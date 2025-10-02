@@ -1,0 +1,75 @@
+# PS60 Live Trader Configuration
+# Based on backtest results from September 30, 2025
+
+trading:
+  account_size: 100000
+  risk_per_trade: 0.01  # 1% risk per trade
+  max_positions: 5      # Maximum concurrent positions
+  max_daily_loss: 0.03  # 3% max daily loss (circuit breaker)
+
+  position_sizing:
+    min_shares: 10
+    max_shares: 1000   # Cap position size
+
+  entry:
+    use_market_orders: true
+    slippage_tolerance: 0.02  # 2% max slippage
+    min_entry_time: "09:45"   # Wait 15 min after open (backtest finding)
+    max_entry_time: "15:00"   # No new entries after 3:00 PM
+
+  exits:
+    partial_1_pct: 0.50       # Sell 50% on first move
+    partial_1_gain: 0.25      # Take partial at $0.25-0.75 gain
+    partial_2_pct: 0.25       # Sell 25% at target1
+    runner_pct: 0.25          # Hold 25% as runner
+    eod_close_time: "15:55"   # Close all positions 5 min before close
+
+  risk:
+    five_minute_rule: true          # Exit if no movement in 5-7 min
+    five_minute_threshold: 7        # Minutes to wait
+    five_minute_min_gain: 0.10      # Min $0.10 gain required
+    breakeven_after_partial: true   # Move stop to entry after partial
+    close_all_by_eod: true         # Flat by end of day
+    stop_at_pivot: true            # Initial stop at pivot level
+
+  attempts:
+    max_attempts_per_pivot: 2  # Max 2 tries per pivot (backtest optimal)
+
+filters:
+  min_score: 50                # Minimum scanner score
+  min_risk_reward: 1.5         # Minimum 1.5:1 R/R
+  max_dist_to_pivot: 2.0       # Max 2% from pivot at scan time
+
+  # Filters from backtest loss analysis
+  avoid_index_shorts: true     # Skip SPY/QQQ/DIA shorts (saved $700/day)
+  avoid_symbols:               # Blacklist
+    - "SPY"    # Index ETFs too choppy
+    - "QQQ"
+    - "DIA"
+    - "IWM"
+
+ibkr:
+  host: "127.0.0.1"
+  port: 7497                   # Paper trading port (7496 for live)
+  client_id: 2000              # Different from scanner (1001)
+
+scanner:
+  output_dir: "../stockscanner/output/"
+  results_file: "scanner_results.json"
+
+logging:
+  log_dir: "./logs/"
+  log_level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  log_trades: true
+  log_positions: true
+  save_daily_report: true
+
+notifications:
+  enabled: false              # Email/SMS notifications
+  on_trade: false
+  on_daily_close: true
+  on_error: true
+
+# Development/Testing
+paper_trading: true          # MUST be true for initial testing
+dry_run: false               # Set to true to monitor without trading

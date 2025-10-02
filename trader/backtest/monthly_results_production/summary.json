@@ -1,0 +1,165 @@
+{
+  "month": "2025-09",
+  "total_days": 22,
+  "total_trades": 183,
+  "total_pnl": 8895.230000000223,
+  "win_rate": 39.89071038251366,
+  "winners": 73,
+  "losers": 103,
+  "daily_results": [
+    {
+      "date": "2025-09-01",
+      "trades": 5,
+      "pnl": -119.56500000003226,
+      "winners": 2,
+      "losers": 3
+    },
+    {
+      "date": "2025-09-02",
+      "trades": 11,
+      "pnl": -607.0550000000289,
+      "winners": 5,
+      "losers": 6
+    },
+    {
+      "date": "2025-09-03",
+      "trades": 15,
+      "pnl": -427.7999999999853,
+      "winners": 3,
+      "losers": 10
+    },
+    {
+      "date": "2025-09-04",
+      "trades": 15,
+      "pnl": 224.95000000002892,
+      "winners": 6,
+      "losers": 8
+    },
+    {
+      "date": "2025-09-05",
+      "trades": 15,
+      "pnl": -1014.9999999999875,
+      "winners": 6,
+      "losers": 9
+    },
+    {
+      "date": "2025-09-08",
+      "trades": 11,
+      "pnl": -330.34999999998337,
+      "winners": 2,
+      "losers": 9
+    },
+    {
+      "date": "2025-09-09",
+      "trades": 8,
+      "pnl": 914.999999999992,
+      "winners": 4,
+      "losers": 3
+    },
+    {
+      "date": "2025-09-10",
+      "trades": 7,
+      "pnl": 1125.000000000014,
+      "winners": 5,
+      "losers": 1
+    },
+    {
+      "date": "2025-09-11",
+      "trades": 5,
+      "pnl": -25.000000000003908,
+      "winners": 1,
+      "losers": 4
+    },
+    {
+      "date": "2025-09-12",
+      "trades": 9,
+      "pnl": 2069.800000000102,
+      "winners": 3,
+      "losers": 5
+    },
+    {
+      "date": "2025-09-15",
+      "trades": 3,
+      "pnl": 52.50000000000266,
+      "winners": 2,
+      "losers": 0
+    },
+    {
+      "date": "2025-09-16",
+      "trades": 0,
+      "pnl": 0,
+      "winners": 0,
+      "losers": 0
+    },
+    {
+      "date": "2025-09-17",
+      "trades": 4,
+      "pnl": 1395.0000000000102,
+      "winners": 3,
+      "losers": 1
+    },
+    {
+      "date": "2025-09-18",
+      "trades": 4,
+      "pnl": -5.000000000002558,
+      "winners": 1,
+      "losers": 3
+    },
+    {
+      "date": "2025-09-19",
+      "trades": 0,
+      "pnl": 0,
+      "winners": 0,
+      "losers": 0
+    },
+    {
+      "date": "2025-09-22",
+      "trades": 25,
+      "pnl": -2185.0000000000887,
+      "winners": 7,
+      "losers": 18
+    },
+    {
+      "date": "2025-09-23",
+      "trades": 3,
+      "pnl": 4882.500000000022,
+      "winners": 3,
+      "losers": 0
+    },
+    {
+      "date": "2025-09-24",
+      "trades": 8,
+      "pnl": 1065.0000000000261,
+      "winners": 5,
+      "losers": 3
+    },
+    {
+      "date": "2025-09-25",
+      "trades": 15,
+      "pnl": -554.4999999999739,
+      "winners": 7,
+      "losers": 8
+    },
+    {
+      "date": "2025-09-26",
+      "trades": 3,
+      "pnl": -294.9999999999919,
+      "winners": 0,
+      "losers": 3
+    },
+    {
+      "date": "2025-09-29",
+      "trades": 7,
+      "pnl": 1122.2500000000114,
+      "winners": 3,
+      "losers": 4
+    },
+    {
+      "date": "2025-09-30",
+      "trades": 10,
+      "pnl": 1607.5000000000905,
+      "winners": 5,
+      "losers": 5
+    }
+  ]
+}

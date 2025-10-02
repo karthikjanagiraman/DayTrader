@@ -1,0 +1,81 @@
+# PS60 Pre-Market Scanner Configuration - Backtest Mode
+# Heavily adjusted for historical backtesting where pre-market data is unavailable
+
+scan_config:
+  # Scanner mode
+  mode: backtest  # Special mode for historical analysis
+
+  # Stock Universe
+  universe:
+    indexes:
+      - NASDAQ100
+      - SP500
+    custom_symbols: []
+    max_symbols: 100
+    min_price: 5
+    min_volume: 200000
+
+  # IBKR Connection Settings
+  ibkr:
+    host: '127.0.0.1'
+    port: 7497  # 7497 for paper, 7496 for live
+    client_id: 1
+    market_data_type: 1  # 1=Live, 2=Frozen, 3=Delayed, 4=Delayed-Frozen
+    timeout: 30
+    max_concurrent_requests: 50
+    request_delay: 0.1  # seconds between requests
+
+  # PS60 Filter Criteria - Heavily Adjusted for Backtesting
+  filters:
+    gap_threshold: 1.0  # Lowered to 1% for backtesting
+    rvol_threshold: 0.3  # Very low for backtesting (pre-market estimate)
+    room_to_run_pct: 2.0  # Increased to be less restrictive
+    consolidation_days: 5
+    enable_pattern_detection: false  # Disable to be less restrictive
+    news_weight: 1.0  # No news weighting for historical
+
+    # Backtest-specific settings
+    historical_volume_factor: 0.5  # Assume 50% of day volume in pre-market
+    use_daily_rvol_fallback: true
+    daily_rvol_threshold: 1.2  # Daily volume must be 1.2x average
+
+    # Additional relaxed criteria for backtesting
+    min_gap_for_consideration: 0.5  # Consider any gap above 0.5%
+    accept_all_patterns: true  # Accept any stock regardless of pattern
+
+  # Scoring Weights - Adjusted for Backtesting
+  scoring:
+    gap_weight: 50  # Gap is most reliable indicator
+    volume_weight: 10  # Volume less reliable in backtest
+    pattern_weight: 10
+    room_weight: 30
+
+  # Risk Management
+  risk:
+    max_position_size_pct: 5
+    max_loss_per_trade_pct: 2
+    min_risk_reward_ratio: 1.0
+    time_stop_minutes: 7
+    pivot_chase_limit: 0.16
+
+  # Output Settings
+  output:
+    directory: ./output
+    formats:
+      - csv
+      - json
+      - markdown
+    max_candidates: 50  # Show more candidates
+
+  # Logging
+  logging:
+    level: INFO
+    log_file: ./logs/scanner_backtest.log
+    max_file_size: 10MB
+    backup_count: 5
+
+  # Scanner Schedule (disabled for backtest)
+  schedule:
+    enabled: false
+    times: []
+    timezone: "US/Eastern"

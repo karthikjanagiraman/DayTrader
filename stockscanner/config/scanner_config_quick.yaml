@@ -1,0 +1,98 @@
+# PS60 Pre-Market Scanner Configuration - Quick Mode
+# Limited symbols for fast scanning
+
+scan_config:
+  # Scanner mode
+  mode: backtest  # Use backtest mode for historical
+
+  # Stock Universe - Limited for speed
+  universe:
+    indexes: []  # Empty - using custom symbols only
+    custom_symbols:   # Core volatile stocks only
+      - NVDA
+      - TSLA
+      - AMD
+      - META
+      - AAPL
+      - MSFT
+      - AMZN
+      - GOOGL
+      - COIN
+      - SNAP
+      - PLTR
+      - ROKU
+      - SOFI
+      - LYFT
+      - DOCU
+      - PYPL
+      - ZM
+      - UBER
+      - SQ
+      - NFLX
+    max_symbols: 20
+    min_price: 5
+    min_volume: 200000
+
+  # IBKR Connection Settings
+  ibkr:
+    host: '127.0.0.1'
+    port: 7497  # 7497 for paper, 7496 for live
+    client_id: 1
+    market_data_type: 1
+    timeout: 30
+    max_concurrent_requests: 50
+    request_delay: 0.1
+    retry_count: 3
+    retry_delay: 1.0
+    max_requests_per_second: 10
+
+  # PS60 Filter Criteria - Relaxed for Historical
+  filters:
+    gap_threshold: 1.0  # Lowered for historical
+    rvol_threshold: 0.3  # Low for historical
+    room_to_run_pct: 2.0
+    consolidation_days: 5
+    enable_pattern_detection: false
+    news_weight: 1.0
+
+    # Historical-specific settings
+    historical_volume_factor: 0.5
+    use_daily_rvol_fallback: true
+    daily_rvol_threshold: 1.2
+
+  # Scoring Weights
+  scoring:
+    gap_weight: 50
+    volume_weight: 10
+    pattern_weight: 10
+    room_weight: 30
+
+  # Risk Management
+  risk:
+    max_position_size_pct: 5
+    max_loss_per_trade_pct: 2
+    min_risk_reward_ratio: 1.0
+    time_stop_minutes: 7
+    pivot_chase_limit: 0.16
+
+  # Output Settings
+  output:
+    directory: ./output
+    formats:
+      - csv
+      - json
+      - markdown
+    max_candidates: 20
+
+  # Logging
+  logging:
+    level: INFO
+    log_file: ./logs/scanner_quick.log
+    max_file_size: 10MB
+    backup_count: 5
+
+  # Scanner Schedule (disabled for backtest)
+  schedule:
+    enabled: false
+    times: []
+    timezone: "US/Eastern"
