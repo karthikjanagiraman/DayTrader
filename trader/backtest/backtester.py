@@ -11,6 +11,11 @@ import pandas as pd
 import sys
 import argparse
 from pathlib import Path
+import yaml
+
+# Import shared strategy module
+sys.path.append(str(Path(__file__).parent.parent))
+from strategy import PS60Strategy, PositionManager
 
 class PS60Backtester:
     """
@@ -46,8 +51,23 @@ class PS60Backtester:
             self.test_date = test_date
 
         self.account_size = account_size
+
+        # Load config and initialize strategy module
+        config_path = Path(__file__).parent.parent / 'config' / 'trader_config.yaml'
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+
+        # Initialize strategy and position manager
+        self.strategy = PS60Strategy(self.config)
+        self.pm = PositionManager()
+
+        # Track trades for backtest results
         self.trades = []
-        self.positions = {}
+
+        # Slippage simulation (realistic execution costs)
+        self.entry_slippage = 0.0005  # 0.05% slippage on entries
+        self.stop_slippage = 0.002    # 0.2% slippage on stops (worse execution)
+        self.exit_slippage = 0.0005   # 0.05% slippage on normal exits
 
         # Load scanner results
         print(f"\n{'='*80}")
@@ -89,12 +109,15 @@ class PS60Backtester:
 
     def backtest_day(self):
         """Backtest single trading day"""
-        # Filter scanner for tradeable setups (UPDATED: R/R >= 1.5, Score >= 75)
-        watchlist = [s for s in self.scanner_results
-                     if s['score'] >= 75 and s['risk_reward'] >= 1.5]
+        # Detect market trend first
+        self.market_trend = self.detect_market_trend()
+
+        # Filter scanner using strategy module
+        watchlist = self.strategy.filter_scanner_results(self.scanner_results)
 
         print(f"\n{'='*80}")
-        print(f"WATCHLIST: {len(watchlist)} tradeable setups (score≥75, R/R≥1.5)")
+        print(f"MARKET TREND: {self.market_trend}")
+        print(f"WATCHLIST: {len(watchlist)} tradeable setups (using strategy filters)")
         print(f"{'='*80}")
 
         for stock in watchlist:
@@ -103,6 +126,45 @@ class PS60Backtester:
             print(f"  Score: {stock['score']} | R/R: {stock['risk_reward']:.2f}:1")
 
             self.backtest_stock(stock)
+
+    def detect_market_trend(self):
+        """
+        Detect overall market trend using SPY
+        Returns: 'BULLISH', 'BEARISH', or 'NEUTRAL'
+        """
+        try:
+            from ib_insync import Stock
+            spy = Stock('SPY', 'SMART', 'USD')
+
+            # Get SPY bars for the day
+            end_datetime = f'{self.test_date.strftime("%Y%m%d")} 16:00:00'
+            bars = self.ib.reqHistoricalData(
+                spy,
+                endDateTime=end_datetime,
+                durationStr='1 D',
+                barSizeSetting='1 day',
+                whatToShow='TRADES',
+                useRTH=True,
+                formatDate=1
+            )
+
+            if not bars:
+                return 'NEUTRAL'
+
+            # Calculate % change from open to close
+            day_bar = bars[-1]
+            change_pct = ((day_bar.close - day_bar.open) / day_bar.open) * 100
+
+            if change_pct > 0.5:
+                return 'BULLISH'
+            elif change_pct < -0.5:
+                return 'BEARISH'
+            else:
+                return 'NEUTRAL'
+
+        except Exception as e:
+            print(f"  ⚠️  Could not detect market trend: {e}")
+            return 'NEUTRAL'
 
     def backtest_stock(self, stock):
         """Backtest single stock for the day"""
@@ -127,28 +189,52 @@ class PS60Backtester:
         short_attempts = 0
         max_attempts = 2
 
+        # Track last exit for re-entry confirmation
+        last_exit_bar = None
+        last_exit_side = None
+
         # Simulate tick-by-tick monitoring
         for bar in bars:
             bar_count += 1
             timestamp = bar.date
             price = bar.close
 
-            # No new entries in last hour (after 3:00 PM / 15:00)
-            hour = timestamp.hour
-            minute = timestamp.minute
-            time_cutoff = (hour >= 15)  # 3:00 PM or later
+            # Check if within entry time window using strategy module
+            within_entry_window = self.strategy.is_within_entry_window(timestamp)
 
             # Entry logic - check for pivot breaks (MAX 2 ATTEMPTS)
-            if position is None and not time_cutoff:
+            if position is None and within_entry_window:
                 # Long entry - only if we haven't exceeded max attempts
                 if long_attempts < max_attempts and price > resistance:
-                    position = self.enter_long(stock, price, timestamp, bar_count)
-                    long_attempts += 1  # Increment attempt counter
+                    # Check if this is counter-trend (long on bearish day)
+                    counter_trend = (self.market_trend == 'BEARISH')
+
+                    # Require stronger confirmation for counter-trend
+                    if counter_trend:
+                        # Counter-trend LONG: require 0.5% above resistance + high score
+                        if price > resistance * 1.005 and stock['score'] >= 85:
+                            position = self.enter_long(stock, price, timestamp, bar_count)
+                            long_attempts += 1
+                    else:
+                        # Normal LONG entry
+                        position = self.enter_long(stock, price, timestamp, bar_count)
+                        long_attempts += 1
 
                 # Short entry - only if we haven't exceeded max attempts
                 elif short_attempts < max_attempts and price < support:
-                    position = self.enter_short(stock, price, timestamp, bar_count)
-                    short_attempts += 1  # Increment attempt counter
+                    # Check if this is counter-trend (short on bullish day)
+                    counter_trend = (self.market_trend == 'BULLISH')
+
+                    # Require stronger confirmation for counter-trend
+                    if counter_trend:
+                        # Counter-trend SHORT: require 0.5% below support + high score
+                        if price < support * 0.995 and stock['score'] >= 85:
+                            position = self.enter_short(stock, price, timestamp, bar_count)
+                            short_attempts += 1
+                    else:
+                        # Normal SHORT entry
+                        position = self.enter_short(stock, price, timestamp, bar_count)
+                        short_attempts += 1
 
             # Exit logic - manage open position
             elif position is not None:
@@ -157,6 +243,9 @@ class PS60Backtester:
                 )
                 if closed_trade:
                     self.trades.append(closed_trade)
+                    # Track exit for re-entry logic
+                    last_exit_bar = bar_count
+                    last_exit_side = closed_trade['side']
                     position = None
                     # Attempts NOT reset - max 2 tries per pivot per day
 
@@ -197,164 +286,128 @@ class PS60Backtester:
 
     def enter_long(self, stock, price, timestamp, bar_num):
         """Enter long position"""
-        shares = self.calculate_position_size(price, stock['resistance'])
+        # Apply entry slippage (buy at slightly worse price)
+        entry_price = price * (1 + self.entry_slippage)
 
-        position = {
-            'symbol': stock['symbol'],
-            'side': 'LONG',
-            'entry_price': price,
-            'entry_time': timestamp,
-            'entry_bar': bar_num,
-            'stop': stock['resistance'],  # Initial stop at pivot
-            'target1': stock['target1'],
-            'target2': stock['target2'],
-            'shares': shares,
-            'remaining': 1.0,  # 100% of position
-            'partials': []
-        }
+        # Use original tight stop (resistance level)
+        stop_price = stock['resistance']
 
-        print(f"  🟢 LONG @ ${price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
-        print(f"     Shares: {shares} | Stop: ${stock['resistance']:.2f}")
+        shares = self.calculate_position_size(entry_price, stop_price)
+
+        # Create position using position manager
+        position = self.pm.create_position(
+            symbol=stock['symbol'],
+            side='LONG',
+            entry_price=entry_price,
+            shares=shares,
+            pivot=stock['resistance'],
+            target1=stock['target1'],
+            target2=stock['target2'],
+            entry_time=timestamp,
+            entry_bar=bar_num
+        )
+
+        print(f"  🟢 LONG @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
+        print(f"     Shares: {shares} | Stop: ${stop_price:.2f}")
         return position
 
     def enter_short(self, stock, price, timestamp, bar_num):
         """Enter short position"""
-        shares = self.calculate_position_size(stock['support'], price)
+        # Apply entry slippage (sell at slightly worse price)
+        entry_price = price * (1 - self.entry_slippage)
 
-        position = {
-            'symbol': stock['symbol'],
-            'side': 'SHORT',
-            'entry_price': price,
-            'entry_time': timestamp,
-            'entry_bar': bar_num,
-            'stop': stock['support'],  # Initial stop at pivot
-            'target1': stock['downside1'],
-            'target2': stock['downside2'],
-            'shares': shares,
-            'remaining': 1.0,
-            'partials': []
-        }
+        # Use original tight stop (support level)
+        stop_price = stock['support']
 
-        print(f"  🔴 SHORT @ ${price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
-        print(f"     Shares: {shares} | Stop: ${stock['support']:.2f}")
+        shares = self.calculate_position_size(stop_price, entry_price)
+
+        # Create position using position manager
+        position = self.pm.create_position(
+            symbol=stock['symbol'],
+            side='SHORT',
+            entry_price=entry_price,
+            shares=shares,
+            pivot=stock['support'],
+            target1=stock.get('downside1', stock['support'] * 0.98),
+            target2=stock.get('downside2', stock['support'] * 0.96),
+            entry_time=timestamp,
+            entry_bar=bar_num
+        )
+
+        print(f"  🔴 SHORT @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
+        print(f"     Shares: {shares} | Stop: ${stop_price:.2f}")
         return position
 
     def manage_position(self, pos, price, timestamp, bar_num):
         """
-        Manage open position per PS60 rules:
+        Manage open position per PS60 rules using strategy module:
         - Take 50% profit on first move
         - Move stop to breakeven
         - Exit at target or stop
-        - 5-7 minute rule
+        - 5-7 minute rule (FIXED - checks if stuck at pivot)
         """
-        time_in_trade = (timestamp - pos['entry_time']).total_seconds() / 60
+        # Check 5-7 minute rule using strategy module (FIXED)
+        should_exit, reason = self.strategy.check_five_minute_rule(pos, price, timestamp)
+        if should_exit:
+            print(f"     ⏱️  {reason} exit @ ${price:.2f} ({timestamp.strftime('%H:%M')})")
+            return None, self.close_position(pos, price, timestamp, reason, bar_num)
 
+        # Check for partial profit using strategy module
+        should_partial, pct, reason = self.strategy.should_take_partial(pos, price)
+        if should_partial:
+            # Record partial using position manager
+            partial_record = self.pm.take_partial(pos['symbol'], price, pct, reason)
+            print(f"     💰 PARTIAL {int(pct*100)}% @ ${price:.2f} "
+                  f"(+${partial_record['gain']:.2f}, {timestamp.strftime('%H:%M')})")
+
+            # Move stop to breakeven if configured
+            if self.strategy.should_move_stop_to_breakeven(pos):
+                pos['stop'] = pos['entry_price']
+
+        # Check stops
         if pos['side'] == 'LONG':
-            gain = price - pos['entry_price']
-
-            # Take 50% profit on first favorable move (0.25-0.75)
-            if pos['remaining'] == 1.0 and gain >= 0.25:
-                print(f"     💰 PARTIAL 50% @ ${price:.2f} (+${gain:.2f}, {timestamp.strftime('%H:%M')})")
-                pos['remaining'] = 0.5
-                pos['stop'] = pos['entry_price']  # Move to breakeven
-                pos['partials'].append({'pct': 0.5, 'price': price, 'gain': gain})
-
-            # Hit target1 - take another 25%
-            elif pos['remaining'] > 0.25 and price >= pos['target1']:
-                gain_t1 = price - pos['entry_price']
-                print(f"     🎯 TARGET1 25% @ ${price:.2f} (+${gain_t1:.2f}, {timestamp.strftime('%H:%M')})")
-                pos['remaining'] = 0.25
-                pos['partials'].append({'pct': 0.25, 'price': price, 'gain': gain_t1})
-
-            # Stop hit - exit remaining
-            elif price <= pos['stop']:
-                print(f"     🛑 STOP remaining @ ${price:.2f} ({timestamp.strftime('%H:%M')})")
-                return None, self.close_position(pos, price, timestamp, 'STOP', bar_num)
-
-            # 5-7 minute rule - no movement
-            elif time_in_trade >= 7 and pos['remaining'] == 1.0 and gain < 0.10:
-                print(f"     ⏱️  5-MIN RULE exit @ ${price:.2f} (no movement in 7 min)")
-                return None, self.close_position(pos, price, timestamp, '5MIN_RULE', bar_num)
+            # Stop hit - exit remaining (with slippage)
+            if price <= pos['stop']:
+                # Apply stop slippage (sell at worse price for longs)
+                stop_exit_price = price * (1 - self.stop_slippage)
+                print(f"     🛑 STOP remaining @ ${stop_exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+                return None, self.close_position(pos, stop_exit_price, timestamp, 'STOP', bar_num)
 
         else:  # SHORT
-            gain = pos['entry_price'] - price
-
-            # Take 50% profit on first favorable move
-            if pos['remaining'] == 1.0 and gain >= 0.25:
-                print(f"     💰 PARTIAL 50% @ ${price:.2f} (+${gain:.2f}, {timestamp.strftime('%H:%M')})")
-                pos['remaining'] = 0.5
-                pos['stop'] = pos['entry_price']  # Move to breakeven
-                pos['partials'].append({'pct': 0.5, 'price': price, 'gain': gain})
-
-            # Hit target1
-            elif pos['remaining'] > 0.25 and price <= pos['target1']:
-                gain_t1 = pos['entry_price'] - price
-                print(f"     🎯 TARGET1 25% @ ${price:.2f} (+${gain_t1:.2f}, {timestamp.strftime('%H:%M')})")
-                pos['remaining'] = 0.25
-                pos['partials'].append({'pct': 0.25, 'price': price, 'gain': gain_t1})
-
-            # Stop hit
-            elif price >= pos['stop']:
-                print(f"     🛑 STOP remaining @ ${price:.2f} ({timestamp.strftime('%H:%M')})")
-                return None, self.close_position(pos, price, timestamp, 'STOP', bar_num)
-
-            # 5-7 minute rule
-            elif time_in_trade >= 7 and pos['remaining'] == 1.0 and gain < 0.10:
-                print(f"     ⏱️  5-MIN RULE exit @ ${price:.2f}")
-                return None, self.close_position(pos, price, timestamp, '5MIN_RULE', bar_num)
+            # Stop hit (with slippage)
+            if price >= pos['stop']:
+                # Apply stop slippage (buy back at worse price for shorts)
+                stop_exit_price = price * (1 + self.stop_slippage)
+                print(f"     🛑 STOP remaining @ ${stop_exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+                return None, self.close_position(pos, stop_exit_price, timestamp, 'STOP', bar_num)
 
         return pos, None
 
     def calculate_position_size(self, entry, stop):
-        """Calculate shares based on 1% risk"""
-        risk_per_trade = self.account_size * 0.01
-        stop_distance = abs(entry - stop)
+        """
+        Calculate shares - CONSERVATIVE FIXED SIZING
 
-        if stop_distance == 0:
-            return 100  # Fallback
-
-        shares = int(risk_per_trade / stop_distance)
-        return min(max(shares, 10), 1000)  # Between 10-1000 shares
+        Note: While live trader uses 1% risk-based sizing, backtester uses
+        fixed 1000 shares for consistency and to avoid over-concentration
+        on tight-stop trades. Real trading will vary position sizes.
+        """
+        return 1000  # Fixed conservative position size
 
     def close_position(self, pos, exit_price, timestamp, reason, bar_num):
-        """Close position and record trade"""
-        # Calculate P&L including partials
-        total_pnl = 0
+        """Close position and record trade using position manager"""
+        # Close position using position manager
+        trade_record = self.pm.close_position(pos['symbol'], exit_price, reason)
 
-        # P&L from partials
-        for partial in pos['partials']:
-            pnl_partial = partial['gain'] * pos['shares'] * partial['pct']
-            total_pnl += pnl_partial
-
-        # P&L from remaining position
-        if pos['side'] == 'LONG':
-            remaining_pnl_per_share = exit_price - pos['entry_price']
-        else:
-            remaining_pnl_per_share = pos['entry_price'] - exit_price
-
-        remaining_pnl = remaining_pnl_per_share * pos['shares'] * pos['remaining']
-        total_pnl += remaining_pnl
-
-        # Overall P&L per share
-        pnl_per_share = total_pnl / pos['shares']
-
+        # Add backtester-specific fields
         duration_min = (timestamp - pos['entry_time']).total_seconds() / 60
+        pnl_per_share = trade_record['pnl'] / pos['shares']
 
         trade = {
-            'symbol': pos['symbol'],
-            'side': pos['side'],
-            'entry': pos['entry_price'],
-            'exit': exit_price,
-            'shares': pos['shares'],
-            'pnl': total_pnl,
+            **trade_record,  # Include all PM fields (symbol, side, entry, exit, pnl, etc.)
             'pnl_per_share': pnl_per_share,
             'pnl_pct': (pnl_per_share / pos['entry_price']) * 100,
-            'entry_time': pos['entry_time'],
-            'exit_time': timestamp,
             'duration_min': duration_min,
-            'reason': reason,
-            'partials': len(pos['partials']),
-            'entry_bar': pos['entry_bar'],
+            'entry_bar': pos.get('entry_bar', 0),
             'exit_bar': bar_num
         }
 
@@ -408,8 +461,8 @@ class PS60Backtester:
         for idx, trade in df.iterrows():
             sign = '+' if trade['pnl'] > 0 else ''
             print(f"\n{idx+1}. {trade['symbol']} {trade['side']}")
-            print(f"   Entry: ${trade['entry']:.2f} @ {trade['entry_time'].strftime('%H:%M')}")
-            print(f"   Exit:  ${trade['exit']:.2f} @ {trade['exit_time'].strftime('%H:%M')} ({trade['reason']})")
+            print(f"   Entry: ${trade['entry_price']:.2f} @ {trade['entry_time'].strftime('%H:%M')}")
+            print(f"   Exit:  ${trade['exit_price']:.2f} @ {trade['exit_time'].strftime('%H:%M')} ({trade['reason']})")
             print(f"   P&L:   {sign}${trade['pnl']:.2f} ({sign}{trade['pnl_pct']:.2f}%) | Duration: {trade['duration_min']:.0f} min")
             print(f"   Partials: {trade['partials']}")
 

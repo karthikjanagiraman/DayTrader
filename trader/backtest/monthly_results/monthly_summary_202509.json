@@ -2,31 +2,40 @@
   "month": "2025-09",
   "daily_results": [
     {
-      "date": "2025-09-02",
-      "trades": 3,
-      "winners": 1,
+      "date": "2025-09-01",
+      "trades": 4,
+      "winners": 2,
       "losers": 2,
-      "win_rate": 33.3,
-      "total_pnl": -1166.81,
-      "avg_pnl": -388.94
+      "win_rate": 50.0,
+      "total_pnl": -860.27,
+      "avg_pnl": -215.07
+    },
+    {
+      "date": "2025-09-02",
+      "trades": 10,
+      "winners": 3,
+      "losers": 7,
+      "win_rate": 30.0,
+      "total_pnl": -6517.79,
+      "avg_pnl": -651.78
     },
     {
       "date": "2025-09-03",
-      "trades": 10,
-      "winners": 5,
-      "losers": 5,
-      "win_rate": 50.0,
-      "total_pnl": -100.3,
-      "avg_pnl": -10.03
+      "trades": 8,
+      "winners": 1,
+      "losers": 7,
+      "win_rate": 12.5,
+      "total_pnl": -1396.12,
+      "avg_pnl": -174.52
     },
     {
       "date": "2025-09-04",
-      "trades": 7,
-      "winners": 2,
-      "losers": 4,
-      "win_rate": 28.6,
-      "total_pnl": 138.6,
-      "avg_pnl": 19.8
+      "trades": 6,
+      "winners": 1,
+      "losers": 5,
+      "win_rate": 16.7,
+      "total_pnl": -1212.98,
+      "avg_pnl": -202.16
     },
     {
       "date": "2025-09-05",
@@ -34,153 +43,153 @@
       "winners": 2,
       "losers": 7,
       "win_rate": 22.2,
-      "total_pnl": -4834.66,
-      "avg_pnl": -537.18
+      "total_pnl": -483.94,
+      "avg_pnl": -53.77
     },
     {
       "date": "2025-09-08",
-      "trades": 6,
-      "winners": 1,
-      "losers": 5,
-      "win_rate": 16.7,
-      "total_pnl": -1170.0,
-      "avg_pnl": -195.0
+      "trades": 11,
+      "winners": 2,
+      "losers": 9,
+      "win_rate": 18.2,
+      "total_pnl": -1137.23,
+      "avg_pnl": -103.38
     },
     {
       "date": "2025-09-09",
       "trades": 7,
-      "winners": 1,
-      "losers": 5,
-      "win_rate": 14.3,
-      "total_pnl": 195.0,
-      "avg_pnl": 27.86
+      "winners": 3,
+      "losers": 4,
+      "win_rate": 42.9,
+      "total_pnl": 22.49,
+      "avg_pnl": 3.21
     },
     {
       "date": "2025-09-10",
-      "trades": 6,
-      "winners": 3,
-      "losers": 3,
-      "win_rate": 50.0,
-      "total_pnl": 195.0,
-      "avg_pnl": 32.5
-    },
-    {
-      "date": "2025-09-11",
-      "trades": 5,
-      "winners": 1,
-      "losers": 3,
-      "win_rate": 20.0,
-      "total_pnl": -100.0,
-      "avg_pnl": -20.0
-    },
-    {
-      "date": "2025-09-12",
-      "trades": 10,
-      "winners": 2,
-      "losers": 8,
-      "win_rate": 20.0,
-      "total_pnl": 1989.8,
-      "avg_pnl": 198.98
-    },
-    {
-      "date": "2025-09-15",
       "trades": 1,
       "winners": 1,
       "losers": 0,
       "win_rate": 100.0,
-      "total_pnl": 12.5,
-      "avg_pnl": 12.5
+      "total_pnl": 726.81,
+      "avg_pnl": 726.81
     },
     {
-      "date": "2025-09-17",
-      "trades": 2,
-      "winners": 1,
-      "losers": 1,
-      "win_rate": 50.0,
-      "total_pnl": -95.0,
-      "avg_pnl": -47.5
+      "date": "2025-09-11",
+      "trades": 4,
+      "winners": 0,
+      "losers": 4,
+      "win_rate": 0.0,
+      "total_pnl": -309.65,
+      "avg_pnl": -77.41
     },
     {
-      "date": "2025-09-18",
+      "date": "2025-09-12",
       "trades": 8,
       "winners": 2,
       "losers": 6,
       "win_rate": 25.0,
-      "total_pnl": -2160.4,
-      "avg_pnl": -270.05
+      "total_pnl": -1266.71,
+      "avg_pnl": -158.34
+    },
+    {
+      "date": "2025-09-15",
+      "trades": 2,
+      "winners": 1,
+      "losers": 1,
+      "win_rate": 50.0,
+      "total_pnl": -66.63,
+      "avg_pnl": -33.31
+    },
+    {
+      "date": "2025-09-17",
+      "trades": 4,
+      "winners": 2,
+      "losers": 2,
+      "win_rate": 50.0,
+      "total_pnl": 167.96,
+      "avg_pnl": 41.99
+    },
+    {
+      "date": "2025-09-18",
+      "trades": 4,
+      "winners": 1,
+      "losers": 3,
+      "win_rate": 25.0,
+      "total_pnl": -162.29,
+      "avg_pnl": -40.57
     },
     {
       "date": "2025-09-22",
-      "trades": 10,
-      "winners": 2,
-      "losers": 8,
-      "win_rate": 20.0,
-      "total_pnl": -2298.4,
-      "avg_pnl": -229.84
-    },
-    {
-      "date": "2025-09-23",
-      "trades": 2,
-      "winners": 2,
-      "losers": 0,
-      "win_rate": 100.0,
-      "total_pnl": 845.0,
-      "avg_pnl": 422.5
-    },
-    {
-      "date": "2025-09-24",
-      "trades": 6,
-      "winners": 3,
-      "losers": 3,
-      "win_rate": 50.0,
-      "total_pnl": 70.0,
-      "avg_pnl": 11.67
-    },
-    {
-      "date": "2025-09-25",
-      "trades": 5,
-      "winners": 2,
-      "losers": 3,
-      "win_rate": 40.0,
-      "total_pnl": -170.01,
-      "avg_pnl": -34.0
-    },
-    {
-      "date": "2025-09-26",
-      "trades": 1,
-      "winners": 0,
-      "losers": 1,
-      "win_rate": 0.0,
-      "total_pnl": -5.0,
-      "avg_pnl": -5.0
-    },
-    {
-      "date": "2025-09-29",
       "trades": 5,
       "winners": 3,
       "losers": 2,
       "win_rate": 60.0,
-      "total_pnl": 670.89,
-      "avg_pnl": 134.18
+      "total_pnl": -60.05,
+      "avg_pnl": -12.01
+    },
+    {
+      "date": "2025-09-23",
+      "trades": 3,
+      "winners": 1,
+      "losers": 2,
+      "win_rate": 33.3,
+      "total_pnl": 2809.8,
+      "avg_pnl": 936.6
+    },
+    {
+      "date": "2025-09-24",
+      "trades": 4,
+      "winners": 2,
+      "losers": 2,
+      "win_rate": 50.0,
+      "total_pnl": -913.95,
+      "avg_pnl": -228.49
+    },
+    {
+      "date": "2025-09-25",
+      "trades": 8,
+      "winners": 4,
+      "losers": 4,
+      "win_rate": 50.0,
+      "total_pnl": -1357.98,
+      "avg_pnl": -169.75
+    },
+    {
+      "date": "2025-09-26",
+      "trades": 2,
+      "winners": 0,
+      "losers": 2,
+      "win_rate": 0.0,
+      "total_pnl": -896.38,
+      "avg_pnl": -448.19
+    },
+    {
+      "date": "2025-09-29",
+      "trades": 6,
+      "winners": 2,
+      "losers": 4,
+      "win_rate": 33.3,
+      "total_pnl": -1455.93,
+      "avg_pnl": -242.65
     },
     {
       "date": "2025-09-30",
-      "trades": 10,
+      "trades": 8,
       "winners": 4,
-      "losers": 6,
-      "win_rate": 40.0,
-      "total_pnl": -2.5,
-      "avg_pnl": -0.25
+      "losers": 4,
+      "win_rate": 50.0,
+      "total_pnl": 796.59,
+      "avg_pnl": 99.57
     }
   ],
   "summary": {
-    "trading_days": 19,
-    "total_trades": 113,
-    "total_pnl": -7986.29,
-    "avg_daily_pnl": -420.33,
-    "win_rate": 33.6,
-    "winning_days": 8,
-    "losing_days": 11,
-    "monthly_return_pct": -7.99
+    "trading_days": 20,
+    "total_trades": 114,
+    "total_pnl": -13574.25,
+    "avg_daily_pnl": -678.71,
+    "win_rate": 32.5,
+    "winning_days": 5,
+    "losing_days": 15,
+    "monthly_return_pct": -13.57
   }
 }

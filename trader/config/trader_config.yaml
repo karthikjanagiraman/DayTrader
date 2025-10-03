@@ -14,7 +14,7 @@ trading:
   entry:
     use_market_orders: true
     slippage_tolerance: 0.02  # 2% max slippage
-    min_entry_time: "09:45"   # Wait 15 min after open (backtest finding)
+    min_entry_time: "09:45"   # Wait 15 min after open (backtest optimal)
     max_entry_time: "15:00"   # No new entries after 3:00 PM
 
   exits:
@@ -36,9 +36,14 @@ trading:
     max_attempts_per_pivot: 2  # Max 2 tries per pivot (backtest optimal)
 
 filters:
-  min_score: 50                # Minimum scanner score
-  min_risk_reward: 1.5         # Minimum 1.5:1 R/R
+  min_score: 75                # Minimum scanner score
+  min_risk_reward: 1.0         # Minimum 1.0:1 R/R
   max_dist_to_pivot: 2.0       # Max 2% from pivot at scan time
+
+  # Gap detection filter (skip trades where gap ate up the move)
+  enable_gap_filter: false     # Disable gap detection (testing)
+  max_gap_through_pivot: 1.0   # Max 1% gap through pivot
+  min_room_to_target: 3.0      # Min 3% room to target (allows gap if big upside)
 
   # Filters from backtest loss analysis
   avoid_index_shorts: true     # Skip SPY/QQQ/DIA shorts (saved $700/day)
@@ -55,7 +60,7 @@ ibkr:
 
 scanner:
   output_dir: "../stockscanner/output/"
-  results_file: "scanner_results.json"
+  results_file: "scanner_results_20251002.json"
 
 logging:
   log_dir: "./logs/"

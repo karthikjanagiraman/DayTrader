@@ -833,10 +833,11 @@ filters:
 3. **Data Latency**: Real-time vs backtest 1-min bars
 4. **Psychological**: Backtest is emotionless, live trading is not
 
-### Critical Bug Fixed (October 1, 2025)
+### Critical Bugs Fixed
 
-**Timezone Bug in EOD Close Logic**:
-- **Issue**: EOD close logic was using local PST time instead of Eastern Time
+#### Bug #1: Timezone Bug in EOD Close Logic (October 1, 2025)
+
+**Issue**: EOD close logic was using local PST time instead of Eastern Time
 - **Impact**: Positions remained open overnight at 4:00 PM market close
 - **Date**: October 1, 2025 - 3 runner positions (PLTR, COIN, TSLA) left open
 - **Fix**: Updated EOD close check to use Eastern Time (lines 532-543 in trader.py)
@@ -852,6 +853,106 @@ eastern = pytz.timezone('US/Eastern')
 now_et = datetime.now(pytz.UTC).astimezone(eastern)
 now = now_et.time()  # Eastern Time
 ```
+
+#### Bug #2: Embedded Scanner in Backtest (October 3, 2025)
+
+**Issue**: `run_monthly_backtest.py` was using an embedded/simplified scanner instead of production scanner
+- **Impact**: Catastrophic - September backtest showed -$56k P&L vs +$8.9k with production scanner
+- **Root Cause**: Created `HistoricalScanner` class inside backtest script instead of using `stockscanner/scanner.py`
+- **Performance Difference**:
+  - Embedded scanner: -$56,362 P&L, 26.8% win rate (WRONG)
+  - Production scanner: +$8,895 P&L, 39.9% win rate (CORRECT)
+  - **$65k difference** due to using wrong scanner!
+
+#### Bug #3: 5-Minute Rule Firing After Partials (October 3, 2025) ⚠️ CRITICAL
+
+**Issue**: Strategy module extraction lost critical condition in 5-minute rule logic
+- **Date Discovered**: October 3, 2025
+- **Impact**: Would have broken live trading - winners exited prematurely after taking partials
+- **Severity**: CRITICAL - Live trading would have failed tomorrow
+
+**Root Cause**:
+When the `strategy/` module was extracted from `trader.py`, the 5-minute rule lost a critical check:
+
+**Original working logic in trader.py:**
+```python
+# 5-7 minute rule
+elif time_in_trade >= 7 and position['remaining'] == 1.0 and gain < 0.10:
+    self.close_position(position, current_price, '5MIN_RULE')
+```
+**Key**: `position['remaining'] == 1.0` - only applies BEFORE taking partials
+
+**Broken logic in extracted strategy module:**
+```python
+# Missing the remaining == 1.0 check!
+if gain < self.five_minute_min_gain:
+    return True, "5MIN_RULE"
+```
+
+**Impact on Results:**
+- Oct 2 backtest WITHOUT fix: -$11,285 (88% losers)
+- Oct 2 backtest WITH fix: -$3,401 (70% improvement)
+- Oct 2 live trading (used original embedded logic): +$1,692 ✅
+
+**Why This Matters:**
+- After taking 50% partial profit, the original logic STOPS checking the 5-minute rule
+- This allows profitable positions to run until EOD or target
+- Examples from Oct 2 live trading:
+  - AMAT: Took 1 partial, then held until EOD → +$2,420
+  - LRCX: Took 1 partial, then held until EOD → +$1,425
+  - INTC: Took 2 partials, then held until EOD → +$863
+
+**The Fix:**
+```python
+# CRITICAL: Only apply 5-minute rule if NO partials taken yet
+# If we've taken partials (remaining < 1.0), let the runner work
+if position.get('remaining', 1.0) < 1.0:
+    return False, None
+
+# ... rest of 5-min rule logic
+```
+
+**Status**: ✅ **FIXED** (Line 244-247 in `trader/strategy/ps60_strategy.py`)
+
+**Verification**: Full audit documented in `trader/STRATEGY_MODULE_AUDIT.md`
+
+#### Bug #4: Backtester Not Respecting Entry Time Window (October 3, 2025)
+
+**Issue**: Backtester was ignoring `min_entry_time` configuration
+- **Location**: `trader/backtest/backtester.py` lines 202-206
+- **Impact**: Backtest entering trades at 9:30 AM even when config said 10:13 AM
+- **Root Cause**: Hardcoded check for `hour >= 15` (3 PM cutoff) instead of using strategy module's `is_within_entry_window()`
+
+**The Bug:**
+```python
+# WRONG - only checks if NOT after 3 PM
+time_cutoff = (hour >= 15)
+if position is None and not time_cutoff:
+    # Enter trade...
+```
+
+**The Fix:**
+```python
+# CORRECT - uses strategy module to check min AND max entry time
+within_entry_window = self.strategy.is_within_entry_window(timestamp)
+if position is None and within_entry_window:
+    # Enter trade...
+```
+
+**Status**: ✅ **FIXED** (Line 203 in `trader/backtest/backtester.py`)
+
+#### Bug #5: Exit Time Display Corruption (October 3, 2025) - Cosmetic
+
+**Issue**: Position manager shows exit times as current wall clock time instead of actual bar timestamp
+- **Location**: `trader/strategy/position_manager.py` in `close_position()`
+- **Impact**: All backtest exit times show as 11:45 PM instead of actual market time
+- **Root Cause**: Uses `datetime.now()` for exit_time instead of accepting timestamp parameter
+
+**Example of Bug:**
+- Trade actually exits at 10:28 AM
+- Display shows: "Exit: $219.49 @ 23:44" (11:44 PM - completely wrong!)
+
+**Status**: ⚠️ **NOT FIXED** - Cosmetic issue, doesn't affect P&L calculations
 
 ### October 1, 2025 Trading Session
 
@@ -956,7 +1057,11 @@ The type of scanner used made a MASSIVE difference:
 5. Skip the 5-7 minute rule - it prevents large losses
 6. Skip partial profit-taking - critical for cash flow
 
-### CRITICAL LESSON LEARNED (October 1, 2025):
+### 🚨 CRITICAL LESSON LEARNED - SCANNER DUPLICATION BUG 🚨
+
+**THIS MISTAKE HAS BEEN MADE TWICE - IT MUST NEVER HAPPEN AGAIN**
+
+#### Incident #1 (October 1, 2025):
 **Problem**: Created an "embedded scanner" inside `run_monthly_backtest.py` instead of using the production scanner from `stockscanner/scanner.py`
 
 **Impact**:
@@ -964,15 +1069,34 @@ The type of scanner used made a MASSIVE difference:
 - Production scanner: **+$8,895 P&L (39.9% win rate)**
 - **Difference**: $16,881 swing due to using simplified code!
 
+#### Incident #2 (October 3, 2025):
+**Problem**: SAME MISTAKE - `run_monthly_backtest.py` still using embedded `HistoricalScanner` class
+
+**Impact**:
+- Embedded scanner: -$56,362 P&L (26.8% win rate)
+- Production scanner: **+$8,895 P&L (39.9% win rate)**
+- **Difference**: $65,257 swing - CATASTROPHIC!
+
 **Root Cause**: Took initiative to "simplify" without asking, creating inferior duplicate logic
 
-**Lesson**: **ALWAYS ask before creating any alternative/simplified versions**. The production code exists for a reason - use it. If there's a problem (like IBKR connection issues), ask the user rather than creating workarounds.
+**Lesson**: **ALWAYS ask before creating ANY alternative/simplified versions**. The production code exists for a reason - use it. If there's a problem (like IBKR connection issues), ask the user rather than creating workarounds.
 
-**Rule**: When implementing features that need existing functionality (like scanner), ALWAYS:
-1. ✅ Import and use the actual production module
-2. ✅ Ask if modifications are needed
-3. ❌ NEVER create embedded/simplified versions
-4. ❌ NEVER assume simplification is acceptable
+### 🛑 MANDATORY RULE - NO EXCEPTIONS:
+
+When implementing features that need existing functionality (scanner, strategy, position manager, etc.), **ALWAYS**:
+
+1. ✅ **Import and use the actual production module** from its original location
+2. ✅ **Ask the user** if modifications are needed
+3. ✅ **Verify the code you're using** matches the production version
+4. ❌ **NEVER create embedded/simplified versions** - this is BANNED
+5. ❌ **NEVER assume simplification is acceptable** - always ask first
+6. ❌ **NEVER duplicate logic** that already exists in production code
+
+**If you find yourself copying code or creating a "simpler version":**
+- **STOP IMMEDIATELY**
+- **Ask the user** if this is the right approach
+- **Explain why** you think duplication is needed
+- **Wait for approval** before proceeding
 5. Allow stops to be moved wider - discipline is key
 6. Hold positions overnight - PS60 is day trading only
 7. Chase trades - only enter when scanner pivot breaks

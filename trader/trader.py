@@ -20,6 +20,10 @@ import logging
 from pathlib import Path
 from collections import defaultdict
 import time as time_module
+import pytz
+
+# Import shared strategy module
+from strategy import PS60Strategy, PositionManager
 
 class PS60Trader:
     """Live trader implementing PS60 strategy with scanner-identified pivots"""
@@ -32,24 +36,20 @@ class PS60Trader:
         # Setup logging
         self.setup_logging()
 
+        # Initialize strategy and position manager
+        self.strategy = PS60Strategy(self.config)
+        self.pm = PositionManager()
+
         # Initialize IBKR connection
         self.ib = IB()
 
         # Trading state
         self.watchlist = []
-        self.positions = {}  # symbol -> position dict
-        self.attempted_pivots = defaultdict(lambda: {'long': 0, 'short': 0})
-        self.daily_pnl = 0.0
-        self.trade_count = 0
-        self.trades_today = []
+        self.positions = {}  # Local dict for IBKR-specific data (contracts, stop orders)
 
         # Account info
         self.account_size = self.config['trading']['account_size']
         self.max_positions = self.config['trading']['max_positions']
-
-        # Filters
-        self.avoid_symbols = set(self.config['filters'].get('avoid_symbols', []))
-        self.avoid_index_shorts = self.config['filters']['avoid_index_shorts']
 
         self.logger.info("PS60 Trader initialized")
         self.logger.info(f"Paper Trading: {self.config['paper_trading']}")
@@ -94,27 +94,22 @@ class PS60Trader:
             self.logger.info("✓ Disconnected from IBKR")
 
     def load_scanner_results(self):
-        """Load today's scanner results"""
+        """Load today's scanner results (auto-detects correct date file)"""
         scanner_dir = Path(self.config['scanner']['output_dir'])
-        scanner_file = self.config['scanner']['results_file']
+
+        # Find today's scanner results file
+        today = datetime.now().strftime('%Y%m%d')
+        scanner_file = f"scanner_results_{today}.json"
         scanner_path = scanner_dir / scanner_file
 
         try:
             with open(scanner_path, 'r') as f:
                 all_results = json.load(f)
 
-            # Filter based on configuration
-            min_score = self.config['filters']['min_score']
-            min_rr = self.config['filters']['min_risk_reward']
+            # Filter using strategy module
+            self.watchlist = self.strategy.filter_scanner_results(all_results)
 
-            self.watchlist = [
-                stock for stock in all_results
-                if stock['score'] >= min_score
-                and stock['risk_reward'] >= min_rr
-                and stock['symbol'] not in self.avoid_symbols
-            ]
-
-            self.logger.info(f"✓ Loaded {len(self.watchlist)} setups from scanner")
+            self.logger.info(f"✓ Loaded {len(self.watchlist)} setups from {scanner_file}")
             self.logger.info(f"  Filtered from {len(all_results)} total results")
 
             # Log watchlist
@@ -128,6 +123,8 @@ class PS60Trader:
 
         except FileNotFoundError:
             self.logger.error(f"✗ Scanner results not found: {scanner_path}")
+            self.logger.error(f"  Expected file: {scanner_file}")
+            self.logger.error(f"  Please run the scanner first: cd ../stockscanner && python scanner.py")
             return False
         except Exception as e:
             self.logger.error(f"✗ Error loading scanner results: {e}")
@@ -157,7 +154,6 @@ class PS60Trader:
 
     def is_trading_hours(self):
         """Check if within trading hours"""
-        import pytz
         # Get current time in Eastern Time (market timezone)
         eastern = pytz.timezone('US/Eastern')
         now_et = datetime.now(pytz.UTC).astimezone(eastern)
@@ -167,16 +163,10 @@ class PS60Trader:
         market_open = dt_time(9, 30)
         market_close = dt_time(16, 0)
 
-        # Entry window
-        min_entry = datetime.strptime(
-            self.config['trading']['entry']['min_entry_time'], '%H:%M'
-        ).time()
-        max_entry = datetime.strptime(
-            self.config['trading']['entry']['max_entry_time'], '%H:%M'
-        ).time()
-
         in_market_hours = market_open <= now <= market_close
-        in_entry_window = min_entry <= now <= max_entry
+
+        # Use strategy module for entry window check
+        in_entry_window = self.strategy.is_within_entry_window(now_et)
 
         return in_market_hours, in_entry_window
 
@@ -186,42 +176,33 @@ class PS60Trader:
         resistance = stock_data['resistance']
         support = stock_data['support']
 
-        max_attempts = self.config['trading']['attempts']['max_attempts_per_pivot']
+        # Get attempt count from position manager
+        long_attempts = self.pm.get_attempt_count(symbol, resistance)
+        short_attempts = self.pm.get_attempt_count(symbol, support)
 
-        # Check long pivot break
-        if current_price > resistance:
-            if self.attempted_pivots[symbol]['long'] < max_attempts:
-                return 'LONG', resistance
+        # Check long pivot break using strategy module
+        should_long, reason = self.strategy.should_enter_long(
+            stock_data, current_price, long_attempts
+        )
+        if should_long:
+            return 'LONG', resistance
 
-        # Check short pivot break
-        elif current_price < support:
-            # Skip if avoiding index shorts
-            if self.avoid_index_shorts and symbol in ['SPY', 'QQQ', 'DIA', 'IWM']:
-                self.logger.debug(f"Skipping {symbol} SHORT (index short filter)")
-                return None, None
-
-            if self.attempted_pivots[symbol]['short'] < max_attempts:
-                return 'SHORT', support
+        # Check short pivot break using strategy module
+        should_short, reason = self.strategy.should_enter_short(
+            stock_data, current_price, short_attempts
+        )
+        if should_short:
+            return 'SHORT', support
 
         return None, None
 
     def calculate_position_size(self, entry_price, stop_price):
         """Calculate position size based on 1% risk"""
-        risk_per_trade = self.account_size * self.config['trading']['risk_per_trade']
-        stop_distance = abs(entry_price - stop_price)
-
-        if stop_distance == 0:
-            return self.config['trading']['position_sizing']['min_shares']
-
-        shares = int(risk_per_trade / stop_distance)
-
-        # Apply min/max constraints
-        min_shares = self.config['trading']['position_sizing']['min_shares']
-        max_shares = self.config['trading']['position_sizing']['max_shares']
-
-        shares = max(min_shares, min(shares, max_shares))
-
-        return shares
+        return self.strategy.calculate_position_size(
+            self.account_size,
+            entry_price,
+            stop_price
+        )
 
     def enter_long(self, stock_data, current_price):
         """Enter long position"""
@@ -246,24 +227,20 @@ class PS60Trader:
         if trade.orderStatus.filled > 0:
             fill_price = trade.orderStatus.avgFillPrice
 
-        # Create position record
-        position = {
-            'symbol': symbol,
-            'side': 'LONG',
-            'entry_price': fill_price,
-            'entry_time': datetime.now(),
-            'shares': shares,
-            'stop': resistance,
-            'target1': stock_data['target1'],
-            'target2': stock_data['target2'],
-            'remaining': 1.0,  # 100%
-            'partials': [],
-            'contract': contract
-        }
+        # Create position using position manager
+        position = self.pm.create_position(
+            symbol=symbol,
+            side='LONG',
+            entry_price=fill_price,
+            shares=shares,
+            pivot=resistance,
+            contract=contract,
+            target1=stock_data['target1'],
+            target2=stock_data['target2']
+        )
 
+        # Add to local positions dict
         self.positions[symbol] = position
-        self.attempted_pivots[symbol]['long'] += 1
-        self.trade_count += 1
 
         self.logger.info(f"🟢 LONG {symbol} @ ${fill_price:.2f}")
         self.logger.info(f"   Shares: {shares} | Stop: ${resistance:.2f} | "
@@ -297,24 +274,20 @@ class PS60Trader:
         if trade.orderStatus.filled > 0:
             fill_price = trade.orderStatus.avgFillPrice
 
-        # Create position record
-        position = {
-            'symbol': symbol,
-            'side': 'SHORT',
-            'entry_price': fill_price,
-            'entry_time': datetime.now(),
-            'shares': shares,
-            'stop': support,
-            'target1': stock_data.get('downside1', support * 0.98),
-            'target2': stock_data.get('downside2', support * 0.96),
-            'remaining': 1.0,
-            'partials': [],
-            'contract': contract
-        }
+        # Create position using position manager
+        position = self.pm.create_position(
+            symbol=symbol,
+            side='SHORT',
+            entry_price=fill_price,
+            shares=shares,
+            pivot=support,
+            contract=contract,
+            target1=stock_data.get('downside1', support * 0.98),
+            target2=stock_data.get('downside2', support * 0.96)
+        )
 
+        # Add to local positions dict
         self.positions[symbol] = position
-        self.attempted_pivots[symbol]['short'] += 1
-        self.trade_count += 1
 
         self.logger.info(f"🔴 SHORT {symbol} @ ${fill_price:.2f}")
         self.logger.info(f"   Shares: {shares} | Stop: ${support:.2f}")
@@ -355,41 +328,31 @@ class PS60Trader:
 
             current_price = float(stock_data['ticker'].last)
 
-            # Check time in trade
-            time_in_trade = (datetime.now() - position['entry_time']).total_seconds() / 60
+            # Get current time in Eastern
+            eastern = pytz.timezone('US/Eastern')
+            current_time = datetime.now(pytz.UTC).astimezone(eastern)
 
-            if position['side'] == 'LONG':
-                gain = current_price - position['entry_price']
+            # Check 5-7 minute rule (FIXED - checks if stuck at pivot)
+            should_exit, reason = self.strategy.check_five_minute_rule(
+                position, current_price, current_time
+            )
+            if should_exit:
+                self.logger.info(f"  ⏱️  {reason}: Exiting {symbol}")
+                self.close_position(position, current_price, reason)
+                continue
 
-                # Take 50% partial on first move
-                if position['remaining'] == 1.0 and gain >= 0.25:
-                    self.take_partial(position, current_price, 0.50, 'FIRST_MOVE')
-                    # Move stop to breakeven
+            # Check for partial profit
+            should_partial, pct, reason = self.strategy.should_take_partial(
+                position, current_price
+            )
+            if should_partial:
+                self.take_partial(position, current_price, pct, reason)
+
+                # Move stop to breakeven after partial (if configured)
+                if self.strategy.should_move_stop_to_breakeven(position):
+                    old_stop = position['stop']
                     position['stop'] = position['entry_price']
-
-                # Hit target1
-                elif position['remaining'] > 0.25 and current_price >= position['target1']:
-                    self.take_partial(position, current_price, 0.25, 'TARGET1')
-
-                # 5-7 minute rule
-                elif time_in_trade >= 7 and position['remaining'] == 1.0 and gain < 0.10:
-                    self.logger.info(f"  ⏱️  5-MIN RULE: Exiting {symbol}")
-                    self.close_position(position, current_price, '5MIN_RULE')
-
-            else:  # SHORT
-                gain = position['entry_price'] - current_price
-
-                # Similar logic for shorts
-                if position['remaining'] == 1.0 and gain >= 0.25:
-                    self.take_partial(position, current_price, 0.50, 'FIRST_MOVE')
-                    position['stop'] = position['entry_price']
-
-                elif position['remaining'] > 0.25 and current_price <= position['target1']:
-                    self.take_partial(position, current_price, 0.25, 'TARGET1')
-
-                elif time_in_trade >= 7 and position['remaining'] == 1.0 and gain < 0.10:
-                    self.logger.info(f"  ⏱️  5-MIN RULE: Exiting {symbol}")
-                    self.close_position(position, current_price, '5MIN_RULE')
+                    self.logger.info(f"  🛡️  {symbol}: Stop moved to breakeven ${position['stop']:.2f}")
 
     def take_partial(self, position, price, pct, reason):
         """Take partial profit"""
@@ -398,35 +361,27 @@ class PS60Trader:
 
         if position['side'] == 'LONG':
             action = 'SELL'
-            gain = price - position['entry_price']
         else:
             action = 'BUY'
-            gain = position['entry_price'] - price
 
         # Place market order for partial
         order = MarketOrder(action, shares_to_sell)
         trade = self.ib.placeOrder(position['contract'], order)
 
-        position['remaining'] -= pct
-        position['partials'].append({
-            'pct': pct,
-            'price': price,
-            'gain': gain,
-            'reason': reason,
-            'time': datetime.now()
-        })
+        # Record partial using position manager
+        partial_record = self.pm.take_partial(symbol, price, pct, reason)
 
         self.logger.info(f"  💰 PARTIAL {int(pct*100)}% {symbol} @ ${price:.2f} "
-                        f"(+${gain:.2f}, {reason})")
+                        f"(+${partial_record['gain']:.2f}, {reason})")
 
     def close_position(self, position, price, reason):
-        """Close entire position"""
+        """Close entire position and return trade object"""
         symbol = position['symbol']
         shares = int(position['shares'] * position['remaining'])
 
         if shares == 0:
             del self.positions[symbol]
-            return
+            return None
 
         if position['side'] == 'LONG':
             action = 'SELL'
@@ -437,58 +392,23 @@ class PS60Trader:
         order = MarketOrder(action, shares)
         trade = self.ib.placeOrder(position['contract'], order)
 
-        # Calculate P&L
-        pnl = self.calculate_pnl(position, price)
+        # Close position and record trade using position manager
+        trade_record = self.pm.close_position(symbol, price, reason)
 
         self.logger.info(f"  🛑 CLOSE {symbol} @ ${price:.2f} ({reason})")
-        self.logger.info(f"     P&L: ${pnl:.2f}")
+        self.logger.info(f"     P&L: ${trade_record['pnl']:.2f}")
 
-        # Record trade
-        self.record_trade(position, price, reason, pnl)
-
-        # Remove position
+        # Remove from local positions dict
         del self.positions[symbol]
 
-    def calculate_pnl(self, position, exit_price):
-        """Calculate total P&L including partials"""
-        total_pnl = 0
-
-        # P&L from partials
-        for partial in position['partials']:
-            pnl_partial = partial['gain'] * position['shares'] * partial['pct']
-            total_pnl += pnl_partial
-
-        # P&L from remaining
-        if position['side'] == 'LONG':
-            remaining_pnl = (exit_price - position['entry_price']) * position['shares'] * position['remaining']
-        else:
-            remaining_pnl = (position['entry_price'] - exit_price) * position['shares'] * position['remaining']
-
-        total_pnl += remaining_pnl
-
-        return total_pnl
-
-    def record_trade(self, position, exit_price, reason, pnl):
-        """Record completed trade"""
-        trade_record = {
-            'symbol': position['symbol'],
-            'side': position['side'],
-            'entry_price': position['entry_price'],
-            'exit_price': exit_price,
-            'shares': position['shares'],
-            'pnl': pnl,
-            'entry_time': position['entry_time'].isoformat(),
-            'exit_time': datetime.now().isoformat(),
-            'reason': reason,
-            'partials': len(position['partials'])
-        }
-
-        self.trades_today.append(trade_record)
-        self.daily_pnl += pnl
+        return trade
 
     def close_all_positions(self, reason='EOD'):
-        """Close all open positions"""
+        """Close all open positions and wait for fills"""
         self.logger.info(f"Closing all positions ({reason})...")
+
+        # Collect all trades placed
+        trades_to_monitor = []
 
         for symbol in list(self.positions.keys()):
             position = self.positions[symbol]
@@ -496,7 +416,36 @@ class PS60Trader:
 
             if stock_data and stock_data['ticker'].last:
                 current_price = float(stock_data['ticker'].last)
-                self.close_position(position, current_price, reason)
+                trade = self.close_position(position, current_price, reason)
+                if trade:
+                    trades_to_monitor.append(trade)
+
+        # Wait for all orders to fill (max 30 seconds)
+        if trades_to_monitor:
+            self.logger.info(f"Waiting for {len(trades_to_monitor)} orders to fill...")
+            max_wait = 30
+            start_time = time_module.time()
+
+            while time_module.time() - start_time < max_wait:
+                all_filled = all(
+                    trade.orderStatus.status in ['Filled', 'Cancelled']
+                    for trade in trades_to_monitor
+                )
+
+                if all_filled:
+                    filled_count = sum(1 for t in trades_to_monitor if t.orderStatus.status == 'Filled')
+                    self.logger.info(f"All orders completed: {filled_count}/{len(trades_to_monitor)} filled")
+                    break
+
+                self.ib.sleep(0.5)
+
+            # Log any unfilled orders
+            for trade in trades_to_monitor:
+                if trade.orderStatus.status not in ['Filled', 'Cancelled']:
+                    self.logger.warning(
+                        f"Order {trade.order.orderId} for {trade.contract.symbol} "
+                        f"not filled (status: {trade.orderStatus.status})"
+                    )
 
     def run(self):
         """Main trading loop"""
@@ -529,16 +478,12 @@ class PS60Trader:
                     self.logger.info("Market closed. Exiting...")
                     break
 
-                # Check for EOD close
+                # Check for EOD close using strategy module
                 import pytz
                 eastern = pytz.timezone('US/Eastern')
                 now_et = datetime.now(pytz.UTC).astimezone(eastern)
-                now = now_et.time()
-                eod_time = datetime.strptime(
-                    self.config['trading']['exits']['eod_close_time'], '%H:%M'
-                ).time()
 
-                if now >= eod_time:
+                if self.strategy.is_near_eod(now_et):
                     self.close_all_positions('EOD')
                     break
 
@@ -591,35 +536,33 @@ class PS60Trader:
 
     def print_daily_summary(self):
         """Print end-of-day summary"""
+        # Get summary from position manager
+        summary = self.pm.get_daily_summary()
+
         self.logger.info("\n" + "="*80)
         self.logger.info("DAILY SUMMARY")
         self.logger.info("="*80)
 
-        self.logger.info(f"Total Trades: {len(self.trades_today)}")
-        self.logger.info(f"Daily P&L: ${self.daily_pnl:.2f}")
+        self.logger.info(f"Total Trades: {summary['total_trades']}")
+        self.logger.info(f"Daily P&L: ${summary['daily_pnl']:.2f}")
 
-        if self.trades_today:
-            winners = [t for t in self.trades_today if t['pnl'] > 0]
-            losers = [t for t in self.trades_today if t['pnl'] <= 0]
+        if summary['total_trades'] > 0:
+            self.logger.info(f"Winners: {summary['winners']} ({summary['win_rate']:.1f}%)")
+            self.logger.info(f"Losers: {summary['losers']}")
 
-            self.logger.info(f"Winners: {len(winners)} ({len(winners)/len(self.trades_today)*100:.1f}%)")
-            self.logger.info(f"Losers: {len(losers)}")
+            if summary['avg_winner']:
+                self.logger.info(f"Avg Winner: ${summary['avg_winner']:.2f}")
 
-            if winners:
-                avg_winner = sum(t['pnl'] for t in winners) / len(winners)
-                self.logger.info(f"Avg Winner: ${avg_winner:.2f}")
-
-            if losers:
-                avg_loser = sum(t['pnl'] for t in losers) / len(losers)
-                self.logger.info(f"Avg Loser: ${avg_loser:.2f}")
+            if summary['avg_loser']:
+                self.logger.info(f"Avg Loser: ${summary['avg_loser']:.2f}")
 
         # Save trades to file
-        if self.trades_today:
+        if summary['trades']:
             log_dir = Path(self.config['logging']['log_dir'])
             trade_file = log_dir / f'trades_{datetime.now().strftime("%Y%m%d")}.json'
 
             with open(trade_file, 'w') as f:
-                json.dump(self.trades_today, f, indent=2)
+                json.dump(summary['trades'], f, indent=2)
 
             self.logger.info(f"\nTrades saved to: {trade_file}")
 
