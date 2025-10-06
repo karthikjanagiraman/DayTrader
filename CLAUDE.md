@@ -2,12 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 📖 Implementation Progress
+
+**For detailed implementation history and all completed work, see**: `trader/PROGRESS_LOG.md`
+
+The progress log is the **single source of truth** for:
+- ✅ Completed implementations (October 2025)
+- 🔧 Bug fixes and lessons learned
+- 📊 Backtest results and strategy evolution
+- 📝 Documentation index
+
+**⚠️ IMPORTANT**: Always update `PROGRESS_LOG.md` after completing major implementations, bug fixes, or system enhancements.
+
 ## Project Overview
 
 **DayTrader** is an automated trading system implementing Dan Shapiro's **PS60 Process** for day trading. The project consists of two main modules:
 
 1. **stockscanner** - Pre-market scanner that identifies high-probability breakout setups
-2. **trader** (to be built) - Automated trading module that executes trades based on PS60 methodology using scanner output
+2. **trader** - Automated trading module (✅ COMPLETE - Ready for paper trading)
 
 ## Project Structure
 
@@ -23,14 +35,63 @@ DayTrader/
 │   ├── trader.py            # Main live trading engine
 │   ├── position_manager.py  # Position sizing and risk management
 │   ├── order_executor.py    # IBKR order execution
+│   ├── strategy/            # Strategy modules
+│   │   ├── ps60_strategy.py # Core PS60 strategy logic
+│   │   └── position_manager.py
 │   ├── backtest/            # Backtesting framework
-│   │   └── backtester.py    # Historical 1-min bar backtester
+│   │   ├── backtester.py   # Historical 1-min bar backtester
+│   │   ├── run_monthly_backtest.py
+│   │   ├── logs/           # Backtest logs
+│   │   └── monthly_results/ # Historical results
 │   ├── config/              # Trading configuration
-│   │   └── trader_config.yaml
-│   └── logs/                # Trade logs and performance
+│   │   └── trader_config.yaml  # Filter ON/OFF controls
+│   ├── logs/                # Trade logs and performance
+│   ├── FILTER_DOCUMENTATION.md     # Complete filter reference (Oct 5)
+│   ├── PLTR_DEBUG_SESSION.md       # Oct 5 debug session
+│   ├── STRATEGY_EVOLUTION_LOG.md   # Master evolution log (Oct 5)
+│   └── REQUIREMENTS_IMPLEMENTATION_LOG.md
 │
 └── PS60ProcessComprehensiveDayTradingGuide.md  # Complete PS60 theory
 ```
+
+## 📋 Requirements Specification
+
+**Reference Document**: `trader/Automated Trading System for PS60 Strategy – Requirements Specification.md`
+
+All trader implementation must follow the official requirements specification. This document is the source of truth for:
+- Setup identification (Breakout, Bounce, Rejection/Fade)
+- Trade confirmation logic (Volume surge, Momentum candle, Sustained break)
+- Profit-taking rules (1R-based partials)
+- Risk management (Min 2:1 R/R ratio)
+- Slippage and commission simulation
+
+**Implementation Status**: See `trader/REQUIREMENTS_IMPLEMENTATION_LOG.md` for detailed tracking of requirements implementation, test results, and development progress.
+
+**Phase 1 (✅ COMPLETE - October 4, 2025)**:
+- Min 2.0:1 risk/reward filter
+- 1R-based partial profit-taking (profit = risk)
+- Three-part confirmation logic (volume + momentum + sustained break)
+- Slippage simulation (0.1% entry/exit, -1.2% stops)
+- Commission costs ($0.005/share)
+- **8-minute rule** (exit if no progress after 8 min, no partials taken)
+- **Risk-based position sizing** (1% account risk per trade)
+- **Hybrid entry strategy** (momentum breakout vs pullback/retest)
+- Exit timestamp fix (correct market time tracking)
+- Bounds checking in entry logic (prevents edge case crashes)
+- **Relaxed momentum criteria** (1.3x volume, 0.8% candle - Oct 4 evening)
+- **Entry position filter** (anti-chasing - skip if >70% of 5-min range)
+- **Choppy filter** (anti-consolidation - skip if range <0.5× ATR)
+
+**Phase 2 (⏳ IN PROGRESS)**:
+- Bounce setup detection (infrastructure ready, logic not implemented)
+- Rejection/fade setup detection (infrastructure ready, logic not implemented)
+- Trailing stop mechanism (not implemented)
+- Adaptive profit targets (partially implemented)
+
+**Phase 3 (🔜 PLANNED)**:
+- Live paper trading validation
+- Parameter optimization based on results
+- Production deployment
 
 ## PS60 Trading Methodology (Scanner-Driven Implementation)
 
@@ -76,11 +137,489 @@ THEN enter_short()
 ### Risk Management Rules (CRITICAL)
 
 1. **Initial Stop**: Place at or just beyond pivot price (entry level)
-2. **Take Partial Profits Immediately**: Sell 1/2 or 1/3 on first move (25-75¢)
-3. **Move Stop to Breakeven**: After taking partial, stop on remainder goes to entry price
-4. **5-7 Minute Rule**: If trade doesn't move favorably within 5-7 min, exit (indicates "reload seller/buyer")
-5. **Scale Out**: Take additional profits at next technical levels
-6. **Runner Management**: Trail stop on final piece, close by EOD
+2. **Risk-Based Position Sizing**: Calculate shares based on 1% account risk
+   - Risk Amount = Account Size × 1%
+   - Stop Distance = abs(Entry - Stop)
+   - Shares = Risk Amount / Stop Distance (capped at 10-1000 shares)
+3. **Take Partial Profits at 1R**: Sell 50% when profit equals risk (1R gain)
+4. **Move Stop to Breakeven**: After taking partial, stop on remainder goes to entry price
+5. **8-Minute Rule** (CRITICAL): If no progress (gain < $0.10/share) after 8 minutes AND no partials taken, exit immediately
+   - Prevents "reload seller/buyer" scenarios
+   - Only applies before first partial (once profitable, let it run)
+   - Saves ~$2,300-3,000 per month on quick losers
+   - May exit 1-2 slow starters per month (acceptable trade-off)
+6. **Scale Out**: Take additional 25% at target levels (2R, 3R)
+7. **Runner Management**: Trail stop on final 25%, close by EOD
+
+### Gap Handling (CRITICAL - October 4, 2025)
+
+**Problem**: Scanner data is generated 8-13 hours before market open (pre-market or previous evening). When a stock gaps overnight, the scanner's resistance/support levels may already be breached at the open, invalidating the setup.
+
+**Example**:
+- Scanner runs at 8 PM on Oct 1st: CLOV @ $2.70, resistance $3.24 (19.87% away)
+- Stock gaps up at 9:30 AM on Oct 2nd: Opens at $3.30 (already through resistance)
+- Problem: Gap "ate up" the move - insufficient room to target left
+
+**Solution - Smart Gap Filter**:
+
+The strategy implements a three-tier gap filter:
+
+1. **Small Gaps (<1% through pivot)**: Allow trade
+   - Gap is insignificant, pivot is still valid
+   - Enter normally when price breaks pivot
+
+2. **Large Gaps (>1%) with Room (>3% to target)**: Allow trade
+   - Gap is significant BUT plenty of upside remains
+   - Enter on continued strength after gap
+
+3. **Large Gaps (>1%) without Room (<3% to target)**: Skip trade
+   - Gap ate up most of the move
+   - Risk/reward no longer favorable
+   - **This is the most common reason to skip a scanner setup**
+
+**Implementation** (ps60_strategy.py:180-250):
+
+```python
+def _check_gap_filter(self, stock_data, current_price, side='LONG'):
+    """Check if trade should be skipped due to gap through pivot"""
+
+    previous_close = stock_data.get('close')
+
+    if side == 'LONG':
+        pivot = stock_data['resistance']
+        target = stock_data.get('target1')
+
+        # Check if gapped through pivot
+        if previous_close < pivot and current_price > pivot:
+            gap_pct = ((current_price - pivot) / pivot) * 100
+
+            # Small gap (<1%) - OK to enter
+            if gap_pct <= 1.0:
+                return False, None
+
+            # Large gap - check room to target
+            room_to_target = ((target - current_price) / current_price) * 100
+
+            # Plenty of room (>3%) - OK to enter
+            if room_to_target >= 3.0:
+                return False, None
+
+            # Gap ate up the move - SKIP
+            return True, f"Gap {gap_pct:.1f}% through pivot, only {room_to_target:.1f}% to target"
+```
+
+**Configuration** (trader_config.yaml):
+
+```yaml
+filters:
+  enable_gap_filter: true           # Enable gap detection
+  max_gap_through_pivot: 1.0        # 1% threshold for "small gap"
+  min_room_to_target: 3.0           # 3% minimum room to target after gap
+```
+
+**Real-World Impact**:
+
+Without gap filter:
+- CLOV on Oct 2: Would enter at $3.30, target $3.40 (only 3% gain, too risky)
+
+With gap filter:
+- CLOV skipped: "Gap 1.9% through pivot, only 3.1% to target" (borderline case)
+- Protects capital from low R/R setups after overnight gaps
+
+**Code Reusability - Backtester & Live Trading**:
+
+The gap filter logic is implemented in the **shared PS60Strategy class** (trader/strategy/ps60_strategy.py), ensuring identical behavior between backtesting and live trading:
+
+- **Live Trader** (trader.py): Calls `strategy.should_enter_long()` which checks gap filter
+- **Backtester** (backtest/backtester.py): Calls same `strategy.should_enter_long()` method
+- **Single source of truth**: All trading logic lives in PS60Strategy class
+- **Guaranteed consistency**: Backtest results accurately predict live trading behavior
+
+**Gap Filtering Workflow** (October 4, 2025):
+
+The system now performs **two-stage gap filtering**:
+
+1. **At Market Open (9:30 AM)** - Pre-filter watchlist:
+   ```python
+   # Get opening prices for all stocks
+   opening_prices = get_opening_prices(watchlist)  # {symbol: opening_price}
+
+   # Filter out stocks where gap ate up the move
+   filtered_watchlist, gap_report = strategy.filter_scanner_for_gaps(
+       watchlist,
+       opening_prices
+   )
+   ```
+
+   This removes stocks **before** monitoring begins, saving resources.
+
+2. **During Trading** - Entry validation:
+   ```python
+   # When price breaks pivot, double-check gap didn't invalidate setup
+   should_enter, reason = strategy.should_enter_long(stock, current_price, attempts)
+   ```
+
+   This catches any edge cases where gaps occur during the trading session.
+
+**Gap Filter Actions**:
+- **SKIPPED**: Stock removed from watchlist (gap >1% through pivot, <3% room to target)
+- **ADJUSTED**: Stock kept but noted (gap >1% but sufficient room remains)
+- **NOTED**: Significant gap (>2%) reported for awareness
+
+### Hybrid Entry Strategy (October 4, 2025)
+
+The strategy uses a **two-tier entry approach** based on breakout strength:
+
+#### Type 1: MOMENTUM BREAKOUT (Immediate Entry)
+**Criteria**:
+- 1-minute candle closes above resistance ✅
+- Volume ≥ 2.0x average ✅
+- Candle size ≥ 1.5% OR candle range ≥ 2x ATR ✅
+
+**Action**: Enter immediately after candle close (no pullback needed)
+
+**Example**: TSLA breaks $445 resistance with 3.5x volume and 2.1% candle → Enter at $445.50
+
+#### Type 2: PULLBACK/RETEST (Patient Entry)
+**Criteria**:
+- 1-minute candle closes above resistance ✅
+- Volume < 2.0x OR small candle (weak breakout) ❌
+
+**Action**: Wait for pullback within 0.3% of pivot, then enter on re-break with 1.2x volume
+
+**Example**: AMD breaks $162 resistance with 1.1x volume → Wait for pullback to $162.20 → Enter on re-break
+
+**Implementation**: `trader/strategy/ps60_strategy.py` (lines 697-857)
+
+**Why This Works**:
+- Strong breakouts capture immediate momentum moves (TSLA, COIN)
+- Weak breakouts require patience and confirmation (AMD, PLTR)
+- Reduces whipsaws on weak initial breaks
+- Maximizes entries on high-conviction setups
+
+**Performance**:
+- Oct 1-4: 42 trades, 23.8% win rate, +$5,461
+- Most trades were pullback/retest (no stocks met momentum criteria)
+- 8-minute rule prevents weak pullbacks from becoming large losses
+
+**Example Output**:
+```
+GAP ANALYSIS AT MARKET OPEN (9:30 AM)
+================================================================================
+❌ CLOV: Gap up 3.4% through resistance, only 1.5% to target
+⚠️  TSLA: Gap up 2.1%, but 5.2% to target remains
+📊 AMC: Gap +2.3%, now 0.8% from pivot
+
+FINAL WATCHLIST: 2 setups (1 removed by gap filter)
+```
+
+## Filter System (October 5, 2025)
+
+### Overview
+
+The strategy uses a comprehensive **11-filter system** to ensure trade quality and prevent common losing patterns. Filters are applied in stages: pre-entry screening, entry decision, and exit management.
+
+**Complete Reference**: `trader/FILTER_DOCUMENTATION.md` (300+ lines, detailed explanations)
+**Debug Session**: `trader/PLTR_DEBUG_SESSION.md` (PLTR investigation, Oct 5)
+**Evolution Log**: `trader/STRATEGY_EVOLUTION_LOG.md` (master consolidation log)
+
+### Filter Application Order
+
+```
+Stock breaks resistance
+    ↓
+Wait for 1-minute candle close (0-60 seconds)
+    ↓
+Calculate volume & candle metrics
+    ↓
+┌─────────────────────────────┐
+│ Is it MOMENTUM breakout?    │
+│ (vol ≥1.3x AND candle large)│
+└─────────────┬───────────────┘
+              │
+        ┌─────┴─────┐
+        │           │
+       YES          NO (WEAK)
+        │           │
+        ↓           ↓
+   MOMENTUM    CONFIRMATION NEEDED
+   PATH              │
+        │       ┌────┴────┐
+        │       │         │
+        │   PULLBACK  SUSTAINED
+        │   (0-120s)  (120s)
+        │       │         │
+        └───────┴─────────┘
+                │
+        Check choppy filter (ALL paths)
+                │
+        Check room-to-run filter
+        (pullback/sustained only)
+                │
+            ENTER
+```
+
+### Critical Filters (October 5, 2025)
+
+#### 1. Choppy Market Filter ⭐ CRITICAL
+**Purpose**: Prevent entries during consolidation (high whipsaw risk)
+**When Applied**: ALL entry types (momentum, pullback, sustained)
+**Logic**: Block if 5-minute range < 0.5× ATR
+
+**Configuration**:
+```yaml
+confirmation:
+  enable_choppy_filter: true
+  choppy_atr_multiplier: 0.5      # Range must exceed 0.5× ATR
+  choppy_lookback_bars: 60        # Last 5 minutes
+```
+
+**Impact**:
+- September analysis: 61% of losses from choppy conditions
+- Lost $15,425 in one week from consolidation entries
+- Win rate in choppy: 6.7% vs 40%+ in trending
+
+**Example**:
+```python
+5-minute range: $0.80 ($182.20 - $183.00)
+ATR(20): $2.10
+Threshold: $2.10 × 0.5 = $1.05
+
+$0.80 < $1.05 → CHOPPY → BLOCK ❌
+```
+
+#### 2. Room-to-Run Filter ⭐⭐⭐ NEW (Oct 5, 2025)
+**Purpose**: Validate sufficient opportunity remaining at entry time
+**When Applied**: Pullback/retest and sustained break entries ONLY
+**Logic**: Block if (target - entry) / entry < 1.5%
+
+**Configuration**:
+```yaml
+filters:
+  enable_room_to_run_filter: true
+  min_room_to_target_pct: 1.5     # Minimum 1.5% to target
+```
+
+**Why This Filter Was Created**:
+- Scanner generates setups 8-13 hours before market open
+- Market conditions change overnight (gaps, pre-market moves)
+- Confirmation strategies wait for patterns (0-120 seconds)
+- Price moves during confirmation wait
+- Need to validate opportunity still exists at entry time
+
+**Impact**:
+- PLTR Oct 1: 0.61% room → BLOCKED ✅ (would have lost -$1,567)
+- Oct 1 results: 5 trades (+$41) → 1 trade (+$796) with filter
+- 19x P&L improvement by blocking marginal setups
+
+**Example**:
+```python
+PLTR @ 9:48 AM:
+  Entry: $183.03
+  Target: $184.14
+  Room: ($184.14 - $183.03) / $183.03 = 0.61%
+
+0.61% < 1.5% → BLOCK ❌
+
+COIN @ 10:05 AM:
+  Entry: $345.92
+  Target: $354.00
+  Room: ($354.00 - $345.92) / $345.92 = 2.33%
+
+2.33% > 1.5% → ALLOW ✅
+```
+
+**Paradigm Shift**:
+- ❌ Old thinking: "Are we too high in the range?" (defensive)
+- ❌ Old thinking: "Are we too far from pivot?" (pivot-centric)
+- ✅ New thinking: **"Is there enough room to target?"** (opportunity-centric)
+
+#### 3. Sustained Break Logic ⭐ NEW (Oct 5, 2025)
+**Purpose**: Catch "slow grind" breakouts with weak candles but sustained hold
+**When Applied**: Weak breakouts that don't qualify for momentum OR pullback
+**Logic**: Price holds above/below pivot for 2 minutes with volume
+
+**Configuration**:
+```yaml
+confirmation:
+  sustained_break_enabled: true
+  sustained_break_minutes: 2
+  sustained_break_max_pullback_pct: 0.003  # 0.3% tolerance
+```
+
+**Why This Was Added**:
+- 5-second bars show weak candles (0.04%) for strong 1-minute moves (0.22%)
+- Bar resolution mismatch made momentum filter too strict
+- Time-based confirmation works better than size-based for fine-resolution data
+
+**Example - PLTR Oct 1**:
+```
+09:45:55 - Initial break @ $182.25
+           1-minute candle: 0.22% ✅ (reasonable)
+           5-second candle: 0.04% ❌ (too small for 0.8% threshold)
+           Volume: 1.44x ✅ (good)
+           → Classified as WEAK (not momentum)
+
+09:46:00-09:47:55 - Sustained hold pattern
+           Price stayed above $182.24 for 2 minutes
+           Average volume: 1.3x
+           Max pullback: 0.24% (within 0.3% tolerance)
+           → SUSTAINED BREAK confirmed ✅
+
+09:48:00 - Entry eligible @ $183.03
+           BUT: Room to target only 0.61% < 1.5%
+           → BLOCKED by room-to-run filter ✅
+```
+
+### Filter Configuration Matrix
+
+**All filters can be independently enabled/disabled** via `trader/config/trader_config.yaml`:
+
+| Filter | Config Key | Default | Applied To | Impact |
+|--------|-----------|---------|------------|--------|
+| Min Score | `filters.min_score` | 0 (disabled) | Pre-entry | Quality screening |
+| Min R/R | `filters.min_risk_reward` | 0 (disabled) | Pre-entry | Risk validation |
+| Gap Filter | `filters.enable_gap_filter` | false | Pre-entry | Overnight gap handling |
+| **Choppy Filter** | `confirmation.enable_choppy_filter` | **true** | **All entries** | **-$15k/month saved** |
+| **Room-to-Run** | `filters.enable_room_to_run_filter` | **true** | **Pullback/sustained** | **19x P&L improvement** |
+| Max Attempts | `trading.attempts.max_attempts_per_pivot` | 2 | Entry decision | Prevent overtrading |
+| Entry Time Window | `trading.entry.min/max_entry_time` | 09:45-15:00 | Entry decision | Avoid volatility |
+| Index Shorts | `filters.avoid_index_shorts` | true | Entry decision | +$700/day saved |
+| Symbol Blacklist | `filters.avoid_symbols` | SPY/QQQ/DIA/IWM | Pre-entry | Remove bad actors |
+| 8-Minute Rule | (automatic) | true | Exit decision | +$2,334/month net |
+| Trailing Stop | `trading.trailing_stop.enabled` | true | Exit management | Let winners run |
+
+### October 4 Evening: Three Critical Entry Filters
+
+**Based on Sept 23-30 Analysis** (-$19,315 loss, 10.6% win rate, 123 trades)
+
+Comprehensive analysis of all 123 trades revealed three major issues causing losses:
+
+#### Problem #1: Momentum Criteria Too Strict
+- **Only 1 out of 123 trades qualified as "momentum breakout"**
+- 99% of trades went through pullback logic
+- Result: Late entries after pullback → chasing moves
+
+**Fix #1: Relaxed Momentum Criteria**
+```yaml
+# OLD (too strict)
+momentum_volume_threshold: 2.0    # 2.0x volume
+momentum_candle_min_pct: 0.015    # 1.5% candle
+
+# NEW (realistic)
+momentum_volume_threshold: 1.3    # 1.3x volume (-35%)
+momentum_candle_min_pct: 0.008    # 0.8% candle (-47%)
+```
+
+**Expected Impact**: More trades will enter on initial breakout (momentum) instead of waiting for pullback, reducing chasing.
+
+#### Problem #2: Chasing Entries (69.1% of trades) - SUPERSEDED
+- **Winners entered at 36% of 5-minute range**
+- **Losers entered at 81% of 5-minute range**
+- Chasing trades lost $13,099 (68% of all losses)
+
+**Fix #2: Entry Position Filter (DEPRECATED - Oct 5, 2025)**
+```yaml
+enable_entry_position_filter: false  # DISABLED - superseded by room-to-run filter
+max_entry_position_pct: 70           # Don't enter above 70% of 5-min range
+```
+
+**Logic Conflict Discovered (Oct 5)**:
+- Pullback/retest strategies NEED TIME to confirm patterns
+- Chasing filter PENALIZED waiting for confirmation
+- Self-defeating logic
+
+**Replacement**: Room-to-run filter (measures distance to target instead)
+
+#### Problem #3: Choppy Entries (61% of trades)
+- **75 trades had choppy price action** (first minute move <0.15%)
+- These choppy trades: 6.7% win rate, -$15,425 total loss
+- Issue: Entering during consolidation, not trending moves
+
+**Fix #3: Choppy Filter** (See detailed explanation above)
+```yaml
+enable_choppy_filter: true
+choppy_atr_multiplier: 0.5        # Recent range must be >0.5× ATR
+```
+
+**Logic**: Skip entry if 5-minute range is less than 50% of ATR (indicates consolidation).
+
+**Expected Impact**: Eliminate ~55 choppy trades, save ~$11,000.
+
+#### Combined Expected Impact
+
+**BEFORE Fixes** (Sept 23-30):
+- 123 trades
+- 10.6% win rate
+- -$19,315 P&L
+
+**AFTER Fixes (estimated)**:
+- ~40 high-quality trades (-67% trade count)
+- ~25-30% win rate (+150% win rate)
+- +$2,000 to +$5,000 P&L (improvement: +$21K to +$24K)
+
+**Implementation Details**: See `trader/OCT_4_2025_FIXES_IMPLEMENTATION.md`
+
+### Filter Evolution Timeline (Oct 4-5, 2025)
+
+| Date | Filter | Action | Rationale |
+|------|--------|--------|-----------|
+| Oct 4 | Min R/R 2:1 | Added | Per requirements |
+| Oct 4 | Choppy filter | Added | 61% losses from consolidation |
+| Oct 4 | Range chasing | Added | Losers at 81% of range |
+| Oct 4 | Max 2 attempts | Added | Prevent overtrading |
+| Oct 5 | Sustained break | Added | Catch slow grinds |
+| Oct 5 | Pullback tolerance | Increased | 0.1% → 0.3% (5-sec bars) |
+| Oct 5 | Range chasing | **Removed** | Conflicted with confirmation |
+| Oct 5 | **Room-to-run** | **Added** | Smart opportunity validation |
+
+### Key Lessons Learned
+
+**Technical Lessons**:
+1. **Bar Resolution Matters**: 5-second vs 1-minute requires different thresholds
+2. **Filters Must Align**: Don't penalize strategies for being patient
+3. **Ask Right Question**: "Room to target?" not "Position in range?"
+4. **Quality Over Quantity**: 1 good trade > 5 marginal trades
+
+**Strategic Lessons**:
+1. **Multi-Path Entry System**: Different paths need different filters
+2. **Adaptive Filtering**: ATR-based > fixed thresholds
+3. **Entry-Time Validation**: Scanner data is 8-13 hours old, validate at entry
+
+### Related Documentation
+
+- **FILTER_DOCUMENTATION.md**: Complete 300+ line filter reference
+- **PLTR_DEBUG_SESSION.md**: Oct 5 debug session (7 phases, 3 hours)
+- **STRATEGY_EVOLUTION_LOG.md**: Master evolution log (consolidates all progress)
+- **trader_config.yaml**: Live configuration with filter ON/OFF controls
+
+**PS60 Exception Rule** (Future Enhancement):
+
+Per PS60 methodology, if a stock gaps significantly through a pivot but still has room to run, use the **first hour's high/low** as the new pivot instead of scanner levels. This is not yet implemented but is on the roadmap.
+
+**Backtester Implementation** (backtester.py:191-248):
+
+The backtester also includes gap detection to properly simulate overnight gaps in historical data:
+
+```python
+# Detect gap at market open
+opening_price = bars[0].open
+prev_close = stock['close']
+gap_pct = ((opening_price - prev_close) / prev_close) * 100
+
+# Check if gap went through resistance
+if opening_price > resistance and prev_close < resistance:
+    gap_pct_through = ((opening_price - resistance) / resistance) * 100
+
+    if gap_pct_through > 0.5:  # Significant gap
+        room_to_target = ((target1 - opening_price) / opening_price) * 100
+
+        if room_to_target < 3.0:
+            skip_trade = True  # Not enough room left
+        else:
+            # Future: Adjust to first-hour pivot
+            pivot_adjusted = True
+```
 
 ### Chart Setup Requirements
 
@@ -241,17 +780,30 @@ Result: +$0.45 avg on 50%, +$2.65 on 25%, $0 on 25% = +$1.11/share avg
 
 ### Position Management
 
-**Sizing Algorithm**:
+**Sizing Algorithm** (Risk-Based, October 4, 2025):
 ```python
-risk_per_trade = account_value * 0.01  # 1% risk
-stop_distance = abs(entry_price - pivot_price)
-shares = risk_per_trade / stop_distance
-shares = min(shares, max_position_size)  # Cap at max size
+# Calculate 1% risk per trade
+risk_amount = account_value * 0.01  # $1,000 on $100k account
+
+# Calculate stop distance
+stop_distance = abs(entry_price - stop_price)
+
+# Calculate shares to risk exactly $1,000
+shares = int(risk_amount / stop_distance)
+
+# Apply constraints
+shares = max(10, min(shares, 1000))  # Between 10-1000 shares
+
+# Examples:
+# TSLA: Entry $435.29, Stop $435.67, Distance $0.38 → 2,632 shares → 1000 (capped)
+# AVGO: Entry $337.55, Stop $334.79, Distance $2.76 → 362 shares ✅
+# BA:   Entry $217.09, Stop $215.32, Distance $1.77 → 565 shares ✅
+# MS:   Entry $156.02, Stop $154.77, Distance $1.25 → 800 shares ✅
 ```
 
-**Scaling Out**:
-- Sell 50% at first favorable move (0.25-0.75 typically)
-- Sell 25% at target1 (conservative target)
+**Scaling Out** (1R-Based Partials):
+- Sell 50% at 1R (profit = risk distance)
+- Sell 25% at target1 (2R or scanner target)
 - Hold 25% as runner with trailing stop
 
 ### Configuration
@@ -566,11 +1118,55 @@ metrics = {
     'avg_trade': total_pnl / total_trades,
     'max_drawdown': calculate_max_drawdown(trades),
     'sharpe_ratio': calculate_sharpe(returns),
-    '5min_rule_exits': count_by_reason('5MIN_RULE'),
+    '8min_rule_exits': count_by_reason('8MIN_RULE'),  # Updated Oct 4, 2025
     'stop_exits': count_by_reason('STOP'),
-    'target_exits': count_by_reason('TARGET')
+    'target_exits': count_by_reason('TARGET'),
+    'trail_stop_exits': count_by_reason('TRAIL_STOP'),
+    'eod_exits': count_by_reason('EOD')
 }
 ```
+
+### Latest Backtest Results (October 4, 2025)
+
+**Test Period**: October 1-4, 2025
+**Configuration**:
+- 8-minute rule enabled
+- Risk-based position sizing (1% per trade)
+- Hybrid entry strategy (momentum vs pullback)
+- Bounds checking and timestamp fixes applied
+
+**Performance**:
+```
+Total Trades: 42
+Win Rate: 23.8%
+Total P&L: +$5,461
+Avg Daily P&L: +$1,820
+Monthly Return: 5.46%
+
+Winners: 10 trades
+Losers: 32 trades
+Profit Factor: 1.65
+Avg Winner: $1,093
+Avg Loser: -$226
+
+Exit Reasons:
+- 8MIN_RULE: 10 trades (prevented larger losses)
+- STOP: 9 trades
+- TRAIL_STOP: 15 trades
+- EOD: 2 trades
+```
+
+**Daily Breakdown**:
+- Oct 1: -$755 (2W/2L, PLTR caught by 8-min rule)
+- Oct 2: -$1,349 (3W/7L, saved ARM -$1,572 with 8-min rule)
+- Oct 3: +$7,565 (5W/23L, TSLA short +$4,605, saved AMAT -$1,385)
+
+**Key Findings**:
+- 8-minute rule saved ~$3,900 on quick losers
+- 8-minute rule cost ~$1,578 on slow starters (PLTR, INTC)
+- Net benefit of 8-minute rule: +$2,334
+- Risk-based sizing varied positions from 362-1,000 shares
+- Most entries were pullback/retest (no momentum breakouts)
 
 ### IBKR Historical Data Limits
 
@@ -1044,8 +1640,96 @@ The type of scanner used made a MASSIVE difference:
 3. ✅ **Adjust filters** based on live results (tested 1.5 R/R)
 4. ✅ **Document edge cases** and anomalies
 5. ✅ **Fix timezone bug** in EOD close logic
-6. ⏳ **Complete September backtest** and analyze results
-7. ⚠️ **Only go live** after consistent results
+6. ✅ **Complete September backtest** and analyze results
+7. ⏳ **Test LONGS ONLY strategy** (scanner support levels unreliable)
+8. ⚠️ **Only go live** after consistent results
+
+## LONGS ONLY Analysis (October 4, 2025)
+
+### Problem Discovery: Scanner Support Levels Unreliable
+
+**Root Cause Analysis**:
+- Deep analysis of 14 SHORT STOP losses using IBKR historical 1-minute bars
+- Found that 42.9% of stopped-out shorts went back to profit zone
+- However, only 21.4% would be winners even with proper stop placement
+- **78.6% of shorts would still lose** even with correct stops (0.5% above entry)
+- **Conclusion**: Scanner support level predictions are fundamentally unreliable
+
+**Analysis Script**: `trader/analyze_short_stops.py`
+**Results File**: `trader/short_stop_analysis.json`
+
+### Configuration Change: Disable Shorts
+
+**File**: `trader/config/trader_config.yaml` (lines 62-64)
+```yaml
+# Direction filter (testing scanner quality)
+enable_shorts: false              # DISABLED - Scanner support levels unreliable
+enable_longs: true                # ENABLED - Scanner resistance levels more reliable
+```
+
+**Implementation**: `trader/backtest/backtester.py` (lines 67-69, 215, 226, 236, 247)
+```python
+# Direction filters (for testing scanner quality)
+self.enable_shorts = self.config['trading'].get('enable_shorts', True)
+self.enable_longs = self.config['trading'].get('enable_longs', True)
+
+# Entry checks now include direction filters
+if long_attempts < max_attempts and price > resistance and self.enable_longs:
+elif short_attempts < max_attempts and price < support and self.enable_shorts:
+```
+
+### Backtest Results: LONGS ONLY vs LONGS + SHORTS
+
+**Test Period**: September 1-14, 2025 (first two weeks)
+
+| Metric | LONGS ONLY | LONGS + SHORTS | Difference |
+|--------|------------|----------------|------------|
+| Total P&L | +$1,425 | TBD | TBD |
+| Win Rate | 16.7% | TBD | TBD |
+| Total Trades | 42 | TBD | TBD |
+| Trading Days | 8 | 8 | Same |
+| Winning Days | 1/8 (12.5%) | TBD | TBD |
+| Monthly Return | +1.42% | TBD | TBD |
+
+**Key Observations (LONGS ONLY)**:
+- Only 1 winning day out of 8 (Sept 4: +$7,599)
+- Saved by single huge winner: NFLX +$8,140
+- Very low win rate (16.7%) but positive overall
+- Sept 2 had NO trades (shorts disabled, no long triggers)
+- Sept 12 was worst day: -$2,956
+
+**Hypothesis**: Scanner resistance levels (for longs) may be more reliable than support levels (for shorts).
+
+### Improved Logging System
+
+**New Features**:
+- Created `trader/backtest/logs/` directory for all backtest logs
+- Timestamped log files: `{run_name}_{YYYYMM}_{timestamp}.log`
+- Dual output: console + persistent log file
+- Date range support: `--start-day` and `--end-day` parameters
+- Run naming: `--run-name` for organizing different test configurations
+
+**Example Usage**:
+```bash
+cd trader/backtest
+python3 run_monthly_backtest.py \
+  --year 2025 --month 9 \
+  --start-day 1 --end-day 14 \
+  --run-name longs_only \
+  --account-size 100000
+```
+
+**Log Files**:
+- `logs/longs_only_202509_20251004_012008.log` - LONGS ONLY Sept 1-14
+- All backtest output preserved with timestamps for analysis
+
+### Next Analysis Steps
+
+1. ⏳ Run LONGS ONLY backtest for last week of September (Sept 23-30)
+2. ⏳ Run full month LONGS + SHORTS backtest for comparison
+3. ⏳ Compare win rates, P&L, and trade quality between strategies
+4. ⏳ Decide: LONGS ONLY or fix scanner support level detection
+5. ⏳ If LONGS ONLY is better, test on full September month
 
 ## Critical Implementation Rules
 
@@ -1104,6 +1788,27 @@ When implementing features that need existing functionality (scanner, strategy, 
 9. Recalculate resistance/support - use scanner values exactly
 10. Trade stocks not in scanner output - scanner did the pre-qualification
 
+### 📝 DOCUMENTATION MAINTENANCE:
+
+**CRITICAL**: After completing any major implementation, bug fix, or system enhancement:
+
+1. ✅ **Update `trader/PROGRESS_LOG.md`** with:
+   - Date and status of implementation
+   - Problem description
+   - Solution implemented
+   - Files created/modified
+   - Impact and results
+   - Documentation references
+
+2. ✅ **Create standalone documentation** (if needed) for:
+   - New systems (e.g., IBKR_RESILIENCE_COMPLETE.md)
+   - Complex integrations (e.g., BARBUFFER_INTEGRATION.md)
+   - Usage guides (e.g., LOGGING_GUIDE.md)
+
+3. ✅ **Update CLAUDE.md** to reference new documentation
+
+**Why**: The progress log serves as the single source of truth for all implementation history, making it easy to understand the project's evolution and decisions.
+
 ### ALWAYS:
 1. Use IBKR API exclusively for market data and execution
 2. Implement strict stop discipline (no exceptions)
@@ -1143,7 +1848,66 @@ When implementing features that need existing functionality (scanner, strategy, 
 
 ## Documentation Files
 
+### Core Documentation
 - **PS60ProcessComprehensiveDayTradingGuide.md** - Complete PS60 theory and examples
+- **CLAUDE.md** (this file) - Master project documentation and guidance
+- **trader/PROGRESS_LOG.md** - ⭐ **SINGLE SOURCE OF TRUTH** - Complete implementation history (Oct 2025)
+- **trader/REQUIREMENTS_IMPLEMENTATION_LOG.md** - Detailed requirements tracking
+
+### Live Trader Documentation (October 6, 2025)
+- **trader/IBKR_RESILIENCE_COMPLETE.md** - IBKR error handling system (400+ lines)
+  - Retry logic with exponential backoff
+  - Circuit breaker pattern
+  - Connection monitoring
+  - Error statistics and alerts
+  - Testing scenarios
+
+- **trader/STATE_RECOVERY_COMPLETE.md** - Crash recovery system (500+ lines)
+  - Hybrid recovery (state file + IBKR)
+  - Atomic file writes
+  - Position reconciliation
+  - Edge case handling
+
+- **trader/BARBUFFER_INTEGRATION.md** - Tick-to-bar conversion system
+  - Architecture analysis
+  - Live vs backtest compatibility
+  - BarBuffer implementation
+  - Testing framework
+
+- **trader/LOGGING_GUIDE.md** - Comprehensive logging system
+  - Filter decision logging
+  - Entry path tracking
+  - Position state tracking
+  - Daily summary analytics
+
+- **trader/LIVE_TRADER_READY_FOR_TESTING.md** - Pre-launch checklist
+  - System integration status
+  - Testing requirements
+  - Known limitations
+
+### Filter System Documentation (October 5, 2025)
+- **trader/FILTER_DOCUMENTATION.md** - Complete filter reference (300+ lines)
+  - Detailed explanation of all 11 filters
+  - Filter application order diagram
+  - Configuration matrix with ON/OFF controls
+  - Performance impact analysis
+  - Testing framework
+
+- **trader/PLTR_DEBUG_SESSION.md** - Oct 5 debug session log
+  - 7-phase investigation (3 hours)
+  - Timeline of discovery
+  - Technical deep dive
+  - Code changes summary
+  - Key lessons learned
+
+- **trader/STRATEGY_EVOLUTION_LOG.md** - Master evolution log
+  - Implementation phases (Sept-Oct 2025)
+  - Filter evolution timeline
+  - Performance metrics
+  - Lessons learned
+  - Next steps roadmap
+
+### Scanner Documentation
 - **stockscanner/CLAUDE.md** - Scanner implementation details
 - **stockscanner/README.md** - Scanner user guide
 - **stockscanner/IBKR_API_SETUP.md** - TWS configuration

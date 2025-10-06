@@ -1,0 +1,20 @@
+[
+  {
+    "symbol": "COIN",
+    "side": "LONG",
+    "entry_price": 345.91556999999995,
+    "entry_time": "2025-10-01 10:05:35-04:00",
+    "exit_price": 345.1583,
+    "exit_time": "2025-10-01 15:04:35+00:00",
+    "shares": 906,
+    "pnl": 795.993480000043,
+    "reason": "TRAIL_STOP",
+    "partials": 1,
+    "duration_min": 59.0,
+    "pnl_per_share": 0.8785800000000474,
+    "pnl_pct": 0.25398683268291383,
+    "entry_bar": 428,
+    "exit_bar": 1136,
+    "commission": 9.06
+  }
+]

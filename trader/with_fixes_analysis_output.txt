@@ -1,0 +1,646 @@
+Analyzing 88 trades from Sept 23-30 with fixes applied...
+================================================================================
+
+1. ❌ COIN LONG ($328.76 → $327.82, P&L: $-236.89)
+   Entry Position: 22% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.17 (0.36% of price)
+   Range/ATR Ratio: 21.60× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.13%, Net -0.07%
+   Verdict: NEUTRAL
+
+2. ❌ META LONG ($767.03 → $764.82, P&L: $-222.25)
+   Entry Position: 181% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $1.33 (0.17% of price)
+   Range/ATR Ratio: 10.14× 🟢 TRENDING
+   First Minute: Best -0.08%, Worst -0.18%, Net -0.11%
+   Verdict: CHASING
+
+3. ❌ META LONG ($767.00 → $764.68, P&L: $-240.62)
+   Entry Position: 179% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $1.33 (0.17% of price)
+   Range/ATR Ratio: 10.14× 🟢 TRENDING
+   First Minute: Best -0.08%, Worst -0.18%, Net -0.10%
+   Verdict: CHASING
+
+4. ❌ RBLX LONG ($134.87 → $134.35, P&L: $-202.73)
+   Entry Position: 88% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.99 (0.73% of price)
+   Range/ATR Ratio: 15.31× 🟢 TRENDING
+   First Minute: Best +0.21%, Worst -0.23%, Net +0.12%
+   Verdict: CHASING
+
+5. ❌ RBLX LONG ($134.99 → $134.55, P&L: $-283.24)
+   Entry Position: 145% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.39 (0.29% of price)
+   Range/ATR Ratio: 18.28× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.28%, Net -0.13%
+   Verdict: CHASING
+
+6. ❌ NFLX LONG ($1221.63 → $1218.61, P&L: $-190.20)
+   Entry Position: -6% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $4.23 (0.35% of price)
+   Range/ATR Ratio: 37.60× 🟢 TRENDING
+   First Minute: Best +0.08%, Worst -0.10%, Net -0.05%
+   Verdict: NEUTRAL
+
+7. ❌ NFLX LONG ($1222.29 → $1218.63, P&L: $-240.31)
+   Entry Position: 33% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $5.70 (0.47% of price)
+   Range/ATR Ratio: 48.58× 🟢 TRENDING
+   First Minute: Best +0.02%, Worst -0.14%, Net +0.01%
+   Verdict: NEUTRAL
+
+8. ❌ AVGO LONG ($337.50 → $336.72, P&L: $-165.00)
+   Entry Position: -58% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.87 (0.26% of price)
+   Range/ATR Ratio: 6.97× 🟢 TRENDING
+   First Minute: Best +0.21%, Worst -0.14%, Net -0.10%
+   Verdict: NEUTRAL
+
+9. ❌ AVGO LONG ($338.04 → $337.07, P&L: $-192.54)
+   Entry Position: 58% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.75 (0.52% of price)
+   Range/ATR Ratio: 12.35× 🟢 TRENDING
+   First Minute: Best +0.03%, Worst -0.26%, Net -0.02%
+   Verdict: NEUTRAL
+
+10. ❌ NVDA LONG ($177.41 → $176.90, P&L: $-240.45)
+   Entry Position: 182% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.29 (0.16% of price)
+   Range/ATR Ratio: 8.02× 🟢 TRENDING
+   First Minute: Best -0.08%, Worst -0.16%, Net -0.09%
+   Verdict: CHASING
+
+11. ❌ NVDA LONG ($177.43 → $176.88, P&L: $-264.52)
+   Entry Position: 189% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.29 (0.16% of price)
+   Range/ATR Ratio: 8.02× 🟢 TRENDING
+   First Minute: Best -0.09%, Worst -0.17%, Net -0.11%
+   Verdict: CHASING
+
+12. ❌ AMZN LONG ($221.29 → $220.78, P&L: $-110.63)
+   Entry Position: 102% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.96 (0.43% of price)
+   Range/ATR Ratio: 12.63× 🟢 TRENDING
+   First Minute: Best +0.03%, Worst -0.10%, Net -0.05%
+   Verdict: CHASING
+
+13. ❌ AMZN LONG ($220.77 → $220.16, P&L: $-222.64)
+   Entry Position: 165% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.40 (0.18% of price)
+   Range/ATR Ratio: 10.48× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.15%, Net -0.09%
+   Verdict: CHASING
+
+14. ❌ GOOGL LONG ($249.78 → $249.20, P&L: $-159.44)
+   Entry Position: 160% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.80 (0.32% of price)
+   Range/ATR Ratio: 9.94× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.24%, Net +0.00%
+   Verdict: CHASING
+
+15. ❌ GOOGL LONG ($250.04 → $249.20, P&L: $-251.19)
+   Entry Position: 192% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.80 (0.32% of price)
+   Range/ATR Ratio: 9.94× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.34%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+16. ❌ BA LONG ($217.91 → $217.33, P&L: $-216.72)
+   Entry Position: 104% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $1.33 (0.61% of price)
+   Range/ATR Ratio: 14.43× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.12%, Net -0.01%
+   Verdict: CHASING
+
+17. ❌ ROKU LONG ($97.72 → $97.48, P&L: $-145.30)
+   Entry Position: 6% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.43 (0.44% of price)
+   Range/ATR Ratio: 33.95× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.16%, Net -0.10%
+   Verdict: NEUTRAL
+
+18. ❌ ROKU LONG ($97.72 → $97.50, P&L: $-125.32)
+   Entry Position: 28% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.56 (0.57% of price)
+   Range/ATR Ratio: 31.40× 🟢 TRENDING
+   First Minute: Best +0.00%, Worst -0.10%, Net -0.03%
+   Verdict: NEUTRAL
+
+19. ❌ MU LONG ($158.77 → $158.38, P&L: $-188.19)
+   Entry Position: 115% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.58 (0.37% of price)
+   Range/ATR Ratio: 6.71× 🟢 TRENDING
+   First Minute: Best -0.02%, Worst -0.23%, Net -0.09%
+   Verdict: CHASING
+
+20. ❌ MU LONG ($158.88 → $158.41, P&L: $-231.42)
+   Entry Position: 98% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.49 (0.31% of price)
+   Range/ATR Ratio: 6.04× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.25%, Net -0.11%
+   Verdict: CHASING
+
+21. ❌ PINS LONG ($32.98 → $32.89, P&L: $-65.91)
+   Entry Position: 87% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.39% of price)
+   Range/ATR Ratio: 8.04× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+22. ❌ PINS LONG ($33.00 → $32.91, P&L: $-65.95)
+   Entry Position: 102% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.39% of price)
+   Range/ATR Ratio: 8.13× 🟢 TRENDING
+   First Minute: Best +0.02%, Worst -0.19%, Net +0.02%
+   Verdict: CHASING
+
+23. ❌ GME LONG ($26.04 → $25.97, P&L: $-52.03)
+   Entry Position: 82% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.50% of price)
+   Range/ATR Ratio: 11.47× 🟢 TRENDING
+   First Minute: Best +0.02%, Worst -0.10%, Net -0.02%
+   Verdict: CHASING
+
+24. ❌ GME LONG ($26.05 → $25.99, P&L: $-42.06)
+   Entry Position: 89% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.50% of price)
+   Range/ATR Ratio: 11.47× 🟢 TRENDING
+   First Minute: Best -0.02%, Worst -0.14%, Net -0.06%
+   Verdict: CHASING
+
+25. ❌ MS LONG ($158.55 → $158.11, P&L: $-222.57)
+   Entry Position: 112% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.91 (0.57% of price)
+   Range/ATR Ratio: 23.95× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.15%, Net -0.12%
+   Verdict: CHASING
+
+26. ❌ MS LONG ($158.54 → $158.07, P&L: $-247.71)
+   Entry Position: 111% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.91 (0.57% of price)
+   Range/ATR Ratio: 23.95× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.14%, Net -0.11%
+   Verdict: CHASING
+
+27. ❌ UBER LONG ($97.28 → $97.06, P&L: $-134.43)
+   Entry Position: 142% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.21 (0.22% of price)
+   Range/ATR Ratio: 7.08× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.26%, Net -0.10%
+   Verdict: CHASING
+
+28. ❌ UBER LONG ($97.33 → $97.10, P&L: $-144.52)
+   Entry Position: 165% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.21 (0.22% of price)
+   Range/ATR Ratio: 7.50× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.18%, Net -0.03%
+   Verdict: CHASING
+
+29. ✅ PLTR LONG ($175.51 → $181.75, P&L: $1695.95)
+   Entry Position: 124% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.98 (0.56% of price)
+   Range/ATR Ratio: 4.99× 🟢 TRENDING
+   First Minute: Best +0.79%, Worst -0.31%, Net +0.78%
+   Verdict: BAD_REVERSAL
+
+30. ❌ GS LONG ($794.01 → $792.41, P&L: $-144.65)
+   Entry Position: 1% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.58 (0.32% of price)
+   Range/ATR Ratio: 126.89× 🟢 TRENDING
+   First Minute: Best +0.09%, Worst -0.10%, Net +0.05%
+   Verdict: NEUTRAL
+
+31. ❌ GS LONG ($794.79 → $792.41, P&L: $-247.69)
+   Entry Position: 31% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.58 (0.32% of price)
+   Range/ATR Ratio: 126.89× 🟢 TRENDING
+   First Minute: Best -0.01%, Worst -0.20%, Net -0.05%
+   Verdict: NEUTRAL
+
+32. ❌ CLOV SHORT ($3.09 → $3.12, P&L: $-35.21)
+   Entry Position: 36% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.04 (1.46% of price)
+   Range/ATR Ratio: 12.04× 🟢 TRENDING
+   First Minute: Best +0.03%, Worst -0.61%, Net -0.29%
+   Verdict: BAD_REVERSAL
+
+33. ❌ CLOV SHORT ($3.09 → $3.12, P&L: $-39.31)
+   Entry Position: 26% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.04 (1.46% of price)
+   Range/ATR Ratio: 9.47× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.75%, Net -0.42%
+   Verdict: BAD_REVERSAL
+
+34. ❌ CLOV LONG ($3.12 → $3.11, P&L: $-13.73)
+   Entry Position: 165% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.02 (0.64% of price)
+   Range/ATR Ratio: 4.59× 🟢 TRENDING
+   First Minute: Best +0.22%, Worst -0.58%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+35. ❌ CLOV LONG ($3.12 → $3.11, P&L: $-16.24)
+   Entry Position: 116% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.02 (0.64% of price)
+   Range/ATR Ratio: 8.48× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.42%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+36. ❌ F LONG ($11.60 → $11.57, P&L: $-33.18)
+   Entry Position: 129% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.04 (0.34% of price)
+   Range/ATR Ratio: 4.21× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+37. ❌ F LONG ($11.60 → $11.57, P&L: $-33.18)
+   Entry Position: 129% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.04 (0.34% of price)
+   Range/ATR Ratio: 4.21× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+38. ❌ C LONG ($101.81 → $101.54, P&L: $-183.45)
+   Entry Position: 61% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.33 (0.32% of price)
+   Range/ATR Ratio: 30.00× 🟢 TRENDING
+   First Minute: Best +0.03%, Worst -0.11%, Net +0.03%
+   Verdict: NEUTRAL
+
+39. ❌ C LONG ($101.88 → $101.58, P&L: $-213.56)
+   Entry Position: 82% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.33 (0.32% of price)
+   Range/ATR Ratio: 30.00× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.18%, Net -0.04%
+   Verdict: CHASING
+
+40. ❌ HOOD LONG ($121.62 → $121.36, P&L: $-150.34)
+   Entry Position: 129% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.56 (0.46% of price)
+   Range/ATR Ratio: 8.77× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.31%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+41. ❌ HOOD LONG ($121.81 → $121.44, P&L: $-217.81)
+   Entry Position: 141% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.64 (0.53% of price)
+   Range/ATR Ratio: 10.00× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.21%, Net -0.06%
+   Verdict: CHASING
+
+42. ❌ UBER LONG ($97.51 → $97.26, P&L: $-164.86)
+   Entry Position: 40% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.52 (0.53% of price)
+   Range/ATR Ratio: 17.53× 🟢 TRENDING
+   First Minute: Best -0.03%, Worst -0.14%, Net -0.07%
+   Verdict: NEUTRAL
+
+43. ❌ UBER LONG ($97.61 → $97.30, P&L: $-225.00)
+   Entry Position: 86% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.38 (0.39% of price)
+   Range/ATR Ratio: 13.10× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.14%, Net -0.05%
+   Verdict: CHASING
+
+44. ❌ LYFT LONG ($21.65 → $21.60, P&L: $-43.27)
+   Entry Position: 104% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.26 (1.20% of price)
+   Range/ATR Ratio: 19.75× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.28%, Net -0.10%
+   Verdict: CHASING
+
+45. ❌ LYFT LONG ($21.60 → $21.55, P&L: $-23.17)
+   Entry Position: 124% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.60% of price)
+   Range/ATR Ratio: 9.40× 🟢 TRENDING
+   First Minute: Best +0.13%, Worst -0.19%, Net -0.05%
+   Verdict: CHASING
+
+46. ❌ COIN LONG ($305.92 → $305.09, P&L: $-107.34)
+   Entry Position: 62% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $3.21 (1.05% of price)
+   Range/ATR Ratio: 11.46× 🟢 TRENDING
+   First Minute: Best +0.06%, Worst -0.32%, Net -0.02%
+   Verdict: BAD_REVERSAL
+
+47. ❌ COIN LONG ($305.43 → $304.69, P&L: $-129.47)
+   Entry Position: 66% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.27 (0.74% of price)
+   Range/ATR Ratio: 8.58× 🟢 TRENDING
+   First Minute: Best +0.21%, Worst -0.19%, Net -0.05%
+   Verdict: NEUTRAL
+
+48. ❌ PLTR LONG ($176.50 → $176.06, P&L: $-181.09)
+   Entry Position: 38% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.31 (1.31% of price)
+   Range/ATR Ratio: 15.31× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.25%, Net -0.10%
+   Verdict: NEUTRAL
+
+49. ❌ PLTR LONG ($176.68 → $176.08, P&L: $-256.73)
+   Entry Position: 57% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.84 (1.04% of price)
+   Range/ATR Ratio: 12.25× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.42%, Net -0.38%
+   Verdict: BAD_REVERSAL
+
+50. ❌ AMD LONG ($160.13 → $159.71, P&L: $-206.28)
+   Entry Position: 41% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.17 (0.73% of price)
+   Range/ATR Ratio: 12.54× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.19%, Net -0.16%
+   Verdict: NEUTRAL
+
+51. ❌ AMD LONG ($160.11 → $159.68, P&L: $-217.24)
+   Entry Position: 157% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.58 (0.36% of price)
+   Range/ATR Ratio: 6.39× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.34%, Net -0.21%
+   Verdict: BAD_REVERSAL
+
+52. ❌ ARM LONG ($138.43 → $138.07, P&L: $-202.62)
+   Entry Position: 67% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.89 (0.64% of price)
+   Range/ATR Ratio: 21.98× 🟢 TRENDING
+   First Minute: Best +0.10%, Worst -0.29%, Net +0.10%
+   Verdict: NEUTRAL
+
+53. ❌ ARM LONG ($138.61 → $138.19, P&L: $-220.94)
+   Entry Position: 87% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.89 (0.64% of price)
+   Range/ATR Ratio: 21.98× 🟢 TRENDING
+   First Minute: Best -0.03%, Worst -0.42%, Net -0.03%
+   Verdict: BAD_REVERSAL
+
+54. ❌ JD LONG ($34.69 → $34.59, P&L: $-79.32)
+   Entry Position: 127% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.37% of price)
+   Range/ATR Ratio: 9.63× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+55. ❌ JD LONG ($34.69 → $34.61, P&L: $-59.34)
+   Entry Position: 127% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.37% of price)
+   Range/ATR Ratio: 9.63× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+56. ❌ CLOV LONG ($3.13 → $3.12, P&L: $-16.26)
+   Entry Position: 81% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.01 (0.48% of price)
+   Range/ATR Ratio: 34.35× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.23%, Net -0.10%
+   Verdict: CHASING
+
+57. ❌ CLOV LONG ($3.13 → $3.12, P&L: $-13.75)
+   Entry Position: 81% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.01 (0.32% of price)
+   Range/ATR Ratio: 45.80× 🟢 TRENDING
+   First Minute: Best +0.06%, Worst -0.10%, Net -0.10%
+   Verdict: CHASING
+
+58. ❌ BA LONG ($216.62 → $216.01, P&L: $-234.45)
+   Entry Position: 144% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.22 (0.10% of price)
+   Range/ATR Ratio: 7.17× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.10%, Net -0.06%
+   Verdict: CHASING
+
+59. ❌ BA LONG ($216.66 → $216.01, P&L: $-252.00)
+   Entry Position: 162% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.22 (0.10% of price)
+   Range/ATR Ratio: 7.17× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.12%, Net -0.08%
+   Verdict: CHASING
+
+60. ❌ GS LONG ($801.05 → $798.65, P&L: $-243.19)
+   Entry Position: 22% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.98 (0.37% of price)
+   Range/ATR Ratio: 49.67× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.13%, Net -0.09%
+   Verdict: NEUTRAL
+
+61. ❌ GS LONG ($801.17 → $798.77, P&L: $-240.00)
+   Entry Position: 26% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $2.98 (0.37% of price)
+   Range/ATR Ratio: 49.67× 🟢 TRENDING
+   First Minute: Best -0.09%, Worst -0.15%, Net -0.11%
+   Verdict: NEUTRAL
+
+62. ❌ QCOM LONG ($168.38 → $167.86, P&L: $-224.54)
+   Entry Position: 135% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $1.11 (0.66% of price)
+   Range/ATR Ratio: 18.55× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.30%, Net -0.25%
+   Verdict: BAD_REVERSAL
+
+63. ❌ QCOM LONG ($168.21 → $167.75, P&L: $-209.07)
+   Entry Position: 120% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $1.11 (0.66% of price)
+   Range/ATR Ratio: 18.55× 🟢 TRENDING
+   First Minute: Best +0.05%, Worst -0.20%, Net -0.15%
+   Verdict: CHASING
+
+64. ❌ AMC LONG ($2.91 → $2.90, P&L: $-15.82)
+   Entry Position: 65% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.02 (0.69% of price)
+   Range/ATR Ratio: 2.03× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.44%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+65. ❌ AMC LONG ($2.91 → $2.90, P&L: $-15.82)
+   Entry Position: 129% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.01 (0.34% of price)
+   Range/ATR Ratio: 1.02× 🟢 TRENDING
+   First Minute: Best -0.10%, Worst -0.44%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+66. ❌ BIDU LONG ($133.68 → $133.33, P&L: $-206.48)
+   Entry Position: 18% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.40 (0.30% of price)
+   Range/ATR Ratio: 17.91× 🟢 TRENDING
+   First Minute: Best -0.03%, Worst -0.14%, Net -0.06%
+   Verdict: NEUTRAL
+
+67. ❌ BIDU LONG ($133.76 → $133.34, P&L: $-251.76)
+   Entry Position: 38% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.40 (0.30% of price)
+   Range/ATR Ratio: 17.91× 🟢 TRENDING
+   First Minute: Best -0.09%, Worst -0.20%, Net -0.11%
+   Verdict: NEUTRAL
+
+68. ❌ RBLX LONG ($135.74 → $135.34, P&L: $-192.19)
+   Entry Position: 148% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.96 (0.71% of price)
+   Range/ATR Ratio: 6.96× 🟢 TRENDING
+   First Minute: Best +0.08%, Worst -0.44%, Net -0.22%
+   Verdict: BAD_REVERSAL
+
+69. ❌ RBLX LONG ($135.69 → $135.41, P&L: $-138.12)
+   Entry Position: 117% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.93 (0.69% of price)
+   Range/ATR Ratio: 18.12× 🟢 TRENDING
+   First Minute: Best +0.07%, Worst -0.25%, Net +0.00%
+   Verdict: CHASING
+
+70. ❌ LYFT LONG ($22.19 → $22.13, P&L: $-54.34)
+   Entry Position: 79% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.13 (0.59% of price)
+   Range/ATR Ratio: 7.29× 🟢 TRENDING
+   First Minute: Best +0.04%, Worst -0.28%, Net -0.28%
+   Verdict: CHASING
+
+71. ❌ LYFT LONG ($22.23 → $22.19, P&L: $-34.44)
+   Entry Position: 147% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.09 (0.40% of price)
+   Range/ATR Ratio: 5.68× 🟢 TRENDING
+   First Minute: Best -0.01%, Worst -0.37%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+72. ❌ BA LONG ($216.76 → $216.20, P&L: $-197.42)
+   Entry Position: 83% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.86 (0.40% of price)
+   Range/ATR Ratio: 10.22× 🟢 TRENDING
+   First Minute: Best -0.02%, Worst -0.31%, Net -0.06%
+   Verdict: BAD_REVERSAL
+
+73. ❌ BA LONG ($216.87 → $216.34, P&L: $-170.44)
+   Entry Position: 96% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.81 (0.37% of price)
+   Range/ATR Ratio: 10.02× 🟢 TRENDING
+   First Minute: Best +0.04%, Worst -0.17%, Net -0.17%
+   Verdict: CHASING
+
+74. ❌ ROKU LONG ($99.39 → $99.14, P&L: $-158.63)
+   Entry Position: -47% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.68 (0.68% of price)
+   Range/ATR Ratio: 35.48× 🟢 TRENDING
+   First Minute: Best +0.31%, Worst -0.10%, Net -0.05%
+   Verdict: NEUTRAL
+
+75. ❌ ROKU LONG ($99.58 → $99.28, P&L: $-208.96)
+   Entry Position: 26% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.10 (1.10% of price)
+   Range/ATR Ratio: 44.30× 🟢 TRENDING
+   First Minute: Best -0.04%, Worst -0.23%, Net -0.04%
+   Verdict: NEUTRAL
+
+76. ❌ AMD LONG ($160.28 → $159.83, P&L: $-224.00)
+   Entry Position: 58% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.98 (0.61% of price)
+   Range/ATR Ratio: 10.83× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.16%, Net -0.11%
+   Verdict: NEUTRAL
+
+77. ❌ AMD LONG ($160.26 → $159.74, P&L: $-280.58)
+   Entry Position: 56% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.98 (0.61% of price)
+   Range/ATR Ratio: 10.83× 🟢 TRENDING
+   First Minute: Best -0.05%, Worst -0.15%, Net -0.10%
+   Verdict: NEUTRAL
+
+78. ❌ UBER LONG ($97.86 → $97.57, P&L: $-195.53)
+   Entry Position: 9% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.85 (0.87% of price)
+   Range/ATR Ratio: 17.35× 🟢 TRENDING
+   First Minute: Best +0.15%, Worst -0.18%, Net -0.03%
+   Verdict: NEUTRAL
+
+79. ❌ UBER LONG ($97.97 → $97.74, P&L: $-135.81)
+   Entry Position: 22% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.85 (0.87% of price)
+   Range/ATR Ratio: 17.35× 🟢 TRENDING
+   First Minute: Best +0.03%, Worst -0.29%, Net -0.14%
+   Verdict: NEUTRAL
+
+80. ❌ JD LONG ($34.98 → $34.88, P&L: $-79.90)
+   Entry Position: 212% of 5-min range 🔴 CHASING
+   Pre-Entry Range: $0.04 (0.11% of price)
+   Range/ATR Ratio: 3.87× 🟢 TRENDING
+   First Minute: Best -0.07%, Worst -0.19%, Net -0.10%
+   Verdict: CHASING
+
+81. ❌ JD LONG ($34.98 → $34.88, P&L: $-79.90)
+   Entry Position: 50% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.09 (0.26% of price)
+   Range/ATR Ratio: 8.57× 🟢 TRENDING
+   First Minute: Best +0.10%, Worst -0.13%, Net -0.10%
+   Verdict: NEUTRAL
+
+82. ❌ JPM LONG ($314.06 → $313.20, P&L: $-225.26)
+   Entry Position: 18% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $1.00 (0.32% of price)
+   Range/ATR Ratio: 14.53× 🟢 TRENDING
+   First Minute: Best +0.02%, Worst -0.13%, Net -0.10%
+   Verdict: NEUTRAL
+
+83. ❌ JPM LONG ($314.12 → $313.18, P&L: $-251.86)
+   Entry Position: 49% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.97 (0.31% of price)
+   Range/ATR Ratio: 13.82× 🟢 TRENDING
+   First Minute: Best -0.08%, Worst -0.22%, Net -0.17%
+   Verdict: NEUTRAL
+
+84. ❌ CLOV LONG ($3.12 → $3.11, P&L: $-9.78)
+   Entry Position: 42% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.02 (0.61% of price)
+   Range/ATR Ratio: 75.89× 🟢 TRENDING
+   First Minute: Best +0.38%, Worst -0.10%, Net +0.38%
+   Verdict: NEUTRAL
+
+85. ❌ CLOV LONG ($3.12 → $3.11, P&L: $-16.24)
+   Entry Position: 60% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.02 (0.64% of price)
+   Range/ATR Ratio: 36.47× 🟢 TRENDING
+   First Minute: Best -0.06%, Worst -0.38%, Net -0.10%
+   Verdict: BAD_REVERSAL
+
+86. ❌ QCOM LONG ($165.23 → $164.76, P&L: $-240.37)
+   Entry Position: 55% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.65 (0.39% of price)
+   Range/ATR Ratio: 29.10× 🟢 TRENDING
+   First Minute: Best -0.03%, Worst -0.18%, Net -0.05%
+   Verdict: NEUTRAL
+
+87. ❌ QCOM LONG ($165.20 → $164.83, P&L: $-166.89)
+   Entry Position: 50% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.65 (0.39% of price)
+   Range/ATR Ratio: 29.10× 🟢 TRENDING
+   First Minute: Best -0.02%, Worst -0.16%, Net -0.03%
+   Verdict: NEUTRAL
+
+88. ❌ OXY SHORT ($46.71 → $46.80, P&L: $-96.76)
+   Entry Position: 40% of 5-min range 🟢 GOOD
+   Pre-Entry Range: $0.63 (1.35% of price)
+   Range/ATR Ratio: 17.03× 🟢 TRENDING
+   First Minute: Best +0.01%, Worst -0.46%, Net -0.38%
+   Verdict: BAD_REVERSAL
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Total trades analyzed: 88
+
+Entry Quality Breakdown:
+  CHASING: 38 trades (43.2%)
+  NEUTRAL: 31 trades (35.2%)
+  BAD_REVERSAL: 19 trades (21.6%)
+
+Winners (1) vs Losers (87):
+  Winners avg entry position: 124% of range
+  Losers avg entry position: 86% of range
+
+Chasing Trades: 51
+  Winners: 1, Losers: 50
+  Win Rate: 2.0%
+  Total P&L: $-5531.63
+
+Choppy Trades (range < 0.5× ATR): 0
+
+Bad Reversals (immediate move against position >0.3%): 19
+  Winners: 1, Losers: 18
+  Total P&L: $-405.56
+
+✓ Detailed results saved to: /Users/karthik/projects/DayTrader/trader/with_fixes_entry_analysis.json

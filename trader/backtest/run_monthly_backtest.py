@@ -29,9 +29,14 @@ from datetime import datetime, timedelta
 import json
 import pandas as pd
 import time
+import argparse
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent.parent / 'stockscanner'))
+
+# Create logs directory
+LOGS_DIR = Path(__file__).parent / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
 
 # ============================================================================
 # ⚠️  EMBEDDED SCANNER REMOVED - USE PRODUCTION SCANNER INSTEAD ⚠️
@@ -63,119 +68,166 @@ sys.path.append(str(Path(__file__).parent.parent.parent / 'stockscanner'))
 # ============================================================================
 
 
-def run_monthly_backtest(year, month, account_size=100000):
-    """Run scanner + backtest for each trading day in the month"""
+def run_monthly_backtest(year, month, account_size=100000, start_day=None, end_day=None, run_name=None):
+    """Run scanner + backtest for each trading day in the month or date range
 
-    print(f"\n{'='*80}")
-    print(f"MONTHLY BACKTEST: {year}-{month:02d}")
-    print(f"{'='*80}\n")
+    Args:
+        year: Year to backtest
+        month: Month to backtest
+        account_size: Account size for position sizing
+        start_day: Optional start day (1-31) to limit range
+        end_day: Optional end day (1-31) to limit range
+        run_name: Optional run name for logging (e.g., 'longs_only', 'shorts_disabled')
+    """
 
-    # Create output directory
-    output_dir = Path(__file__).parent / 'monthly_results'
-    output_dir.mkdir(exist_ok=True)
-
-    # Import backtester
-    sys.path.append(str(Path(__file__).parent))
-    from backtester import PS60Backtester
-
-    # Use production scanner files (NOT embedded scanner - see warning above)
-    production_dir = Path(__file__).parent / 'monthly_results_production'
-    if not production_dir.exists():
-        raise FileNotFoundError(
-            f"Production scanner directory not found: {production_dir}\n"
-            f"Cannot run backtest without production scanner files."
-        )
-
-    # Get all days in the month
-    start_date = datetime(year, month, 1)
-    if month == 12:
-        end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+    # Generate run name and timestamp for logging
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    if run_name:
+        log_name = f"{run_name}_{year}{month:02d}_{timestamp}"
     else:
-        end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+        log_name = f"backtest_{year}{month:02d}_{timestamp}"
 
-    current_date = start_date
-    all_results = []
-    daily_results = []
+    log_file = LOGS_DIR / f"{log_name}.log"
 
-    while current_date <= end_date:
-        # Skip weekends
-        if current_date.weekday() >= 5:  # Saturday=5, Sunday=6
-            current_date += timedelta(days=1)
-            continue
+    # Tee output to both console and log file
+    class TeeOutput:
+        def __init__(self, *files):
+            self.files = files
+        def write(self, text):
+            for f in self.files:
+                f.write(text)
+                f.flush()
+        def flush(self):
+            for f in self.files:
+                f.flush()
 
-        date_str = current_date.strftime('%Y%m%d')
+    log_fh = open(log_file, 'w')
+    original_stdout = sys.stdout
+    sys.stdout = TeeOutput(sys.stdout, log_fh)
+
+    try:
         print(f"\n{'='*80}")
-        print(f"Processing {current_date.strftime('%Y-%m-%d')} ({current_date.strftime('%A')})")
-        print(f"{'='*80}")
+        print(f"MONTHLY BACKTEST: {year}-{month:02d}")
+        if start_day or end_day:
+            print(f"Date Range: Day {start_day or 1} to Day {end_day or 'end of month'}")
+        if run_name:
+            print(f"Run Name: {run_name}")
+        print(f"Log File: {log_file}")
+        print(f"Timestamp: {timestamp}")
+        print(f"{'='*80}\n")
 
-        try:
-            # Step 1: Load production scanner results
-            print(f"\n[1/2] Loading production scanner file...")
-            scanner_file = production_dir / f'scanner_{date_str}.json'
+        # Create output directory
+        output_dir = Path(__file__).parent / 'monthly_results'
+        output_dir.mkdir(exist_ok=True)
 
-            if not scanner_file.exists():
-                print(f"✗ No production scanner file for {date_str}, skipping...")
-                current_date += timedelta(days=1)
-                continue
+        # Import backtester
+        sys.path.append(str(Path(__file__).parent))
+        from backtester import PS60Backtester
 
-            with open(scanner_file) as f:
-                scanner_results = json.load(f)
-
-            if not scanner_results or len(scanner_results) == 0:
-                print(f"✗ Empty scanner results for {date_str}, skipping...")
-                current_date += timedelta(days=1)
-                continue
-
-            print(f"✓ Loaded {len(scanner_results)} setups from production scanner")
-            print(f"✓ File: {scanner_file}")
-
-            # Step 2: Run backtest using scanner results
-            print(f"\n[2/2] Running backtest...")
-            backtester = PS60Backtester(
-                scanner_results_path=str(scanner_file),
-                test_date=current_date,
-                account_size=account_size
+        # Use production scanner files (NOT embedded scanner - see warning above)
+        production_dir = Path(__file__).parent / 'monthly_results_production'
+        if not production_dir.exists():
+            raise FileNotFoundError(
+                f"Production scanner directory not found: {production_dir}\n"
+                f"Cannot run backtest without production scanner files."
             )
 
-            # Run backtest (it modifies backtester.trades internally)
-            backtester.run()
-            trades = backtester.trades
+        # Get all days in the month
+        if start_day:
+            start_date = datetime(year, month, start_day)
+        else:
+            start_date = datetime(year, month, 1)
 
-            if trades:
-                # Calculate daily P&L
-                total_pnl = sum(t['pnl'] for t in trades)
-                winners = [t for t in trades if t['pnl'] > 0]
-                losers = [t for t in trades if t['pnl'] < 0]
-                win_rate = (len(winners) / len(trades) * 100) if trades else 0
+        if end_day:
+            end_date = datetime(year, month, end_day)
+        elif month == 12:
+            end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1) - timedelta(days=1)
 
-                daily_summary = {
-                    'date': current_date.strftime('%Y-%m-%d'),
-                    'trades': len(trades),
-                    'winners': len(winners),
-                    'losers': len(losers),
-                    'win_rate': round(win_rate, 1),
-                    'total_pnl': round(total_pnl, 2),
-                    'avg_pnl': round(total_pnl / len(trades), 2) if trades else 0
-                }
+        current_date = start_date
+        all_results = []
+        daily_results = []
 
-                daily_results.append(daily_summary)
-                all_results.extend(trades)
+        while current_date <= end_date:
+            # Skip weekends
+            if current_date.weekday() >= 5:  # Saturday=5, Sunday=6
+                current_date += timedelta(days=1)
+                continue
 
-                print(f"\n✓ Backtest complete: {len(trades)} trades, ${total_pnl:,.2f} P&L")
-            else:
-                print(f"✓ Backtest complete: No trades")
+            date_str = current_date.strftime('%Y%m%d')
+            print(f"\n{'='*80}")
+            print(f"Processing {current_date.strftime('%Y-%m-%d')} ({current_date.strftime('%A')})")
+            print(f"{'='*80}")
 
-        except Exception as e:
-            print(f"✗ Error processing {date_str}: {e}")
-            import traceback
-            traceback.print_exc()
+            try:
+                # Step 1: Load production scanner results
+                print(f"\n[1/2] Loading production scanner file...")
+                scanner_file = production_dir / f'scanner_{date_str}.json'
 
-        current_date += timedelta(days=1)
-        time.sleep(1)  # Small delay between days
+                if not scanner_file.exists():
+                    print(f"✗ No production scanner file for {date_str}, skipping...")
+                    current_date += timedelta(days=1)
+                    continue
 
-    # Generate monthly summary
-    if daily_results:
-        print(f"\n{'='*80}")
+                with open(scanner_file) as f:
+                    scanner_results = json.load(f)
+
+                if not scanner_results or len(scanner_results) == 0:
+                    print(f"✗ Empty scanner results for {date_str}, skipping...")
+                    current_date += timedelta(days=1)
+                    continue
+
+                print(f"✓ Loaded {len(scanner_results)} setups from production scanner")
+                print(f"✓ File: {scanner_file}")
+
+                # Step 2: Run backtest using scanner results
+                print(f"\n[2/2] Running backtest...")
+                backtester = PS60Backtester(
+                    scanner_results_path=str(scanner_file),
+                    test_date=current_date,
+                    account_size=account_size
+                )
+
+                # Run backtest (it modifies backtester.trades internally)
+                backtester.run()
+                trades = backtester.trades
+
+                if trades:
+                    # Calculate daily P&L
+                    total_pnl = sum(t['pnl'] for t in trades)
+                    winners = [t for t in trades if t['pnl'] > 0]
+                    losers = [t for t in trades if t['pnl'] < 0]
+                    win_rate = (len(winners) / len(trades) * 100) if trades else 0
+
+                    daily_summary = {
+                        'date': current_date.strftime('%Y-%m-%d'),
+                        'trades': len(trades),
+                        'winners': len(winners),
+                        'losers': len(losers),
+                        'win_rate': round(win_rate, 1),
+                        'total_pnl': round(total_pnl, 2),
+                        'avg_pnl': round(total_pnl / len(trades), 2) if trades else 0
+                    }
+
+                    daily_results.append(daily_summary)
+                    all_results.extend(trades)
+
+                    print(f"\n✓ Backtest complete: {len(trades)} trades, ${total_pnl:,.2f} P&L")
+                else:
+                    print(f"✓ Backtest complete: No trades")
+
+            except Exception as e:
+                print(f"✗ Error processing {date_str}: {e}")
+                import traceback
+                traceback.print_exc()
+
+            current_date += timedelta(days=1)
+            time.sleep(1)  # Small delay between days
+
+        # Generate monthly summary
+        if daily_results:
+            print(f"\n{'='*80}")
         print(f"MONTHLY SUMMARY: {year}-{month:02d}")
         print(f"{'='*80}\n")
 
@@ -225,18 +277,33 @@ def run_monthly_backtest(year, month, account_size=100000):
         with open(trades_file, 'w') as f:
             json.dump(all_results, f, indent=2, default=str)
         print(f"✓ All trades saved to {trades_file}")
-    else:
+
+    finally:
+        # Restore stdout and close log file
+        sys.stdout = original_stdout
+        log_fh.close()
+        print(f"\n✓ Full backtest log saved to: {log_file}")
+
+    if not daily_results:
         print(f"\nNo trading days processed for {year}-{month:02d}")
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description='Run monthly backtest')
     parser.add_argument('--year', type=int, default=2025, help='Year')
     parser.add_argument('--month', type=int, default=9, help='Month (1-12)')
     parser.add_argument('--account-size', type=int, default=100000, help='Account size')
+    parser.add_argument('--start-day', type=int, help='Start day (1-31) - optional')
+    parser.add_argument('--end-day', type=int, help='End day (1-31) - optional')
+    parser.add_argument('--run-name', type=str, help='Run name for logging (e.g., longs_only)')
 
     args = parser.parse_args()
 
-    run_monthly_backtest(args.year, args.month, args.account_size)
+    run_monthly_backtest(
+        args.year,
+        args.month,
+        args.account_size,
+        args.start_day,
+        args.end_day,
+        args.run_name
+    )

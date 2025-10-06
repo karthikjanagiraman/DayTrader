@@ -12,6 +12,7 @@ import sys
 import argparse
 from pathlib import Path
 import yaml
+import pytz
 
 # Import shared strategy module
 sys.path.append(str(Path(__file__).parent.parent))
@@ -64,10 +65,20 @@ class PS60Backtester:
         # Track trades for backtest results
         self.trades = []
 
-        # Slippage simulation (realistic execution costs)
-        self.entry_slippage = 0.0005  # 0.05% slippage on entries
-        self.stop_slippage = 0.002    # 0.2% slippage on stops (worse execution)
-        self.exit_slippage = 0.0005   # 0.05% slippage on normal exits
+        # In-memory cache for bars (avoids re-reading from disk)
+        self.bars_cache = {}
+
+        # Direction filters (for testing scanner quality)
+        self.enable_shorts = self.config['trading'].get('enable_shorts', True)
+        self.enable_longs = self.config['trading'].get('enable_longs', True)
+
+        # Slippage simulation (per requirements - use strategy config)
+        self.entry_slippage = self.strategy.slippage_pct if self.strategy.slippage_enabled else 0.0
+        self.stop_slippage = self.strategy.slippage_pct * 2 if self.strategy.slippage_enabled else 0.0  # Stops get worse fills
+        self.exit_slippage = self.strategy.slippage_pct if self.strategy.slippage_enabled else 0.0
+
+        # Commission costs (per requirements)
+        self.commission_per_share = self.strategy.commission_per_share if self.strategy.commission_enabled else 0.0
 
         # Load scanner results
         print(f"\n{'='*80}")
@@ -96,6 +107,9 @@ class PS60Backtester:
             self.ib.disconnect()
             print("\n✓ Disconnected from IBKR")
 
+        # Clear in-memory cache to free memory
+        self.bars_cache.clear()
+
     def run(self):
         """Run backtest"""
         if not self.connect():
@@ -112,7 +126,7 @@ class PS60Backtester:
         # Detect market trend first
         self.market_trend = self.detect_market_trend()
 
-        # Filter scanner using strategy module
+        # Filter scanner using strategy module (score, R/R, distance)
         watchlist = self.strategy.filter_scanner_results(self.scanner_results)
 
         print(f"\n{'='*80}")
@@ -120,12 +134,70 @@ class PS60Backtester:
         print(f"WATCHLIST: {len(watchlist)} tradeable setups (using strategy filters)")
         print(f"{'='*80}")
 
-        for stock in watchlist:
+        # Get opening prices for gap analysis (simulates 9:30 AM market open)
+        opening_prices = self.get_opening_prices(watchlist)
+
+        # Apply gap filter at market open
+        gap_filtered_watchlist, gap_report = self.strategy.filter_scanner_for_gaps(
+            watchlist,
+            opening_prices
+        )
+
+        # Print gap analysis
+        if gap_report:
+            print(f"\n{'='*80}")
+            print(f"GAP ANALYSIS AT MARKET OPEN (9:30 AM)")
+            print(f"{'='*80}")
+            for gap in gap_report:
+                symbol = gap['symbol']
+                action = gap['action']
+                reason = gap['reason']
+
+                if action == 'SKIPPED':
+                    print(f"❌ {symbol}: {reason}")
+                elif action == 'ADJUSTED':
+                    print(f"⚠️  {symbol}: {reason}")
+                elif action == 'NOTED':
+                    print(f"📊 {symbol}: {reason}")
+
+        # Final watchlist after gap filtering
+        if len(gap_filtered_watchlist) < len(watchlist):
+            skipped_count = len(watchlist) - len(gap_filtered_watchlist)
+            print(f"\n{'='*80}")
+            print(f"FINAL WATCHLIST: {len(gap_filtered_watchlist)} setups ({skipped_count} removed by gap filter)")
+            print(f"{'='*80}")
+
+        # Backtest final watchlist
+        for stock in gap_filtered_watchlist:
             print(f"\n[{stock['symbol']}] Testing setup...")
             print(f"  Resistance: ${stock['resistance']:.2f} | Support: ${stock['support']:.2f}")
             print(f"  Score: {stock['score']} | R/R: {stock['risk_reward']:.2f}:1")
 
             self.backtest_stock(stock)
+
+    def get_opening_prices(self, watchlist):
+        """
+        Get opening prices for all stocks in watchlist
+
+        Args:
+            watchlist: List of stock dicts from scanner
+
+        Returns:
+            Dict of {symbol: opening_price}
+        """
+        opening_prices = {}
+
+        for stock in watchlist:
+            symbol = stock['symbol']
+
+            # Get bars for this stock (will use cache if available)
+            bars = self.get_bars(symbol)
+
+            if bars and len(bars) > 0:
+                # First bar of the day = opening price
+                opening_prices[symbol] = bars[0].open
+
+        return opening_prices
 
     def detect_market_trend(self):
         """
@@ -179,7 +251,21 @@ class PS60Backtester:
             print(f"  ⚠️  No historical data available")
             return
 
-        print(f"  ✓ Fetched {len(bars)} 1-minute bars")
+        print(f"  ✓ Fetched {len(bars)} 5-second bars")
+
+        # Gap detection is now handled by strategy.should_enter_long/short() which calls _check_gap_filter()
+        # This ensures consistent gap handling between backtesting and live trading
+
+        # Report opening gap for visibility (optional diagnostic info)
+        opening_bar = bars[0]
+        opening_price = opening_bar.open
+        prev_close = stock['close']
+        gap_pct = ((opening_price - prev_close) / prev_close) * 100
+
+        if abs(gap_pct) > 2.0:
+            dist_to_r = abs(((opening_price - resistance) / opening_price) * 100)
+            dist_to_s = abs(((opening_price - support) / opening_price) * 100)
+            print(f"  📊 Overnight gap: {gap_pct:+.2f}% → Now {min(dist_to_r, dist_to_s):.2f}% from pivot")
 
         position = None
         bar_count = 0
@@ -202,38 +288,80 @@ class PS60Backtester:
             # Check if within entry time window using strategy module
             within_entry_window = self.strategy.is_within_entry_window(timestamp)
 
-            # Entry logic - check for pivot breaks (MAX 2 ATTEMPTS)
+            # Entry logic - check for setups (MAX 2 ATTEMPTS per type)
+            # CRITICAL FIX (Oct 4, 2025): Prioritize BREAKOUT checks over BOUNCE/REJECTION
+            # Previous bug: BOUNCE condition (price > support*0.99) blocked SHORT breakout checks
             if position is None and within_entry_window:
-                # Long entry - only if we haven't exceeded max attempts
-                if long_attempts < max_attempts and price > resistance:
-                    # Check if this is counter-trend (long on bearish day)
-                    counter_trend = (self.market_trend == 'BEARISH')
+                # Check BREAKOUT long entry using strategy module (includes gap filter!)
+                if long_attempts < max_attempts and self.enable_longs:
+                    # Use strategy module's should_enter_long (checks pivot, attempts, gap filter, etc.)
+                    should_enter, reason = self.strategy.should_enter_long(stock, price, long_attempts)
 
-                    # Require stronger confirmation for counter-trend
-                    if counter_trend:
-                        # Counter-trend LONG: require 0.5% above resistance + high score
-                        if price > resistance * 1.005 and stock['score'] >= 85:
-                            position = self.enter_long(stock, price, timestamp, bar_count)
+                    if should_enter:
+                        # HYBRID Entry Strategy (Oct 4, 2025)
+                        # Momentum breakout OR pullback/retest based on volume + candle strength
+                        confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
+                            bars, bar_count - 1, resistance, side='LONG',
+                            target_price=stock.get('target1')  # For room-to-run filter
+                        )
+
+                        if confirmed:
+                            # Use ATR-based stop if enabled, otherwise pivot stop
+                            if self.strategy.use_atr_stops:
+                                atr = self.strategy._calculate_atr(bars, bar_count - 1)
+                                stop_price = price - (atr * self.strategy.atr_stop_multiplier)
+                            else:
+                                stop_price = resistance
+
+                            position = self.enter_long(stock, price, timestamp, bar_count, setup_type='BREAKOUT', stop_override=stop_price)
                             long_attempts += 1
-                    else:
-                        # Normal LONG entry
-                        position = self.enter_long(stock, price, timestamp, bar_count)
+
+                # Check BREAKOUT short entry using strategy module (includes gap filter!)
+                # MOVED UP: Must check BEFORE bounce/rejection to prevent blocking
+                if position is None and short_attempts < max_attempts and self.enable_shorts:
+                    # Use strategy module's should_enter_short (checks pivot, attempts, gap filter, etc.)
+                    should_enter, reason = self.strategy.should_enter_short(stock, price, short_attempts)
+
+                    if should_enter:
+                        # HYBRID Entry Strategy (Oct 4, 2025)
+                        # Momentum breakout OR pullback/retest based on volume + candle strength
+                        confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
+                            bars, bar_count - 1, support, side='SHORT',
+                            target_price=stock.get('downside1')  # For room-to-run filter
+                        )
+
+                        if confirmed:
+                            # Use ATR-based stop if enabled, otherwise pivot stop
+                            if self.strategy.use_atr_stops:
+                                atr = self.strategy._calculate_atr(bars, bar_count - 1)
+                                stop_price = price + (atr * self.strategy.atr_stop_multiplier)
+                            else:
+                                stop_price = support
+
+                            position = self.enter_short(stock, price, timestamp, bar_count,
+                                                      setup_type='BREAKOUT', stop_override=stop_price)
+                            short_attempts += 1
+
+                # Check BOUNCE long entry (pullback to support + reversal)
+                # MOVED DOWN: After breakout checks to avoid blocking SHORT entries
+                if position is None and long_attempts < max_attempts and price > support * 0.99 and self.enable_longs:
+                    bounce_confirmed, bounce_reason = self.strategy.check_bounce_setup(
+                        bars, bar_count, support, side='LONG'
+                    )
+
+                    if bounce_confirmed:
+                        position = self.enter_long(stock, price, timestamp, bar_count, setup_type='BOUNCE')
                         long_attempts += 1
 
-                # Short entry - only if we haven't exceeded max attempts
-                elif short_attempts < max_attempts and price < support:
-                    # Check if this is counter-trend (short on bullish day)
-                    counter_trend = (self.market_trend == 'BULLISH')
+                # Check REJECTION short entry (failed breakout at resistance)
+                # MOVED DOWN: After breakout checks
+                if position is None and short_attempts < max_attempts and price < resistance * 1.01 and self.enable_shorts:
+                    rejection_confirmed, rejection_reason = self.strategy.check_rejection_setup(
+                        bars, bar_count, resistance, side='SHORT'
+                    )
 
-                    # Require stronger confirmation for counter-trend
-                    if counter_trend:
-                        # Counter-trend SHORT: require 0.5% below support + high score
-                        if price < support * 0.995 and stock['score'] >= 85:
-                            position = self.enter_short(stock, price, timestamp, bar_count)
-                            short_attempts += 1
-                    else:
-                        # Normal SHORT entry
-                        position = self.enter_short(stock, price, timestamp, bar_count)
+                    if rejection_confirmed:
+                        position = self.enter_short(stock, price, timestamp, bar_count, setup_type='REJECTION')
                         short_attempts += 1
 
             # Exit logic - manage open position
@@ -258,25 +386,93 @@ class PS60Backtester:
             self.trades.append(closed_trade)
 
     def get_bars(self, symbol):
-        """Fetch 1-minute bars from IBKR"""
+        """Fetch 1-second bars from IBKR (with local caching)"""
+        # Check in-memory cache first (fastest)
+        if symbol in self.bars_cache:
+            return self.bars_cache[symbol]
+
+        # Check disk cache
+        cache_dir = Path(__file__).parent / 'data'
+        cache_dir.mkdir(exist_ok=True)
+
+        date_str = self.test_date.strftime('%Y%m%d')
+        cache_file = cache_dir / f'{symbol}_{date_str}_5sec.json'
+
+        # Load from cache if exists
+        if cache_file.exists():
+            print(f"  ✓ Loading from cache: {cache_file.name}")
+            try:
+                import json
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+
+                # Reconstruct BarDataList from cached data
+                from ib_insync import BarDataList, BarData
+                from datetime import datetime
+
+                bars = BarDataList()
+                for bar_dict in cached_data:
+                    bar = BarData(
+                        date=datetime.fromisoformat(bar_dict['date']),
+                        open=bar_dict['open'],
+                        high=bar_dict['high'],
+                        low=bar_dict['low'],
+                        close=bar_dict['close'],
+                        volume=bar_dict['volume'],
+                        average=bar_dict.get('average', bar_dict['close']),
+                        barCount=bar_dict.get('barCount', 0)
+                    )
+                    bars.append(bar)
+
+                # Store in memory cache
+                self.bars_cache[symbol] = bars
+                return bars
+            except Exception as e:
+                print(f"  ⚠️  Cache read error: {e}, fetching fresh...")
+
+        # Fetch from IBKR
         contract = Stock(symbol, 'SMART', 'USD')
 
         try:
-            # Request historical 1-minute bars for the day
+            # Request historical 1-second bars for the day
             end_datetime = f'{self.test_date.strftime("%Y%m%d")} 16:00:00'
 
             bars = self.ib.reqHistoricalData(
                 contract,
                 endDateTime=end_datetime,
                 durationStr='1 D',
-                barSizeSetting='1 min',
+                barSizeSetting='5 secs',  # 5-second bars (1-second not supported)
                 whatToShow='TRADES',
                 useRTH=True,  # Regular trading hours only
                 formatDate=1
             )
 
+            # Cache the data for future use
+            if bars:
+                import json
+                cache_data = []
+                for bar in bars:
+                    cache_data.append({
+                        'date': bar.date.isoformat(),
+                        'open': bar.open,
+                        'high': bar.high,
+                        'low': bar.low,
+                        'close': bar.close,
+                        'volume': bar.volume,
+                        'average': bar.average,
+                        'barCount': bar.barCount
+                    })
+
+                with open(cache_file, 'w') as f:
+                    json.dump(cache_data, f, indent=2)
+                print(f"  💾 Cached to: {cache_file.name}")
+
             # Add small delay to respect rate limits
             self.ib.sleep(0.5)
+
+            # Store in memory cache
+            if bars:
+                self.bars_cache[symbol] = bars
 
             return bars
 
@@ -284,13 +480,21 @@ class PS60Backtester:
             print(f"  ✗ Error fetching data: {e}")
             return []
 
-    def enter_long(self, stock, price, timestamp, bar_num):
+    def enter_long(self, stock, price, timestamp, bar_num, setup_type='BREAKOUT', stop_override=None):
         """Enter long position"""
         # Apply entry slippage (buy at slightly worse price)
         entry_price = price * (1 + self.entry_slippage)
 
-        # Use original tight stop (resistance level)
-        stop_price = stock['resistance']
+        # Stop placement depends on setup type
+        if stop_override is not None:
+            # Use stop price from retest confirmation strategy (includes 0.3% buffer)
+            stop_price = stop_override
+        elif setup_type == 'BOUNCE':
+            # For bounce: stop below support
+            stop_price = stock['support'] * 0.995  # Just below support
+        else:  # BREAKOUT
+            # For breakout: stop at resistance (pivot)
+            stop_price = stock['resistance']
 
         shares = self.calculate_position_size(entry_price, stop_price)
 
@@ -306,18 +510,29 @@ class PS60Backtester:
             entry_time=timestamp,
             entry_bar=bar_num
         )
+        position['setup_type'] = setup_type
 
-        print(f"  🟢 LONG @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
+        emoji = "🔄" if setup_type == 'BOUNCE' else "🟢"
+        print(f"  {emoji} LONG {setup_type} @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
         print(f"     Shares: {shares} | Stop: ${stop_price:.2f}")
         return position
 
-    def enter_short(self, stock, price, timestamp, bar_num):
+    def enter_short(self, stock, price, timestamp, bar_num, setup_type='BREAKOUT', stop_override=None):
         """Enter short position"""
         # Apply entry slippage (sell at slightly worse price)
         entry_price = price * (1 - self.entry_slippage)
 
-        # Use original tight stop (support level)
-        stop_price = stock['support']
+        # Stop placement depends on setup type
+        # If stop_override provided (from retest confirmation), use it
+        if stop_override is not None:
+            # Use stop from retest confirmation (includes 0.3% buffer)
+            stop_price = stop_override
+        elif setup_type == 'REJECTION':
+            # For rejection: stop above resistance
+            stop_price = stock['resistance'] * 1.005  # Just above resistance
+        else:  # BREAKOUT
+            # For breakout: stop at support (pivot)
+            stop_price = stock['support']
 
         shares = self.calculate_position_size(stop_price, entry_price)
 
@@ -333,26 +548,41 @@ class PS60Backtester:
             entry_time=timestamp,
             entry_bar=bar_num
         )
+        position['setup_type'] = setup_type
 
-        print(f"  🔴 SHORT @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
+        emoji = "⬇️" if setup_type == 'REJECTION' else "🔴"
+        print(f"  {emoji} SHORT {setup_type} @ ${entry_price:.2f} (bar {bar_num}, {timestamp.strftime('%H:%M')})")
         print(f"     Shares: {shares} | Stop: ${stop_price:.2f}")
         return position
 
     def manage_position(self, pos, price, timestamp, bar_num):
         """
         Manage open position per PS60 rules using strategy module:
+        - 8-minute rule: Exit if no progress after 8 minutes
         - Take 50% profit on first move
         - Move stop to breakeven
+        - Update trailing stop for runners
         - Exit at target or stop
-        - 5-7 minute rule (FIXED - checks if stuck at pivot)
+        - Partial profit-taking at 1R and targets
         """
-        # Check 5-7 minute rule using strategy module (FIXED)
-        should_exit, reason = self.strategy.check_five_minute_rule(pos, price, timestamp)
-        if should_exit:
-            print(f"     ⏱️  {reason} exit @ ${price:.2f} ({timestamp.strftime('%H:%M')})")
-            return None, self.close_position(pos, price, timestamp, reason, bar_num)
+        # 8-MINUTE RULE (CRITICAL - PS60 Core Rule)
+        # Exit if trade shows no progress after 8 minutes and no partials taken
+        time_in_trade = (timestamp - pos['entry_time']).total_seconds() / 60.0
 
-        # Check for partial profit using strategy module
+        if time_in_trade >= 8.0 and pos['remaining'] == 1.0:  # After 8 min, no partials taken
+            # Check if we have favorable movement (gain >= $0.10/share)
+            if pos['side'] == 'LONG':
+                gain_per_share = price - pos['entry_price']
+            else:  # SHORT
+                gain_per_share = pos['entry_price'] - price
+
+            if gain_per_share < 0.10:  # Less than 10 cents gain
+                # No progress - exit immediately
+                exit_price = price  # No additional slippage, market exit
+                print(f"     ⏱️  8-MIN RULE: No progress (${gain_per_share:+.2f}/share) @ ${exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+                return None, self.close_position(pos, exit_price, timestamp, '8MIN_RULE', bar_num)
+
+        # Check for partial profit using strategy module (now uses 1R-based logic)
         should_partial, pct, reason = self.strategy.should_take_partial(pos, price)
         if should_partial:
             # Record partial using position manager
@@ -364,7 +594,25 @@ class PS60Backtester:
             if self.strategy.should_move_stop_to_breakeven(pos):
                 pos['stop'] = pos['entry_price']
 
-        # Check stops
+        # Update trailing stop for runners (per requirements)
+        stop_updated, new_stop, trail_reason = self.strategy.update_trailing_stop(pos, price)
+        if stop_updated:
+            pos['stop'] = new_stop
+            # Uncomment for detailed trail tracking:
+            # print(f"     ⬆️  {trail_reason}")
+
+        # Check trailing stop hit (for runners)
+        trail_hit, trail_reason = self.strategy.check_trailing_stop_hit(pos, price)
+        if trail_hit:
+            # Apply stop slippage
+            if pos['side'] == 'LONG':
+                exit_price = price * (1 - self.stop_slippage)
+            else:
+                exit_price = price * (1 + self.stop_slippage)
+            print(f"     🎯 {trail_reason} @ ${exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+            return None, self.close_position(pos, exit_price, timestamp, trail_reason.split()[0], bar_num)
+
+        # Check regular stops
         if pos['side'] == 'LONG':
             # Stop hit - exit remaining (with slippage)
             if price <= pos['stop']:
@@ -385,18 +633,46 @@ class PS60Backtester:
 
     def calculate_position_size(self, entry, stop):
         """
-        Calculate shares - CONSERVATIVE FIXED SIZING
+        Calculate shares based on 1% risk per trade
 
-        Note: While live trader uses 1% risk-based sizing, backtester uses
-        fixed 1000 shares for consistency and to avoid over-concentration
-        on tight-stop trades. Real trading will vary position sizes.
+        Risk-based sizing:
+        - Risk amount = account_size × risk_per_trade (1%)
+        - Stop distance = abs(entry - stop)
+        - Shares = risk_amount / stop_distance
+        - Capped at min_shares and max_shares
+
+        This matches live trader behavior and provides realistic backtest results.
         """
-        return 1000  # Fixed conservative position size
+        # Calculate risk amount (1% of account)
+        risk_amount = self.config['trading']['account_size'] * self.config['trading']['risk_per_trade']
+
+        # Calculate stop distance
+        stop_distance = abs(entry - stop)
+
+        if stop_distance == 0:
+            # Avoid division by zero - use min shares
+            return self.config['trading']['position_sizing']['min_shares']
+
+        # Calculate shares based on risk
+        shares = int(risk_amount / stop_distance)
+
+        # Apply min/max constraints
+        min_shares = self.config['trading']['position_sizing']['min_shares']
+        max_shares = self.config['trading']['position_sizing']['max_shares']
+
+        shares = max(min_shares, min(shares, max_shares))
+
+        return shares
 
     def close_position(self, pos, exit_price, timestamp, reason, bar_num):
         """Close position and record trade using position manager"""
         # Close position using position manager
-        trade_record = self.pm.close_position(pos['symbol'], exit_price, reason)
+        # FIX: Pass timestamp to get correct exit time instead of wall clock
+        trade_record = self.pm.close_position(pos['symbol'], exit_price, reason, exit_time=timestamp)
+
+        # Deduct commission costs (per requirements)
+        commission_cost = pos['shares'] * self.commission_per_share * 2  # Entry + exit
+        trade_record['pnl'] -= commission_cost
 
         # Add backtester-specific fields
         duration_min = (timestamp - pos['entry_time']).total_seconds() / 60
@@ -408,7 +684,8 @@ class PS60Backtester:
             'pnl_pct': (pnl_per_share / pos['entry_price']) * 100,
             'duration_min': duration_min,
             'entry_bar': pos.get('entry_bar', 0),
-            'exit_bar': bar_num
+            'exit_bar': bar_num,
+            'commission': commission_cost  # Track commissions paid
         }
 
         return trade
@@ -460,9 +737,12 @@ class PS60Backtester:
 
         for idx, trade in df.iterrows():
             sign = '+' if trade['pnl'] > 0 else ''
+            # Convert times to Eastern Time for display
+            entry_et = trade['entry_time'].astimezone(pytz.timezone('US/Eastern'))
+            exit_et = trade['exit_time'].astimezone(pytz.timezone('US/Eastern'))
             print(f"\n{idx+1}. {trade['symbol']} {trade['side']}")
-            print(f"   Entry: ${trade['entry_price']:.2f} @ {trade['entry_time'].strftime('%H:%M')}")
-            print(f"   Exit:  ${trade['exit_price']:.2f} @ {trade['exit_time'].strftime('%H:%M')} ({trade['reason']})")
+            print(f"   Entry: ${trade['entry_price']:.2f} @ {entry_et.strftime('%H:%M')}")
+            print(f"   Exit:  ${trade['exit_price']:.2f} @ {exit_et.strftime('%H:%M')} ({trade['reason']})")
             print(f"   P&L:   {sign}${trade['pnl']:.2f} ({sign}{trade['pnl_pct']:.2f}%) | Duration: {trade['duration_min']:.0f} min")
             print(f"   Partials: {trade['partials']}")
 

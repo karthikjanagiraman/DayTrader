@@ -1,0 +1,24 @@
+{
+  "month": "2025-10",
+  "daily_results": [
+    {
+      "date": "2025-10-01",
+      "trades": 1,
+      "winners": 1,
+      "losers": 0,
+      "win_rate": 100.0,
+      "total_pnl": 795.99,
+      "avg_pnl": 795.99
+    }
+  ],
+  "summary": {
+    "trading_days": 1,
+    "total_trades": 1,
+    "total_pnl": 795.99,
+    "avg_daily_pnl": 795.99,
+    "win_rate": 100.0,
+    "winning_days": 1,
+    "losing_days": 0,
+    "monthly_return_pct": 0.8
+  }
+}

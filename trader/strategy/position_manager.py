@@ -7,6 +7,7 @@ Shared by both live trader and backtester.
 
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+import pytz
 
 
 class PositionManager:
@@ -56,7 +57,7 @@ class PositionManager:
             'symbol': symbol,
             'side': side,
             'entry_price': entry_price,
-            'entry_time': datetime.now(),
+            'entry_time': datetime.now(pytz.UTC),  # Timezone-aware UTC
             'shares': shares,
             'remaining': 1.0,  # 100% remaining
             'pivot': pivot,
@@ -141,7 +142,7 @@ class PositionManager:
             gain = position['entry_price'] - price
 
         partial = {
-            'time': datetime.now(),
+            'time': datetime.now(pytz.UTC),  # Timezone-aware UTC
             'price': price,
             'pct': pct,
             'gain': gain,
@@ -157,7 +158,8 @@ class PositionManager:
         self,
         symbol: str,
         exit_price: float,
-        reason: str
+        reason: str,
+        exit_time: datetime = None
     ) -> Optional[dict]:
         """
         Close position and record trade
@@ -166,6 +168,7 @@ class PositionManager:
             symbol: Stock symbol
             exit_price: Exit price
             reason: Exit reason (e.g., 'STOP', 'TARGET', 'EOD')
+            exit_time: Exit timestamp (uses current time if None)
 
         Returns:
             Trade record dict
@@ -178,22 +181,25 @@ class PositionManager:
         # Calculate total P&L
         pnl = self.calculate_pnl(position, exit_price)
 
-        # Calculate duration - handle both timezone-aware and naive datetimes
-        exit_time = datetime.now()
+        # Use provided exit_time or current time
+        # FIX: Accept exit_time parameter instead of always using datetime.now()
+        if exit_time is None:
+            exit_time = datetime.now(pytz.UTC)
+
         entry_time = position['entry_time']
 
-        # Strip timezone info from both to ensure compatibility
-        if hasattr(entry_time, 'tzinfo') and entry_time.tzinfo is not None:
-            entry_time_naive = entry_time.replace(tzinfo=None)
+        # Ensure both are UTC for consistent duration calculation
+        if entry_time.tzinfo is None:
+            entry_time = pytz.UTC.localize(entry_time)
         else:
-            entry_time_naive = entry_time
+            entry_time = entry_time.astimezone(pytz.UTC)
 
-        if hasattr(exit_time, 'tzinfo') and exit_time.tzinfo is not None:
-            exit_time_naive = exit_time.replace(tzinfo=None)
+        if exit_time.tzinfo is None:
+            exit_time = pytz.UTC.localize(exit_time)
         else:
-            exit_time_naive = exit_time
+            exit_time = exit_time.astimezone(pytz.UTC)
 
-        duration_min = (exit_time_naive - entry_time_naive).total_seconds() / 60
+        duration_min = (exit_time - entry_time).total_seconds() / 60
 
         # Create trade record
         trade_record = {

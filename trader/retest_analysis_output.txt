@@ -1,0 +1,19 @@
+====================================================================================================
+OCTOBER 2ND RETEST STRATEGY - DETAILED TRADE ANALYSIS
+====================================================================================================
+
+Analyzing 17 trades...
+
+====================================================================================================
+TRADE #1: MU LONG
+====================================================================================================
+Traceback (most recent call last):
+  File "/Users/karthik/projects/DayTrader/trader/analyze_retest_trades.py", line 339, in <module>
+    main()
+  File "/Users/karthik/projects/DayTrader/trader/analyze_retest_trades.py", line 298, in main
+    action = analyze_trade(
+  File "/Users/karthik/projects/DayTrader/trader/analyze_retest_trades.py", line 160, in analyze_trade
+    entry_idx, entry_bar = find_bar_by_time(bars, entry_time)
+  File "/Users/karthik/projects/DayTrader/trader/analyze_retest_trades.py", line 37, in find_bar_by_time
+    target_time = datetime.fromisoformat(target_time_str.replace(' ', 'T'))
+ValueError: Invalid isoformat string: '2025-10-02T2025-10-02T09:45:30-04:00'

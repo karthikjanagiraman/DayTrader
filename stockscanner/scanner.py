@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from tabulate import tabulate
 import argparse
+import pytz
 
 class PS60Scanner:
     """Main scanner for PS60 trading setups"""
@@ -483,6 +484,38 @@ class PS60Scanner:
         if self.failed:
             print(f"\nFailed to scan: {', '.join(self.failed)}")
 
+    def get_next_trading_date(self):
+        """
+        Determine the trading date for this scan based on current time.
+
+        Logic:
+        - Before 4:00 PM ET: Use today's date (scan for today's session)
+        - After 4:00 PM ET: Use next weekday's date (scan for next session)
+        - Weekends: Use next Monday's date
+        """
+        eastern = pytz.timezone('US/Eastern')
+        now_et = datetime.now(pytz.UTC).astimezone(eastern)
+
+        # Market close time (4:00 PM ET)
+        market_close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+
+        # If it's a weekend, use next Monday
+        if now_et.weekday() >= 5:  # Saturday = 5, Sunday = 6
+            days_until_monday = 7 - now_et.weekday()
+            trading_date = now_et + timedelta(days=days_until_monday)
+        # If before market close, use today
+        elif now_et < market_close:
+            trading_date = now_et
+        # If after market close, use next trading day
+        else:
+            # If Friday after close, use Monday
+            if now_et.weekday() == 4:  # Friday
+                trading_date = now_et + timedelta(days=3)
+            else:
+                trading_date = now_et + timedelta(days=1)
+
+        return trading_date.strftime('%Y%m%d')
+
     def save_results(self):
         """Save results to files"""
         if not self.results:
@@ -494,10 +527,10 @@ class PS60Scanner:
         # Save to CSV
         df = pd.DataFrame(self.results)
 
-        # Create dated filenames (for tomorrow's trading)
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
-        csv_filename = f'output/scanner_results_{tomorrow}.csv'
-        json_filename = f'output/scanner_results_{tomorrow}.json'
+        # Get the trading date this scan is for
+        trading_date = self.get_next_trading_date()
+        csv_filename = f'output/scanner_results_{trading_date}.csv'
+        json_filename = f'output/scanner_results_{trading_date}.json'
 
         # Save with dated filenames
         df.to_csv(csv_filename, index=False)

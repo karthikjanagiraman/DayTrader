@@ -1,0 +1,9 @@
+Symbol,Date,Resistance,Support,Day High,Day Low,Day Close,Long Breakout?,Long Outcome,Long Reason,Short Breakout?,Short Outcome,Short Reason,Error
+NVDA,2025-10-01,187.35,178.24,188.14,183.9,187.18,Yes,FALSE_BREAKOUT,Reversed below $187.35 (closed $187.18),No,NO_BREAKOUT,Stayed above $178.24,
+COIN,2025-10-01,343.44,327.02,349.87,340.5,346.2,Yes,UNCONFIRMED,Held above but only 78.3% to target,No,NO_BREAKOUT,Stayed above $327.02,
+PLTR,2025-10-01,182.24,178.42,186.28,179.5,184.9,Yes,SUCCESS,Hit $184.14 (max $186.28),No,NO_BREAKOUT,Stayed above $178.42,
+SPY,,,,,,,No,NO_DATA,,No,NO_DATA,,Insufficient data
+QQQ,2025-10-01,602.05,597.22,603.79,596.34,603.29,Yes,UNCONFIRMED,Held above but only 72.2% to target,Yes,FALSE_BREAKOUT,Reversed above $597.22 (closed $603.29),
+TSLA,2025-10-01,444.77,432.63,462.27,440.75,459.47,Yes,SUCCESS,Hit $450.84 (max $462.27),No,NO_BREAKOUT,Stayed above $432.63,
+AMD,2025-10-01,161.26,159.82,164.18,160.49,164.04,Yes,SUCCESS,Hit $161.97 (max $164.18),No,NO_BREAKOUT,Stayed above $159.82,
+GME,,,,,,,No,NO_DATA,,No,NO_DATA,,Insufficient data

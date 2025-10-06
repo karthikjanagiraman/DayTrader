@@ -1,44 +1,5 @@
 # **Dan Shapiro’s “PS60 Process” – Comprehensive Day Trading Guide**
 
-**Author:** *Trading Strategy Analyst – summarizing Dan Shapiro’s PS60 Process*
-
-## **Table of Contents**
-
-* [Executive Summary](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#executive-summary)
-
-* [Theory & Principles](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#theory--principles)
-
-* [Chart-Setup Checklist](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#chart-setup-checklist)
-
-* [Playbook: Long & Short Setups](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#playbook-long--short-setups)
-
-  * [Market-Open Breakout (Long)](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#market-open-breakout-long)
-
-  * [Intra-day Continuation (Long)](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#intra-day-continuation-long)
-
-  * [Market-Open Breakdown (Short)](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#market-open-breakdown-short)
-
-  * [Gap Plays & Variations](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#gap-plays--variations)
-
-* [Risk-Management Rules](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#risk-management-rules)
-
-* [Annotated Trade Examples](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#annotated-trade-examples)
-
-  * [Example Trade 1: Morning Breakout Long](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#example-trade-1-morning-breakout-long)
-
-  * [Example Trade 2: Midday Continuation Long](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#example-trade-2-midday-continuation-long)
-
-  * [Example Trade 3: Morning Breakdown Short](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#example-trade-3-morning-breakdown-short)
-
-* [Glossary & Cheat Sheets](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#glossary--cheat-sheets)
-
-* [Common Mistakes & Troubleshooting](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#common-mistakes--troubleshooting)
-
-* [Further Resources](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#further-resources)
-
-* [Appendix: Raw Transcripts & References](https://chatgpt.com/c/6870c8ce-5264-8006-a6d7-de84ee9a52d0#appendix-raw-transcripts--references)
-
----
 
 ## **Executive Summary**
 
