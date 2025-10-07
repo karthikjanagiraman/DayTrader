@@ -60,13 +60,13 @@ These have the tightest pivot widths, matching yesterday's winner profile.
 
 #### 5. GOOGL (Google) - Score: 100 LONG
 - **Current Price**: $249.80 (+1.9% today)
-- **Resistance**: $254.54 (+1.9% away)
+- **Resistance**: $251.32 (+1.9% away)
 - **Support**: $249.67
 - **Pivot Width**: 1.91% ✓ (TIGHT)
 - **Target 1**: $259.41 (+1.9% from entry)
 - **Risk/Reward**: 1.73:1
 - **Why Good**: Strong momentum today (+1.9%), tight pivot
-- **Entry Plan**: Enter on break of $254.54
+- **Entry Plan**: Enter on break of $251.32
 
 #### 6. UBER - Score: 100 LONG
 - **Current Price**: $100.20 (+3.6% today) 🔥
@@ -288,7 +288,7 @@ These have the tightest pivot widths, matching yesterday's winner profile.
 2. ✅ AAPL - $259.49 resistance (1.70% pivot)
 3. ✅ BA - $220.28 resistance (1.75% pivot)
 4. ✅ AMZN - $224.38 resistance (1.73% pivot)
-5. ✅ GOOGL - $254.54 resistance (1.91% pivot)
+5. ✅ GOOGL - $251.32 resistance (1.91% pivot)
 6. ✅ UBER - $102.51 resistance (2.31% pivot)
 
 ### CONSIDER THESE (Tier 2)

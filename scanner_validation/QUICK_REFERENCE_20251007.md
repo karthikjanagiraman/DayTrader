@@ -12,7 +12,7 @@
 | 2 | **AAPL** | **$259.49** | 1.70% ✓ | Mega-cap, tight pivot, R/R 12.57:1 |
 | 3 | **BA** | **$220.28** | 1.75% ✓ | Very close to breakout! |
 | 4 | **AMZN** | **$224.38** | 1.73% ✓ | Tight pivot, good mover |
-| 5 | **GOOGL** | **$254.54** | 1.91% ✓ | Strong momentum +1.9% |
+| 5 | **GOOGL** | **$251.32** | 1.91% ✓ | Strong momentum +1.9% |
 | 6 | **UBER** | **$102.51** | 2.31% ✓ | Hot today +3.6% |
 
 ---
