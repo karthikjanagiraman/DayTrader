@@ -124,7 +124,7 @@ trading:
 
 filters:
   # ============================================================================
-  # FILTER CONFIGURATION MATRIX (Oct 5, 2025)
+  # FILTER CONFIGURATION MATRIX (Oct 6, 2025 - Enhanced Scoring Update)
   # ============================================================================
   # Each filter can be independently enabled/disabled for testing and tuning.
   # Filters are applied in order during entry decision process.
@@ -133,9 +133,41 @@ filters:
 
   # SCANNER-BASED FILTERS (Pre-entry screening)
   # ----------------------------------------------------------------------------
+  # LEGACY FILTERS (Used when enhanced scoring CSV not available)
   min_score: 0                 # Minimum scanner score (0-100, 0 = disabled)
-  min_risk_reward: 0.0         # Minimum R/R ratio from scanner (0 = disabled)
+  min_risk_reward: 2.0         # Minimum R/R ratio from scanner (per trading plan)
   max_dist_to_pivot: 100.0     # Max distance to pivot % (100 = disabled)
+
+  # ENHANCED SCORING FILTERS (Oct 6, 2025) ⭐ NEW
+  # ----------------------------------------------------------------------------
+  # Based on validation showing 70% accuracy in top 10 ranked setups
+  # These filters apply when using enhanced scoring CSV (rescored_YYYYMMDD.csv)
+
+  # Enhanced score thresholds
+  min_enhanced_score: 85       # Minimum enhanced score (0-100+)
+                               # 85+ captures top-tier setups
+                               # TIER 1 stocks typically score 100
+                               # TIER 2 stocks typically score 85-100
+
+  # Pivot width filter (KEY INSIGHT: tight pivots = winners)
+  # Winners averaged 2.51% pivot width vs 4.92% for false breakouts
+  min_pivot_width_pct: 0.0     # Minimum pivot width % (0 = no min)
+  max_pivot_width_pct: 5.0     # Maximum pivot width %
+                               # 5.0% = avoid very wide pivots (high false breakout risk)
+                               # Per validation: >5% = likely false breakout
+
+  # Test count filter (KEY INSIGHT: heavily tested = higher success)
+  # Tested ≥10x = 80% success rate, <5x = 47% success rate
+  min_test_count: 5            # Minimum number of times resistance/support tested
+                               # 5+ = 58% success rate
+                               # 10+ = 80% success rate (TIER 1)
+
+  # Tier-based filtering
+  tier_filter:                 # Which tiers to trade
+    - 'TIER 1'                 # Always trade (70-80% expected success)
+    - 'TIER 2'                 # Trade with normal position size (50-60% success)
+    - 'TIER 3'                 # Trade selectively (40-50% success)
+    # 'AVOID' tier is never traded (blacklisted or too wide pivots)
 
   # GAP FILTER (Overnight gap detection)
   # ----------------------------------------------------------------------------
@@ -181,6 +213,7 @@ ibkr:
 scanner:
   output_dir: "../stockscanner/output/"
   results_file: "scanner_results_20251002.json"
+  enhanced_scoring_dir: "../scanner_validation/"  # Directory with rescored_YYYYMMDD.csv files
 
 logging:
   log_dir: "./logs/"

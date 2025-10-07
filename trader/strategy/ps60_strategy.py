@@ -1706,6 +1706,134 @@ class PS60Strategy:
 
         return filtered
 
+    def filter_enhanced_scanner_results(self, scanner_results):
+        """
+        Filter enhanced scanner results using tier-based criteria (Oct 6, 2025)
+
+        ENHANCED SCORING FILTERS:
+        - Tier-based classification (TIER 1/2/3/AVOID)
+        - Pivot width filtering (tight pivots = winners)
+        - Test count filtering (heavily tested = higher success)
+        - Symbol blacklisting (index ETFs, high-vol stocks)
+        - Risk/reward minimum thresholds
+
+        Based on Oct 6 validation showing 70% accuracy in top 10 ranked setups.
+
+        Args:
+            scanner_results: List of enhanced scanner result dicts with fields:
+                - enhanced_long_score, enhanced_short_score, best_enhanced_score
+                - pivot_width_pct
+                - breakout_reason (contains test count)
+                - symbol, risk_reward, etc.
+
+        Returns:
+            List of filtered results (TIER 1, TIER 2, and select TIER 3)
+        """
+        import re
+
+        filtered = []
+
+        # Load config filters
+        min_enhanced_score = self.config.get('filters', {}).get('min_enhanced_score', 0)
+        min_pivot_width_pct = self.config.get('filters', {}).get('min_pivot_width_pct', 0)
+        max_pivot_width_pct = self.config.get('filters', {}).get('max_pivot_width_pct', 10.0)
+        min_test_count = self.config.get('filters', {}).get('min_test_count', 0)
+        tier_filter = self.config.get('filters', {}).get('tier_filter', ['TIER 1', 'TIER 2', 'TIER 3'])
+
+        # Blacklists from validation
+        index_etfs = ['SPY', 'QQQ', 'DIA', 'IWM']  # 100% false breakout rate
+        high_vol_stocks = ['TSLA', 'NVDA', 'COIN', 'AMC', 'GME', 'HOOD', 'LCID', 'RIVN']  # 75% false breakout
+
+        for stock in scanner_results:
+            symbol = stock.get('symbol', '')
+
+            # Blacklist filter - SKIP index ETFs and high-vol stocks
+            if symbol in index_etfs:
+                continue
+            if symbol in high_vol_stocks:
+                continue
+
+            # Enhanced score filter
+            best_score = stock.get('best_enhanced_score', stock.get('score', 0))
+            if best_score < min_enhanced_score:
+                continue
+
+            # Risk/Reward filter
+            if stock.get('risk_reward', 0) < self.min_risk_reward:
+                continue
+
+            # Pivot width filter (key insight from validation)
+            pivot_width = stock.get('pivot_width_pct', 100)
+            if pivot_width < min_pivot_width_pct or pivot_width > max_pivot_width_pct:
+                continue
+
+            # Test count filter (Oct 6 insight: tested ≥10x = 80% success)
+            breakout_reason = stock.get('breakout_reason', '')
+            match = re.search(r'Tested (\d+)x', breakout_reason)
+            test_count = int(match.group(1)) if match else 0
+
+            if test_count < min_test_count:
+                continue
+
+            # Tier classification for filtering
+            tier = self._classify_stock_tier(stock)
+
+            # Apply tier filter
+            if tier not in tier_filter:
+                continue
+
+            # Symbol avoid list (from config)
+            if symbol in self.avoid_symbols:
+                continue
+
+            # Store tier classification in stock data
+            stock['tier'] = tier
+            stock['test_count'] = test_count
+
+            filtered.append(stock)
+
+        return filtered
+
+    def _classify_stock_tier(self, stock):
+        """
+        Classify stock into tiers based on enhanced scoring criteria
+
+        TIER 1: Tight pivot (<2.5%) + Heavy testing (≥10x) = 70-80% success expected
+        TIER 2: Good on one factor (pivot <3.5% OR tests ≥5x) = 50-60% success
+        TIER 3: Weaker on both (pivot <5.0%) = 40-50% success
+        AVOID: Too wide (pivot >5.0%) or blacklisted
+
+        Args:
+            stock: Dict with enhanced scoring data
+
+        Returns:
+            str: 'TIER 1', 'TIER 2', 'TIER 3', or 'AVOID'
+        """
+        import re
+
+        pivot_width = stock.get('pivot_width_pct', 100)
+
+        # Extract test count from breakout_reason
+        breakout_reason = stock.get('breakout_reason', '')
+        match = re.search(r'Tested (\d+)x', breakout_reason)
+        test_count = int(match.group(1)) if match else 0
+
+        # TIER 1: Tight pivot + heavy testing
+        if pivot_width <= 2.5 and test_count >= 10:
+            return 'TIER 1'
+
+        # TIER 2: Good on one factor
+        elif pivot_width <= 3.5 or test_count >= 5:
+            return 'TIER 2'
+
+        # TIER 3: Weaker on both
+        elif pivot_width <= 5.0:
+            return 'TIER 3'
+
+        # AVOID: Too wide
+        else:
+            return 'AVOID'
+
     def filter_scanner_for_gaps(self, scanner_results, opening_prices):
         """
         Filter scanner results at market open based on overnight gaps

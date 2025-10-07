@@ -86,10 +86,46 @@ class PS60Backtester:
         print(f"{'='*80}")
         print(f"Scanner file: {scanner_file}")
 
-        with open(scanner_file) as f:
-            self.scanner_results = json.load(f)
+        # Check if it's enhanced scoring CSV or regular JSON
+        if scanner_file.endswith('.csv'):
+            print(f"✓ Detected enhanced scoring CSV")
+            self.scanner_results = self._load_enhanced_scoring_csv(scanner_file)
+            self.using_enhanced_scoring = True
+        else:
+            with open(scanner_file) as f:
+                self.scanner_results = json.load(f)
+            self.using_enhanced_scoring = False
 
         print(f"Loaded {len(self.scanner_results)} scanner results")
+
+    def _load_enhanced_scoring_csv(self, csv_path):
+        """Load enhanced scoring CSV for backtesting"""
+        import csv
+
+        results = []
+        with open(csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convert numeric fields
+                stock = {}
+                for key, value in row.items():
+                    if key in ['close', 'resistance', 'support', 'target1', 'target2', 'target3',
+                               'downside1', 'downside2', 'risk_reward', 'dist_to_R%', 'dist_to_S%',
+                               'rvol', 'atr%', 'score', 'enhanced_long_score', 'enhanced_short_score',
+                               'best_enhanced_score', 'pivot_width_pct', 'change%', 'volume',
+                               'volume_M', 'potential_gain%', 'risk%']:
+                        try:
+                            stock[key] = float(value) if value else 0.0
+                        except ValueError:
+                            stock[key] = 0.0
+                    else:
+                        stock[key] = value
+
+                # Use 'symbol' field
+                if 'symbol' in stock:
+                    results.append(stock)
+
+        return results
 
     def connect(self):
         """Connect to IBKR"""
@@ -127,12 +163,30 @@ class PS60Backtester:
         self.market_trend = self.detect_market_trend()
 
         # Filter scanner using strategy module (score, R/R, distance)
-        watchlist = self.strategy.filter_scanner_results(self.scanner_results)
+        # Use enhanced filtering if enhanced scoring CSV was loaded
+        if self.using_enhanced_scoring:
+            watchlist = self.strategy.filter_enhanced_scanner_results(self.scanner_results)
+            print(f"✓ Using ENHANCED SCORING filtering (tier-based)")
+        else:
+            watchlist = self.strategy.filter_scanner_results(self.scanner_results)
+            print(f"⚠️  Using LEGACY scoring filtering")
 
         print(f"\n{'='*80}")
         print(f"MARKET TREND: {self.market_trend}")
         print(f"WATCHLIST: {len(watchlist)} tradeable setups (using strategy filters)")
         print(f"{'='*80}")
+
+        # Print tier breakdown if using enhanced scoring
+        if self.using_enhanced_scoring and watchlist:
+            from collections import Counter
+            tiers = Counter(stock.get('tier', 'UNKNOWN') for stock in watchlist)
+            print(f"\nTIER BREAKDOWN:")
+            for tier in ['TIER 1', 'TIER 2', 'TIER 3']:
+                count = tiers.get(tier, 0)
+                if count > 0:
+                    symbols = [s['symbol'] for s in watchlist if s.get('tier') == tier]
+                    print(f"  {tier}: {count} stocks - {', '.join(symbols[:5])}")
+            print()
 
         # Get opening prices for gap analysis (simulates 9:30 AM market open)
         opening_prices = self.get_opening_prices(watchlist)

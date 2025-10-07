@@ -245,11 +245,40 @@ class PS60Trader:
             self.logger.info("✓ Disconnected from IBKR")
 
     def load_scanner_results(self):
-        """Load today's scanner results (auto-detects correct date file)"""
+        """
+        Load today's scanner results (auto-detects correct date file)
+
+        ENHANCED SCORING SUPPORT (Oct 6, 2025):
+        - First tries to load enhanced scoring CSV (rescored_YYYYMMDD.csv)
+        - Falls back to regular scanner JSON if enhanced scoring not found
+        - Enhanced scoring provides tier classification and improved predictions
+        """
         scanner_dir = Path(self.config['scanner']['output_dir'])
 
-        # Find today's scanner results file
+        # Check if we should use enhanced scoring from scanner_validation/
+        enhanced_scoring_dir = Path(self.config['scanner'].get('enhanced_scoring_dir',
+                                                                '../scanner_validation/'))
+
         today = datetime.now().strftime('%Y%m%d')
+
+        # Try enhanced scoring first
+        enhanced_file = f"rescored_{today}_v2.csv"  # v2 includes test count bonus
+        enhanced_path = enhanced_scoring_dir / enhanced_file
+
+        if enhanced_path.exists():
+            self.logger.info(f"✓ Found enhanced scoring: {enhanced_file}")
+            return self._load_enhanced_scoring(enhanced_path)
+
+        # Try v1 enhanced scoring (without test count bonus)
+        enhanced_file_v1 = f"rescored_{today}.csv"
+        enhanced_path_v1 = enhanced_scoring_dir / enhanced_file_v1
+
+        if enhanced_path_v1.exists():
+            self.logger.info(f"✓ Found enhanced scoring (v1): {enhanced_file_v1}")
+            return self._load_enhanced_scoring(enhanced_path_v1)
+
+        # Fall back to regular scanner output
+        self.logger.info(f"⚠️  Enhanced scoring not found, using regular scanner output")
         scanner_file = f"scanner_results_{today}.json"
         scanner_path = scanner_dir / scanner_file
 
@@ -280,6 +309,87 @@ class PS60Trader:
         except Exception as e:
             self.logger.error(f"✗ Error loading scanner results: {e}")
             return False
+
+    def _load_enhanced_scoring(self, csv_path):
+        """Load enhanced scoring CSV and apply tier-based filtering"""
+        import csv
+
+        try:
+            all_results = []
+            with open(csv_path, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Convert numeric fields
+                    stock = {}
+                    for key, value in row.items():
+                        if key in ['close', 'resistance', 'support', 'target1', 'target2', 'target3',
+                                   'downside1', 'downside2', 'risk_reward', 'dist_to_R%', 'dist_to_S%',
+                                   'rvol', 'atr%', 'score', 'enhanced_long_score', 'enhanced_short_score',
+                                   'best_enhanced_score', 'pivot_width_pct', 'change%', 'volume',
+                                   'volume_M', 'potential_gain%', 'risk%']:
+                            try:
+                                stock[key] = float(value) if value else 0.0
+                            except ValueError:
+                                stock[key] = 0.0
+                        else:
+                            stock[key] = value
+
+                    # Use 'symbol' field (not 'Symbol')
+                    if 'symbol' in stock:
+                        all_results.append(stock)
+
+            self.logger.info(f"✓ Loaded {len(all_results)} stocks from enhanced scoring")
+
+            # Apply tier-based filtering
+            self.watchlist = self.strategy.filter_enhanced_scanner_results(all_results)
+
+            self.logger.info(f"✓ Filtered to {len(self.watchlist)} setups after tier filtering")
+
+            # Log watchlist with tier information
+            for stock in self.watchlist:
+                tier = self._classify_tier(stock)
+                long_score = stock.get('enhanced_long_score', stock.get('score', 0))
+                short_score = stock.get('enhanced_short_score', stock.get('score', 0))
+                pivot_width = stock.get('pivot_width_pct', 0)
+
+                self.logger.info(f"  [{stock['symbol']}] {tier} - "
+                               f"LONG:{long_score:.0f} SHORT:{short_score:.0f} "
+                               f"Pivot:{pivot_width:.2f}% "
+                               f"R/R:{stock.get('risk_reward', 0):.2f}")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"✗ Error loading enhanced scoring: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return False
+
+    def _classify_tier(self, stock):
+        """Classify stock into tiers based on enhanced scoring criteria"""
+        pivot_width = stock.get('pivot_width_pct', 100)
+
+        # Extract test count from breakout_reason
+        import re
+        breakout_reason = stock.get('breakout_reason', '')
+        match = re.search(r'Tested (\d+)x', breakout_reason)
+        test_count = int(match.group(1)) if match else 0
+
+        # TIER 1: Tight pivot + heavy testing
+        if pivot_width <= 2.5 and test_count >= 10:
+            return "TIER 1 ⭐⭐⭐"
+
+        # TIER 2: Good on one factor
+        elif pivot_width <= 3.5 or test_count >= 5:
+            return "TIER 2 ⭐⭐"
+
+        # TIER 3: Weaker on both
+        elif pivot_width <= 5.0:
+            return "TIER 3 ⭐"
+
+        # AVOID: Too wide
+        else:
+            return "AVOID ❌"
 
     def subscribe_market_data(self):
         """Subscribe to real-time market data for watchlist with error handling"""
