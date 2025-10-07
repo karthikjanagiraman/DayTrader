@@ -1721,10 +1721,10 @@ class PS60Strategy:
             (filtered_list, gap_report) - Filtered stocks and gap analysis report
         """
         if not self.enable_gap_filter:
-            return scanner_results, []
+            return scanner_results, {'skipped': [], 'adjusted': [], 'noted': []}
 
         filtered = []
-        gap_report = []
+        gap_report = {'skipped': [], 'adjusted': [], 'noted': []}
 
         for stock in scanner_results:
             symbol = stock['symbol']
@@ -1762,10 +1762,9 @@ class PS60Strategy:
                     if gap_through_pct > self.max_gap_through_pivot and room_to_target < self.min_room_to_target:
                         skip_long = True
                         reason = f"Gap up {gap_through_pct:.1f}% through resistance, only {room_to_target:.1f}% to target"
-                        gap_report.append({
+                        gap_report['skipped'].append({
                             'symbol': symbol,
                             'direction': 'LONG',
-                            'action': 'SKIPPED',
                             'gap_pct': gap_pct,
                             'gap_through': gap_through_pct,
                             'room_to_target': room_to_target,
@@ -1773,10 +1772,9 @@ class PS60Strategy:
                         })
                     elif gap_through_pct > self.max_gap_through_pivot:
                         # Large gap but still has room
-                        gap_report.append({
+                        gap_report['adjusted'].append({
                             'symbol': symbol,
                             'direction': 'LONG',
-                            'action': 'ADJUSTED',
                             'gap_pct': gap_pct,
                             'gap_through': gap_through_pct,
                             'room_to_target': room_to_target,
@@ -1796,20 +1794,18 @@ class PS60Strategy:
                     if gap_through_pct > self.max_gap_through_pivot and room_to_downside < self.min_room_to_target:
                         skip_short = True
                         reason = f"Gap down {gap_through_pct:.1f}% through support, only {room_to_downside:.1f}% to downside"
-                        gap_report.append({
+                        gap_report['skipped'].append({
                             'symbol': symbol,
                             'direction': 'SHORT',
-                            'action': 'SKIPPED',
                             'gap_pct': gap_pct,
                             'gap_through': gap_through_pct,
                             'room_to_target': room_to_downside,
                             'reason': reason
                         })
                     elif gap_through_pct > self.max_gap_through_pivot:
-                        gap_report.append({
+                        gap_report['adjusted'].append({
                             'symbol': symbol,
                             'direction': 'SHORT',
-                            'action': 'ADJUSTED',
                             'gap_pct': gap_pct,
                             'gap_through': gap_through_pct,
                             'room_to_target': room_to_downside,
@@ -1820,10 +1816,9 @@ class PS60Strategy:
             if abs(gap_pct) > 2.0 and not skip_long and not skip_short:
                 dist_to_r = abs(((opening_price - resistance) / opening_price) * 100) if resistance else 100
                 dist_to_s = abs(((opening_price - support) / opening_price) * 100) if support else 100
-                gap_report.append({
+                gap_report['noted'].append({
                     'symbol': symbol,
                     'direction': 'BOTH',
-                    'action': 'NOTED',
                     'gap_pct': gap_pct,
                     'dist_to_pivot': min(dist_to_r, dist_to_s),
                     'reason': f"Gap {gap_pct:+.1f}%, now {min(dist_to_r, dist_to_s):.1f}% from pivot"

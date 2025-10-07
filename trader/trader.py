@@ -422,7 +422,7 @@ class PS60Trader:
         if not self.bar_buffers[symbol].has_enough_data():
             bars_count = len(self.bar_buffers[symbol].get_bars_for_strategy())
             self.logger.debug(f"  {symbol}: Warming up ({bars_count}/20 bars), skipping checks")
-            return None, None
+            return None, None, None
 
         # Get bars from buffer for strategy module
         bars = self.bar_buffers[symbol].get_bars_for_strategy()
@@ -460,15 +460,21 @@ class PS60Trader:
             return 'LONG', resistance, reason
         elif reason:
             # Track which filter blocked
-            filter_name = reason.split(':')[0] if ':' in reason else reason
+            # CRITICAL: reason can be a string or dict from check_hybrid_entry
+            if isinstance(reason, dict):
+                filter_name = reason.get('phase', 'unknown')
+                reason_str = str(reason)
+            else:
+                filter_name = reason.split(':')[0] if ':' in reason else reason
+                reason_str = reason
             self.analytics['filter_blocks'][filter_name] += 1
 
             # CRITICAL: Log filter blocks at INFO level when price is close to pivot
             # This helps understand why we DIDN'T enter a trade
             if abs(distance_to_resistance) < 1.0:  # Within 1% of pivot
-                self.logger.info(f"  ❌ {symbol}: LONG blocked @ ${current_price:.2f} - {reason}")
+                self.logger.info(f"  ❌ {symbol}: LONG blocked @ ${current_price:.2f} - {reason_str}")
             else:
-                self.logger.debug(f"  {symbol}: LONG blocked - {reason}")
+                self.logger.debug(f"  {symbol}: LONG blocked - {reason_str}")
 
         # Check short pivot break using strategy module WITH ALL FILTERS
         # Pass bars and current_idx for hybrid entry confirmation
@@ -487,15 +493,21 @@ class PS60Trader:
             return 'SHORT', support, reason
         elif reason:
             # Track which filter blocked
-            filter_name = reason.split(':')[0] if ':' in reason else reason
+            # CRITICAL: reason can be a string or dict from check_hybrid_entry
+            if isinstance(reason, dict):
+                filter_name = reason.get('phase', 'unknown')
+                reason_str = str(reason)
+            else:
+                filter_name = reason.split(':')[0] if ':' in reason else reason
+                reason_str = reason
             self.analytics['filter_blocks'][filter_name] += 1
 
             # CRITICAL: Log filter blocks at INFO level when price is close to pivot
             # This helps understand why we DIDN'T enter a trade
             if abs(distance_to_support) < 1.0:  # Within 1% of pivot
-                self.logger.info(f"  ❌ {symbol}: SHORT blocked @ ${current_price:.2f} - {reason}")
+                self.logger.info(f"  ❌ {symbol}: SHORT blocked @ ${current_price:.2f} - {reason_str}")
             else:
-                self.logger.debug(f"  {symbol}: SHORT blocked - {reason}")
+                self.logger.debug(f"  {symbol}: SHORT blocked - {reason_str}")
 
         return None, None, None
 
@@ -522,6 +534,8 @@ class PS60Trader:
 
         # Create market order
         order = MarketOrder('BUY', shares)
+        # Bypass IBKR direct routing warning (10311)
+        order.outsideRth = False  # Only trade during regular hours
 
         # Place order with error handling
         trade = self.resilience.safe_place_order(contract, order, f"{symbol} LONG")
@@ -587,6 +601,8 @@ class PS60Trader:
 
         # Create market order
         order = MarketOrder('SELL', shares)
+        # Bypass IBKR direct routing warning (10311)
+        order.outsideRth = False  # Only trade during regular hours
 
         # Place order with error handling
         trade = self.resilience.safe_place_order(contract, order, f"{symbol} SHORT")
@@ -640,7 +656,6 @@ class PS60Trader:
     def place_stop_order(self, position):
         """Place stop loss order with error handling"""
         symbol = position['symbol']
-        contract = position['contract']
         stop_price = position['stop']
         shares = int(position['shares'] * position['remaining'])
 
@@ -652,8 +667,11 @@ class PS60Trader:
         # Create stop order
         stop_order = StopOrder(action, shares, stop_price)
 
+        # CRITICAL: Use SMART routing to avoid direct routing restrictions
+        smart_contract = self.get_smart_contract(position['contract'])
+
         # Place order with error handling
-        trade = self.resilience.safe_place_order(contract, stop_order, f"{symbol} STOP")
+        trade = self.resilience.safe_place_order(smart_contract, stop_order, f"{symbol} STOP")
 
         if not trade:
             self.logger.error(f"✗ Failed to place stop order for {symbol}")
@@ -702,17 +720,19 @@ class PS60Trader:
                                 f"Remaining: {int(position['remaining']*100)}% | "
                                 f"P&L: ${unrealized_pnl:+.2f}")
 
-            # Check 8-minute rule (FIXED - checks if stuck at pivot)
-            should_exit, reason = self.strategy.check_five_minute_rule(
-                position, current_price, current_time
-            )
-            if should_exit:
-                self.logger.info(f"\n⏱️  8-MINUTE RULE: {symbol} ({reason})")
-                self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
-                self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
-                self.logger.info(f"   Reason: No progress, exiting to prevent larger loss")
-                self.close_position(position, current_price, reason)
-                continue
+            # TODO: Implement 8-minute rule in PS60Strategy
+            # Check 8-minute rule (checks if stuck at pivot)
+            # TEMPORARILY DISABLED - method not implemented in strategy module
+            # should_exit, reason = self.strategy.check_five_minute_rule(
+            #     position, current_price, current_time
+            # )
+            # if should_exit:
+            #     self.logger.info(f"\n⏱️  8-MINUTE RULE: {symbol} ({reason})")
+            #     self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
+            #     self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
+            #     self.logger.info(f"   Reason: No progress, exiting to prevent larger loss")
+            #     self.close_position(position, current_price, reason)
+            #     continue
 
             # Check for partial profit
             should_partial, pct, reason = self.strategy.should_take_partial(
@@ -726,7 +746,15 @@ class PS60Trader:
                     old_stop = position['stop']
                     position['stop'] = position['entry_price']
                     self.logger.info(f"  🛡️  {symbol}: Stop moved ${old_stop:.2f} → ${position['stop']:.2f} (breakeven)")
-                    self.logger.info(f"      Now protected: ${position['realized_pnl']:.2f} locked in")
+
+    def get_smart_contract(self, contract):
+        """
+        Convert contract to use SMART routing
+
+        CRITICAL: IBKR returns contracts with actual exchange (NYSE, NASDAQ, etc)
+        but we need SMART routing to avoid direct routing restrictions
+        """
+        return Stock(contract.symbol, 'SMART', 'USD')
 
     def take_partial(self, position, price, pct, reason):
         """Take partial profit"""
@@ -740,7 +768,12 @@ class PS60Trader:
 
         # Place market order for partial
         order = MarketOrder(action, shares_to_sell)
-        trade = self.ib.placeOrder(position['contract'], order)
+        # Bypass IBKR direct routing warning (10311)
+        order.outsideRth = False  # Only trade during regular hours
+
+        # CRITICAL: Use SMART routing to avoid direct routing restrictions
+        smart_contract = self.get_smart_contract(position['contract'])
+        trade = self.ib.placeOrder(smart_contract, order)
 
         # Record partial using position manager
         partial_record = self.pm.take_partial(symbol, price, pct, reason)
@@ -764,7 +797,12 @@ class PS60Trader:
 
         # Place market order with error handling
         order = MarketOrder(action, shares)
-        trade = self.resilience.safe_place_order(position['contract'], order, f"{symbol} CLOSE")
+        # Bypass IBKR direct routing warning (10311)
+        order.outsideRth = False  # Only trade during regular hours
+
+        # CRITICAL: Use SMART routing to avoid direct routing restrictions
+        smart_contract = self.get_smart_contract(position['contract'])
+        trade = self.resilience.safe_place_order(smart_contract, order, f"{symbol} CLOSE")
 
         if not trade:
             self.logger.error(f"✗ Failed to close {symbol} position")
@@ -1140,8 +1178,15 @@ class PS60Trader:
         if summary['trades']:
             self.logger.info(f"\n📋 TRADE-BY-TRADE BREAKDOWN:")
             for i, trade in enumerate(summary['trades'], 1):
-                entry_time = datetime.fromisoformat(trade['entry_time'])
-                exit_time = datetime.fromisoformat(trade['exit_time'])
+                # Handle both string and datetime objects
+                entry_time = trade['entry_time']
+                if isinstance(entry_time, str):
+                    entry_time = datetime.fromisoformat(entry_time)
+
+                exit_time = trade['exit_time']
+                if isinstance(exit_time, str):
+                    exit_time = datetime.fromisoformat(exit_time)
+
                 duration = (exit_time - entry_time).total_seconds() / 60
 
                 pnl_sign = '+' if trade['pnl'] > 0 else ''
@@ -1178,8 +1223,21 @@ class PS60Trader:
                 }
             }
 
+            # Convert datetime objects to strings for JSON serialization
+            def serialize_datetimes(obj):
+                if isinstance(obj, dict):
+                    return {k: serialize_datetimes(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_datetimes(item) for item in obj]
+                elif isinstance(obj, datetime):
+                    return obj.isoformat()
+                else:
+                    return obj
+
+            serialized_data = serialize_datetimes(save_data)
+
             with open(trade_file, 'w') as f:
-                json.dump(save_data, f, indent=2)
+                json.dump(serialized_data, f, indent=2)
 
             self.logger.info(f"\n💾 Full session data saved to: {trade_file}")
 

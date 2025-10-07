@@ -315,6 +315,7 @@ class PositionManager:
                 'win_rate': 0.0,
                 'avg_winner': 0.0,
                 'avg_loser': 0.0,
+                'trades': [],  # CRITICAL: Include empty trades list
             }
 
         winners = [t for t in self.trades_today if t['pnl'] > 0]
@@ -328,6 +329,7 @@ class PositionManager:
             'win_rate': len(winners) / len(self.trades_today) * 100 if self.trades_today else 0,
             'avg_winner': sum(t['pnl'] for t in winners) / len(winners) if winners else 0,
             'avg_loser': sum(t['pnl'] for t in losers) / len(losers) if losers else 0,
+            'trades': self.trades_today,  # CRITICAL: Include trades list
         }
 
     def reset_daily(self):

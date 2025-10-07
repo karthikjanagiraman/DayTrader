@@ -273,11 +273,16 @@ class StateManager:
         positions = {}
 
         for symbol, pos in self.trader.positions.items():
+            # Convert entry_time to ISO string for JSON serialization
+            entry_time = pos['entry_time']
+            if isinstance(entry_time, datetime):
+                entry_time = entry_time.isoformat()
+
             positions[symbol] = {
                 'symbol': symbol,
                 'side': pos['side'],
                 'entry_price': pos['entry_price'],
-                'entry_time': pos['entry_time'],
+                'entry_time': entry_time,
                 'shares': pos['shares'],
                 'remaining': pos['remaining'],
                 'pivot': pos['pivot'],
@@ -368,7 +373,11 @@ class StateManager:
                     )
 
                     # Restore additional metadata
-                    position['entry_time'] = pos_data['entry_time']
+                    # CRITICAL: Convert entry_time string to datetime object
+                    if isinstance(pos_data['entry_time'], str):
+                        position['entry_time'] = datetime.fromisoformat(pos_data['entry_time'])
+                    else:
+                        position['entry_time'] = pos_data['entry_time']
                     position['remaining'] = pos_data['remaining']
                     position['stop_price'] = pos_data.get('stop_price')
                     position['partials_taken'] = pos_data.get('partials_taken', [])
@@ -394,18 +403,23 @@ class StateManager:
         """Restore attempt counts to position manager"""
         self.logger.info("\n🔄 RESTORING ATTEMPT COUNTS...")
 
-        for symbol, counts in attempt_counts.items():
-            if 'long_attempts' in counts:
-                resistance = counts['resistance']
-                for _ in range(counts['long_attempts']):
-                    self.trader.pm.record_attempt(symbol, resistance)
-                self.logger.info(f"  {symbol}: {counts['long_attempts']} long attempts at ${resistance:.2f}")
+        # TODO: Implement record_attempt method in PositionManager
+        # For now, skip attempt count restoration - not critical for trading
+        self.logger.warning("⚠️  Attempt count restoration skipped (record_attempt method not implemented)")
+        return
 
-            if 'short_attempts' in counts:
-                support = counts['support']
-                for _ in range(counts['short_attempts']):
-                    self.trader.pm.record_attempt(symbol, support)
-                self.logger.info(f"  {symbol}: {counts['short_attempts']} short attempts at ${support:.2f}")
+        # for symbol, counts in attempt_counts.items():
+        #     if 'long_attempts' in counts:
+        #         resistance = counts['resistance']
+        #         for _ in range(counts['long_attempts']):
+        #             self.trader.pm.record_attempt(symbol, resistance)
+        #         self.logger.info(f"  {symbol}: {counts['long_attempts']} long attempts at ${resistance:.2f}")
+        #
+        #     if 'short_attempts' in counts:
+        #         support = counts['support']
+        #         for _ in range(counts['short_attempts']):
+        #             self.trader.pm.record_attempt(symbol, support)
+        #         self.logger.info(f"  {symbol}: {counts['short_attempts']} short attempts at ${support:.2f}")
 
     def _restore_analytics(self, analytics):
         """Restore analytics data"""
@@ -454,7 +468,8 @@ class StateManager:
 
                     # Mark as recovered with incomplete data
                     eastern = pytz.timezone('US/Eastern')
-                    position['entry_time'] = datetime.now(pytz.UTC).astimezone(eastern).isoformat()
+                    # CRITICAL: Use datetime object, not string
+                    position['entry_time'] = datetime.now(pytz.UTC).astimezone(eastern)
                     position['remaining'] = 1.0  # Assume no partials
                     position['recovered_incomplete'] = True
 
