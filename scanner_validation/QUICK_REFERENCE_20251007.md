@@ -4,16 +4,21 @@
 
 ---
 
-## TOP 6 PRIORITY SETUPS (Tight Pivots < 2.5%)
+## TIER 1 SETUPS ⭐⭐⭐ (Tight Pivot + Heavy Testing = 70-80% Success)
 
-| Rank | Symbol | Entry (Resistance) | Pivot Width | Why Trade |
-|------|--------|-------------------|-------------|-----------|
-| 1 | **GS** | **$806.38** | 1.41% ✓ | Tight pivot, excellent R/R 8.36:1 |
-| 2 | **AAPL** | **$259.49** | 1.70% ✓ | Mega-cap, tight pivot, R/R 12.57:1 |
-| 3 | **BA** | **$220.28** | 1.75% ✓ | Very close to breakout! |
-| 4 | **AMZN** | **$224.38** | 1.73% ✓ | Tight pivot, good mover |
-| 5 | **GOOGL** | **$251.32** | 1.91% ✓ | Strong momentum +1.9% |
-| 6 | **UBER** | **$102.51** | 2.31% ✓ | Hot today +3.6% |
+| Rank | Symbol | Entry (Resistance) | Pivot | Tests | Why Trade |
+|------|--------|-------------------|-------|-------|-----------|
+| 1 | **GS** | **$806.38** | 1.41% | **12x** ✓✓ | Tightest pivot + most tested = BEST |
+| 2 | **AAPL** | **$259.49** | 1.70% | **10x** ✓✓ | Mega-cap, tight + heavily tested |
+| 3 | **BA** | **$220.28** | 1.75% | **11x** ✓✓ | Very close to breakout + heavily tested |
+
+## TIER 2 SETUPS ⭐⭐ (Good on One Factor = 50-60% Success)
+
+| Rank | Symbol | Entry (Resistance) | Pivot | Tests | Why Trade |
+|------|--------|-------------------|-------|-------|-----------|
+| 4 | **GOOGL** | **$251.32** | 1.91% | **10x** ✓ | Tight pivot + heavily tested |
+| 5 | **AMZN** | **$224.38** | 1.73% | 9x ✓ | Very tight pivot |
+| 6 | **UBER** | **$102.51** | 2.31% | 9x ✓ | Good momentum +3.6% |
 
 ---
 
@@ -65,11 +70,15 @@
 
 ## EXPECTED OUTCOME
 
-**Conservative**: 2-3 winners → $2,000-3,000
-**Base Case**: 3-5 winners → $4,000-6,000
-**Optimistic**: 6-8 winners → $8,000-10,000
+**TIER 1 Focus** (GS, AAPL, BA):
+- Expected: 2-3 winners (70-80% success rate)
+- Potential: $3,000-5,000 from these 3 alone
 
-**Target**: $4,000+ (30% capture rate minimum)
+**TIER 1 + TIER 2** (6 setups):
+- Expected: 3-4 winners (60% success rate)
+- Potential: $4,000-7,000
+
+**Target**: $4,000+ (focus on TIER 1 quality over quantity)
 
 ---
 

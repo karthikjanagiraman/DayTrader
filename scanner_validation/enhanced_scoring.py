@@ -226,6 +226,50 @@ class EnhancedScorer:
 
         return score
 
+    def calculate_test_count_score(self, stock):
+        """
+        Score based on how many times resistance was tested
+
+        KEY INSIGHT: More tests = Higher conviction level = Better success rate
+
+        Oct 6 Validation Results:
+        - Winners: 9.6x avg tests (median 10x)
+        - False Breakouts: 5.6x avg tests (median 5x)
+        - Tested ≥10x: 80% success rate!
+        - Tested ≥5x: 58.3% success rate
+        - Tested <5x: 47.1% success rate
+
+        Args:
+            stock: Dict with breakout_reason
+
+        Returns:
+            int: Adjustment (0 to +25)
+        """
+        breakout_reason = stock.get('breakout_reason', '')
+
+        if not breakout_reason:
+            return 0
+
+        # Extract test count from reason (e.g., "Tested 10x")
+        import re
+        match = re.search(r'Tested (\d+)x', breakout_reason)
+        if not match:
+            return 0
+
+        test_count = int(match.group(1))
+
+        # Scoring based on validation data
+        if test_count >= 10:
+            return +25  # 80% success rate - EXCELLENT!
+        elif test_count >= 7:
+            return +15  # 55% success rate - VERY GOOD
+        elif test_count >= 5:
+            return +10  # 58% success rate - GOOD
+        elif test_count >= 3:
+            return +5   # 50% success rate - ACCEPTABLE
+        else:
+            return 0    # <47% success rate - NEUTRAL
+
     def score_setup(self, stock, side='LONG'):
         """
         Calculate enhanced score for a setup
@@ -245,9 +289,10 @@ class EnhancedScorer:
         direction_adj = self.calculate_direction_score(stock, side)
         symbol_penalty = self.calculate_symbol_penalty(symbol)
         move_quality_adj = self.calculate_move_quality_score(stock)
+        test_count_bonus = self.calculate_test_count_score(stock)
 
         # Total enhanced score
-        total_score = base_score + pivot_adj + direction_adj + symbol_penalty + move_quality_adj
+        total_score = base_score + pivot_adj + direction_adj + symbol_penalty + move_quality_adj + test_count_bonus
         total_score = min(100, max(0, total_score))
 
         return {
@@ -257,7 +302,8 @@ class EnhancedScorer:
                 'pivot_width': pivot_adj,
                 'direction': direction_adj,
                 'symbol_penalty': symbol_penalty,
-                'move_quality': move_quality_adj
+                'move_quality': move_quality_adj,
+                'test_count_bonus': test_count_bonus
             },
             'pivot_width_pct': stock.get('pivot_width_pct', 0),
             'recommendation': self._get_recommendation(total_score)
