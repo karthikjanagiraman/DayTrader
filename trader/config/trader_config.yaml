@@ -4,13 +4,14 @@
 trading:
   account_size: 100000
   risk_per_trade: 0.01  # 1% risk per trade
-  max_positions: 5      # Maximum concurrent positions
+  max_positions: 10     # Maximum concurrent positions (increased for more opportunities)
   max_daily_loss: 0.03  # 3% max daily loss (circuit breaker)
 
   position_sizing:
     min_shares: 10
-    max_shares: 1000   # Cap position size
-    max_position_pct: 200.0  # Skip trade if position > 200% of account (temporarily raised to test strategy)
+    max_shares: 1000          # Hard cap on share count
+    max_position_value: 20000 # Adaptive sizing: $20k max per position (20% of account)
+    max_position_pct: 200.0   # Legacy check - replaced by max_position_value
 
   entry:
     use_market_orders: true
@@ -48,6 +49,11 @@ trading:
     atr_stop_multiplier: 2.0       # Stop = Entry - (2.0 × ATR) for longs
     atr_stop_period: 20            # Calculate ATR from last 20 bars
 
+    # 15-Minute Rule (PS60) - Exit if no progress after 15 minutes
+    fifteen_minute_rule_enabled: true    # Enable 15-minute stuck position exit
+    fifteen_minute_threshold: 15         # Exit after 15 minutes with no progress
+    fifteen_minute_min_gain: 0.001       # Minimum 0.1% gain to avoid exit (must show some progress)
+
   # Trade confirmation (per requirements - avoid false breakouts)
   confirmation:
     enabled: true                   # Enable confirmation logic
@@ -67,11 +73,22 @@ trading:
     candle_timeframe_seconds: 60    # 60 seconds = 1-minute candles
 
     # MOMENTUM BREAKOUT thresholds (immediate entry, no pullback)
-    # FIX #1 (Oct 4, 2025): Relaxed from 2.0x/1.5% based on Sept 23-30 analysis
-    # Only 1 out of 123 trades qualified as momentum with strict criteria
-    momentum_volume_threshold: 1.3          # Volume ≥1.3x average = strong momentum
-    momentum_candle_min_pct: 0.008          # Candle ≥0.8% move OR
-    momentum_candle_min_atr: 2.0            # Candle ≥2x ATR = large breakout
+    # Updated Oct 7, 2025: Volume-only filter (RSI/MACD removed - too slow for intraday)
+    momentum_volume_threshold: 2.0          # Volume ≥2.0x average = strong momentum
+    momentum_candle_min_pct: 0.000          # DISABLED - no candle size requirement
+    momentum_candle_min_atr: 0.0            # DISABLED - no ATR requirement
+
+    # RSI/MACD Momentum Filters (Oct 7, 2025) - DISABLED (ineffective for intraday)
+    enable_rsi_filter: false                # ❌ DISABLED - 1-hour too slow for intraday breakouts
+    rsi_period: 14                          # RSI calculation period
+    rsi_threshold: 60                       # Minimum RSI (50=bias, 60=strong)
+    rsi_timeframe: '1 hour'                 # 1 hour bars (more reliable than 5-min)
+
+    enable_macd_filter: false               # ❌ DISABLED - 1-hour too slow for intraday breakouts
+    macd_fast: 12                           # MACD fast EMA (hourly standard)
+    macd_slow: 26                           # MACD slow EMA (hourly standard)
+    macd_signal: 9                          # MACD signal EMA (hourly standard)
+    macd_timeframe: '1 hour'                # 1 hour bars (same as RSI)
 
     # PULLBACK/RETEST thresholds (patient entry for weak initial breaks)
     require_pullback_retest: true           # Enable pullback logic for weak breaks
@@ -82,7 +99,7 @@ trading:
     # SUSTAINED BREAK logic (Oct 5, 2025) - Alternative for slow grind breakouts
     # Catches PLTR-type setups: weak candle but sustained hold with volume
     sustained_break_enabled: true           # Enable sustained break detection
-    sustained_break_minutes: 2              # Must hold above/below pivot for 2 minutes
+    sustained_break_minutes: 1              # Must hold above/below pivot for 1 minute (reduced from 2 - Oct 9 state machine fix)
     sustained_break_max_pullback_pct: 0.003 # Allow 0.3% pullback (was 0.1%, too strict for 5-sec bars)
 
     # ENTRY QUALITY FILTERS (Applied during entry decision)
@@ -135,7 +152,7 @@ filters:
   # ----------------------------------------------------------------------------
   # LEGACY FILTERS (Used when enhanced scoring CSV not available)
   min_score: 0                 # Minimum scanner score (0-100, 0 = disabled)
-  min_risk_reward: 2.0         # Minimum R/R ratio from scanner (per trading plan)
+  min_risk_reward: 1.0         # Minimum R/R ratio from scanner (per trading plan)
   max_dist_to_pivot: 100.0     # Max distance to pivot % (100 = disabled)
 
   # ENHANCED SCORING FILTERS (Oct 6, 2025) ⭐ NEW
@@ -208,7 +225,7 @@ filters:
 ibkr:
   host: "127.0.0.1"
   port: 7497                   # Paper trading port (7496 for live)
-  client_id: 2001              # Different from scanner (1001)
+  client_id: 2002              # Changed from 2001 (old session still connected)
 
 scanner:
   output_dir: "../stockscanner/output/"
@@ -217,7 +234,7 @@ scanner:
 
 logging:
   log_dir: "./logs/"
-  log_level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  log_level: "DEBUG"          # DEBUG, INFO, WARNING, ERROR (changed to DEBUG for full visibility - Oct 10, 2025)
   log_trades: true
   log_positions: true
   save_daily_report: true

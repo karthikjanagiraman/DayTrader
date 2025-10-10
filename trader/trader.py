@@ -619,6 +619,44 @@ class PS60Trader:
             else:
                 self.logger.debug(f"  {symbol}: SHORT blocked - {reason_str}")
 
+        # Check BOUNCE long entry (pullback to support + reversal) - FEATURE #1 (Oct 9, 2025)
+        # Only check if price near support (within 1%) and not already in position
+        if symbol not in self.positions and long_attempts < self.strategy.max_attempts_per_pivot:
+            if current_price > support * 0.99 and current_price < support * 1.01:
+                bounce_confirmed, bounce_reason = self.strategy.check_bounce_setup(
+                    bars, current_idx, support, side='LONG'
+                )
+
+                if bounce_confirmed:
+                    self.logger.info(f"\n🔄 {symbol}: BOUNCE SIGNAL @ ${current_price:.2f}")
+                    self.logger.info(f"   Bouncing off support: ${support:.2f}")
+                    self.logger.info(f"   Attempt: {long_attempts + 1}/{self.strategy.max_attempts_per_pivot}")
+                    self.logger.info(f"   Entry Path: {bounce_reason}")
+
+                    # Track entry path
+                    self.analytics['entry_paths'][bounce_reason] += 1
+
+                    return 'LONG', support, bounce_reason
+
+        # Check REJECTION short entry (failed breakout at resistance) - FEATURE #2 (Oct 9, 2025)
+        # Only check if price near resistance (within 1%) and not already in position
+        if symbol not in self.positions and short_attempts < self.strategy.max_attempts_per_pivot:
+            if current_price < resistance * 1.01 and current_price > resistance * 0.99:
+                rejection_confirmed, rejection_reason = self.strategy.check_rejection_setup(
+                    bars, current_idx, resistance, side='SHORT'
+                )
+
+                if rejection_confirmed:
+                    self.logger.info(f"\n⬇️  {symbol}: REJECTION SIGNAL @ ${current_price:.2f}")
+                    self.logger.info(f"   Rejected at resistance: ${resistance:.2f}")
+                    self.logger.info(f"   Attempt: {short_attempts + 1}/{self.strategy.max_attempts_per_pivot}")
+                    self.logger.info(f"   Entry Path: {rejection_reason}")
+
+                    # Track entry path
+                    self.analytics['entry_paths'][rejection_reason] += 1
+
+                    return 'SHORT', resistance, rejection_reason
+
         return None, None, None
 
     def calculate_position_size(self, entry_price, stop_price):
@@ -628,6 +666,47 @@ class PS60Trader:
             entry_price,
             stop_price
         )
+
+    def check_margin_available(self, symbol, shares, price):
+        """
+        Check if sufficient margin available for trade
+
+        CRITICAL FIX (Oct 10, 2025): Prevents IBKR Error 201 rejections
+
+        Args:
+            symbol: Stock symbol
+            shares: Number of shares to buy/sell
+            price: Entry price
+
+        Returns:
+            tuple: (is_available: bool, message: str)
+        """
+        try:
+            # Query IBKR account summary for buying power
+            account_values = self.ib.accountSummary()
+
+            # Get buying power (available funds for new positions)
+            buying_power = next((float(v.value) for v in account_values
+                               if v.tag == 'BuyingPower'), None)
+
+            if buying_power is None:
+                self.logger.warning(f"  ⚠️  Could not query buying power - allowing trade (fail-open)")
+                return True, "Unknown buying power"
+
+            # Calculate required margin for this trade
+            required_margin = shares * price
+
+            # Check if sufficient margin available
+            if required_margin > buying_power:
+                return False, f"Insufficient margin: ${buying_power:,.2f} available, ${required_margin:,.2f} required (${required_margin - buying_power:,.2f} short)"
+
+            # Sufficient margin available
+            return True, f"${buying_power:,.2f} available, ${required_margin:,.2f} required"
+
+        except Exception as e:
+            self.logger.error(f"  ✗ Error checking margin: {e}")
+            # On error, allow trade (fail-open to avoid blocking legitimate trades)
+            return True, f"Error checking margin: {e}"
 
     def enter_long(self, stock_data, current_price, entry_reason="Resistance broken"):
         """Enter long position with full filter system"""
@@ -641,6 +720,15 @@ class PS60Trader:
 
         # Calculate position size
         shares = self.calculate_position_size(current_price, resistance)
+
+        # CRITICAL FIX (Oct 10, 2025): Check margin before placing order
+        # Prevents IBKR Error 201 rejections that occurred on 3 trades today
+        margin_ok, margin_msg = self.check_margin_available(symbol, shares, current_price)
+        if not margin_ok:
+            self.logger.warning(f"\n❌ {symbol} LONG REJECTED - {margin_msg}")
+            return None
+
+        self.logger.debug(f"  ✓ Margin check passed: {margin_msg}")
 
         # Create market order
         order = MarketOrder('BUY', shares)
@@ -666,13 +754,34 @@ class PS60Trader:
             self.logger.error(f"⚠️  Error checking fill for {symbol}: {e}")
             fill_price = current_price  # Use current price as fallback
 
+        # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
+        # Prevents getting stopped out by normal price noise
+        MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
+        PULLBACK_MIN_STOP_PCT = 0.003  # 0.3% for pullback/retest
+        BOUNCE_MIN_STOP_PCT = 0.004    # 0.4% for bounce setups
+
+        # Determine minimum stop distance based on entry reason
+        base_stop = resistance  # Default to pivot
+        if 'MOMENTUM' in entry_reason.upper():
+            min_stop_pct = MOMENTUM_MIN_STOP_PCT
+        elif 'BOUNCE' in entry_reason.upper():
+            min_stop_pct = BOUNCE_MIN_STOP_PCT
+        else:  # PULLBACK or other
+            min_stop_pct = PULLBACK_MIN_STOP_PCT
+
+        # Calculate minimum stop price
+        min_stop_price = fill_price * (1 - min_stop_pct)
+
+        # Use the LOWER of base_stop or min_stop (provides more protection)
+        stop_price = min(base_stop, min_stop_price)
+
         # Create position using position manager
         position = self.pm.create_position(
             symbol=symbol,
             side='LONG',
             entry_price=fill_price,
             shares=shares,
-            pivot=resistance,
+            pivot=stop_price,  # Use widened stop instead of raw pivot
             contract=contract,
             target1=stock_data['target1'],
             target2=stock_data['target2']
@@ -682,14 +791,14 @@ class PS60Trader:
         self.positions[symbol] = position
 
         # Calculate risk and room to target
-        risk = fill_price - resistance
+        risk = fill_price - stop_price  # Use widened stop for risk calc
         room_to_target = stock_data['target1'] - fill_price
         room_pct = (room_to_target / fill_price) * 100
 
         self.logger.info(f"\n🟢 LONG {symbol} @ ${fill_price:.2f} ({now_et.strftime('%I:%M:%S %p')} ET)")
         self.logger.info(f"   Entry Path: {entry_reason}")
         self.logger.info(f"   Shares: {shares} | Risk: ${risk:.2f} | Room: {room_pct:.2f}%")
-        self.logger.info(f"   Stop: ${resistance:.2f} | Target1: ${stock_data['target1']:.2f}")
+        self.logger.info(f"   Stop: ${stop_price:.2f} (pivot: ${resistance:.2f}) | Target1: ${stock_data['target1']:.2f}")
 
         # Place stop order
         self.place_stop_order(position)
@@ -708,6 +817,15 @@ class PS60Trader:
 
         # Calculate position size
         shares = self.calculate_position_size(support, current_price)
+
+        # CRITICAL FIX (Oct 10, 2025): Check margin before placing order
+        # Prevents IBKR Error 201 rejections that occurred on 3 trades today
+        margin_ok, margin_msg = self.check_margin_available(symbol, shares, current_price)
+        if not margin_ok:
+            self.logger.warning(f"\n❌ {symbol} SHORT REJECTED - {margin_msg}")
+            return None
+
+        self.logger.debug(f"  ✓ Margin check passed: {margin_msg}")
 
         # Create market order
         order = MarketOrder('SELL', shares)
@@ -733,13 +851,34 @@ class PS60Trader:
             self.logger.error(f"⚠️  Error checking fill for {symbol}: {e}")
             fill_price = current_price  # Use current price as fallback
 
+        # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
+        # Prevents getting stopped out by normal price noise
+        MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
+        PULLBACK_MIN_STOP_PCT = 0.003  # 0.3% for pullback/retest
+        REJECTION_MIN_STOP_PCT = 0.004 # 0.4% for rejection setups
+
+        # Determine minimum stop distance based on entry reason
+        base_stop = support  # Default to pivot
+        if 'MOMENTUM' in entry_reason.upper():
+            min_stop_pct = MOMENTUM_MIN_STOP_PCT
+        elif 'REJECTION' in entry_reason.upper():
+            min_stop_pct = REJECTION_MIN_STOP_PCT
+        else:  # PULLBACK or other
+            min_stop_pct = PULLBACK_MIN_STOP_PCT
+
+        # Calculate minimum stop price (ABOVE entry for shorts)
+        min_stop_price = fill_price * (1 + min_stop_pct)
+
+        # Use the HIGHER of base_stop or min_stop (provides more protection for shorts)
+        stop_price = max(base_stop, min_stop_price)
+
         # Create position using position manager
         position = self.pm.create_position(
             symbol=symbol,
             side='SHORT',
             entry_price=fill_price,
             shares=shares,
-            pivot=support,
+            pivot=stop_price,  # Use widened stop instead of raw pivot
             contract=contract,
             target1=stock_data.get('downside1', support * 0.98),
             target2=stock_data.get('downside2', support * 0.96)
@@ -749,14 +888,14 @@ class PS60Trader:
         self.positions[symbol] = position
 
         # Calculate risk and room to target
-        risk = support - fill_price
+        risk = stop_price - fill_price  # Use widened stop for risk calc
         room_to_target = fill_price - stock_data.get('downside1', support * 0.98)
         room_pct = (room_to_target / fill_price) * 100
 
         self.logger.info(f"\n🔴 SHORT {symbol} @ ${fill_price:.2f} ({now_et.strftime('%I:%M:%S %p')} ET)")
         self.logger.info(f"   Entry Path: {entry_reason}")
         self.logger.info(f"   Shares: {shares} | Risk: ${risk:.2f} | Room: {room_pct:.2f}%")
-        self.logger.info(f"   Stop: ${support:.2f} | Target1: ${stock_data.get('downside1', support * 0.98):.2f}")
+        self.logger.info(f"   Stop: ${stop_price:.2f} (pivot: ${support:.2f}) | Target1: ${stock_data.get('downside1', support * 0.98):.2f}")
 
         # Place stop order
         self.place_stop_order(position)
@@ -766,7 +905,9 @@ class PS60Trader:
     def place_stop_order(self, position):
         """Place stop loss order with error handling"""
         symbol = position['symbol']
-        stop_price = position['stop']
+        # FIX (Oct 10, 2025): Round stop price to minimum tick size ($0.01 for stocks)
+        # Prevents IBKR Warning 110: "price does not conform to minimum price variation"
+        stop_price = round(position['stop'], 2)
         shares = int(position['shares'] * position['remaining'])
 
         if position['side'] == 'LONG':
@@ -798,15 +939,54 @@ class PS60Trader:
 
         LOGS DETAILED POSITION STATE for analysis
         """
+        if not self.positions:
+            return  # No positions to manage
+
+        # Log that we're managing positions (INFO level for visibility)
+        self.logger.debug(f"🔄 Managing {len(self.positions)} position(s)...")
+
+        # FIX (Oct 10, 2025): Query IBKR portfolio once for all position validations
+        # This prevents checking portfolio separately for each position (more efficient)
+        try:
+            portfolio = self.ib.portfolio()
+            ibkr_symbols = {p.contract.symbol for p in portfolio}
+        except Exception as e:
+            self.logger.warning(f"  Could not query IBKR portfolio: {e}")
+            ibkr_symbols = set()  # Empty set - won't trigger broker close detection
+
         for symbol in list(self.positions.keys()):
             position = self.positions[symbol]
+            self.logger.debug(f"  Checking {symbol} {position['side']}...")
+
+            # CRITICAL FIX (Oct 10, 2025): Detect broker-initiated closes
+            # If position exists in our tracking but NOT in IBKR portfolio,
+            # broker closed it (stop fill, margin call, liquidation, etc.)
+            if ibkr_symbols and symbol not in ibkr_symbols:
+                self.logger.warning(f"  ⚠️  {symbol}: NOT in IBKR portfolio - closed by broker")
+                self.logger.warning(f"     Removing from tracking (already closed externally)")
+                # Get current price for approximate P&L calculation
+                stock_data = next((s for s in self.watchlist if s['symbol'] == symbol), None)
+                current_price = float(stock_data['ticker'].last) if stock_data and stock_data['ticker'].last else position['entry_price']
+                # Record trade with approximate exit price
+                trade_record = self.pm.close_position(
+                    symbol,
+                    current_price,
+                    'BROKER_CLOSE'
+                )
+                continue
 
             # Get current price
             stock_data = next((s for s in self.watchlist if s['symbol'] == symbol), None)
-            if not stock_data or not stock_data['ticker'].last:
+            if not stock_data:
+                self.logger.warning(f"  ⚠️  {symbol}: No stock data in watchlist - skipping")
+                continue
+
+            if not stock_data['ticker'].last:
+                self.logger.debug(f"  {symbol}: No price data yet - skipping")
                 continue
 
             current_price = float(stock_data['ticker'].last)
+            self.logger.debug(f"  {symbol}: Current price ${current_price:.2f}")
 
             # Get current time in Eastern
             eastern = pytz.timezone('US/Eastern')
@@ -822,40 +1002,122 @@ class PS60Trader:
 
             time_in_trade = (current_time - position['entry_time']).total_seconds() / 60
 
-            # Log position state every minute (for learning)
-            if int(time_in_trade) % 1 == 0 and time_in_trade > 0:
-                self.logger.debug(f"  [{symbol}] {position['side']} @ ${position['entry_price']:.2f} | "
+            # Log position state every 30 seconds at INFO level (changed from DEBUG every minute)
+            # This gives us visibility without flooding logs
+            if int(time_in_trade * 2) % 30 == 0:  # Every 30 seconds
+                self.logger.info(f"  [{symbol}] {position['side']} @ ${position['entry_price']:.2f} | "
                                 f"Current: ${current_price:.2f} ({gain_pct:+.2f}%) | "
                                 f"Time: {int(time_in_trade)}m | "
                                 f"Remaining: {int(position['remaining']*100)}% | "
                                 f"P&L: ${unrealized_pnl:+.2f}")
 
-            # TODO: Implement 8-minute rule in PS60Strategy
-            # Check 8-minute rule (checks if stuck at pivot)
-            # TEMPORARILY DISABLED - method not implemented in strategy module
-            # should_exit, reason = self.strategy.check_five_minute_rule(
-            #     position, current_price, current_time
-            # )
-            # if should_exit:
-            #     self.logger.info(f"\n⏱️  8-MINUTE RULE: {symbol} ({reason})")
-            #     self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
-            #     self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
-            #     self.logger.info(f"   Reason: No progress, exiting to prevent larger loss")
-            #     self.close_position(position, current_price, reason)
-            #     continue
+            # Check 15-minute rule (PS60 methodology - exit stuck positions)
+            self.logger.debug(f"  {symbol}: Checking 15-minute rule (time in trade: {int(time_in_trade)}m)...")
+            should_exit, reason = self.strategy.check_fifteen_minute_rule(
+                position, current_price, current_time
+            )
+            self.logger.debug(f"  {symbol}: 15-min rule result: {should_exit}, reason: {reason}")
+            if should_exit:
+                self.logger.info(f"\n⏱️  15-MINUTE RULE: {symbol}")
+                self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
+                self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
+                self.logger.info(f"   Reason: {reason}")
+                self.close_position(position, current_price, '15MIN_RULE')
+                continue
 
             # Check for partial profit
+            self.logger.debug(f"  {symbol}: Checking for partial profit...")
             should_partial, pct, reason = self.strategy.should_take_partial(
                 position, current_price
             )
+            self.logger.debug(f"  {symbol}: Partial check result: {should_partial}, pct: {pct}, reason: {reason}")
             if should_partial:
+                self.logger.info(f"  💰 {symbol}: Taking {int(pct*100)}% partial - {reason}")
                 self.take_partial(position, current_price, pct, reason)
 
                 # Move stop to breakeven after partial (if configured)
                 if self.strategy.should_move_stop_to_breakeven(position):
                     old_stop = position['stop']
                     position['stop'] = position['entry_price']
-                    self.logger.info(f"  🛡️  {symbol}: Stop moved ${old_stop:.2f} → ${position['stop']:.2f} (breakeven)")
+
+                    # CRITICAL: Cancel old stop order and place new one with updated quantity
+                    stop_canceled = False
+                    if 'stop_order' in position and position['stop_order']:
+                        try:
+                            old_order = position['stop_order']
+                            self.ib.cancelOrder(old_order.order)
+                            # Wait for cancellation confirmation
+                            self.ib.sleep(0.5)
+                            self.logger.info(f"  ✓ Cancelled old stop order for {symbol} (Order ID: {old_order.order.orderId})")
+                            stop_canceled = True
+                        except Exception as e:
+                            self.logger.error(f"  ✗ CRITICAL: Could not cancel old stop order for {symbol}: {e}")
+                            self.logger.error(f"    Old stop may still be active - MANUAL CHECK REQUIRED")
+                    else:
+                        self.logger.warning(f"  ⚠️  No stop order found in position for {symbol} - cannot cancel")
+
+                    # Place new stop order with correct remaining shares
+                    if stop_canceled or not ('stop_order' in position and position['stop_order']):
+                        success = self.place_stop_order(position)
+                        if success:
+                            self.logger.info(f"  🛡️  {symbol}: Stop moved ${old_stop:.2f} → ${position['stop']:.2f} (breakeven)")
+                        else:
+                            self.logger.error(f"  ✗ CRITICAL: Failed to place new stop order for {symbol} at breakeven")
+                    else:
+                        self.logger.error(f"  ✗ CRITICAL: Skipping new stop placement - old stop not canceled for {symbol}")
+
+            # Update trailing stop for runners (CRITICAL FEATURE #3 - Oct 9, 2025)
+            self.logger.debug(f"  {symbol}: Checking trailing stop update...")
+            stop_updated, new_stop, trail_reason = self.strategy.update_trailing_stop(
+                position, current_price
+            )
+            self.logger.debug(f"  {symbol}: Trailing stop update result: {stop_updated}")
+            if stop_updated:
+                old_stop = position['stop']
+                position['stop'] = new_stop
+                self.logger.info(f"   ⬆️  {symbol}: {trail_reason}")
+
+                # Update stop order with IBKR
+                stop_canceled = False
+                if 'stop_order' in position and position['stop_order']:
+                    try:
+                        old_order = position['stop_order']
+                        self.ib.cancelOrder(old_order.order)
+                        self.ib.sleep(0.5)
+                        self.logger.debug(f"  ✓ Cancelled old stop order for {symbol} (trailing)")
+                        stop_canceled = True
+                    except Exception as e:
+                        self.logger.error(f"  ✗ Could not cancel old stop order for {symbol}: {e}")
+
+                # Place new stop order with trailing stop price
+                if stop_canceled or not ('stop_order' in position and position['stop_order']):
+                    success = self.place_stop_order(position)
+                    if success:
+                        self.logger.info(f"  🛡️  {symbol}: Trailing stop updated ${old_stop:.2f} → ${new_stop:.2f}")
+                    else:
+                        self.logger.error(f"  ✗ Failed to place new trailing stop order for {symbol}")
+
+            # Check trailing stop hit (CRITICAL FEATURE #3 - Oct 9, 2025)
+            self.logger.debug(f"  {symbol}: Checking if trailing stop hit...")
+            trail_hit, trail_reason = self.strategy.check_trailing_stop_hit(
+                position, current_price
+            )
+            self.logger.debug(f"  {symbol}: Trailing stop hit result: {trail_hit}")
+            if trail_hit:
+                self.logger.info(f"   🎯 {symbol}: {trail_reason} - closing runner")
+                trade = self.close_position(position, current_price, trail_reason)
+                continue
+
+            # CRITICAL: Check if stop order was filled by IBKR (Oct 10, 2025)
+            # This was missing - stops would fill but position wouldn't be removed
+            if 'stop_order' in position and position['stop_order']:
+                stop_order = position['stop_order']
+                if stop_order.orderStatus.status == 'Filled':
+                    self.logger.info(f"   🛑 {symbol}: Stop order FILLED by IBKR @ ${stop_order.orderStatus.avgFillPrice:.2f}")
+                    self.logger.info(f"      Position was stopped out - removing from tracker")
+                    # Close position in our tracking (already closed by IBKR)
+                    trade = self.close_position(position, stop_order.orderStatus.avgFillPrice, 'STOP_HIT')
+                    continue
 
     def get_smart_contract(self, contract):
         """
@@ -890,6 +1152,17 @@ class PS60Trader:
 
         self.logger.info(f"  💰 PARTIAL {int(pct*100)}% {symbol} @ ${price:.2f} "
                         f"(+${partial_record['gain']:.2f}, {reason})")
+
+        # FIX (Oct 10, 2025): Remove position if fully closed via partials
+        # Before this fix, positions with remaining=0.0 stayed in tracking indefinitely
+        if position['remaining'] <= 0:
+            self.logger.info(f"  ✓ {symbol}: Position fully closed via partials (remaining={position['remaining']})")
+            # Record final trade closure
+            trade_record = self.pm.close_position(symbol, price, 'FULL_PARTIALS')
+            # Remove from local tracking
+            if symbol in self.positions:
+                del self.positions[symbol]
+            self.logger.info(f"  ✓ {symbol}: Removed from position tracking")
 
     def close_position(self, position, price, reason):
         """Close entire position and return trade object with error handling"""
@@ -975,6 +1248,83 @@ class PS60Trader:
                         f"not filled (status: {trade.orderStatus.status})"
                     )
 
+    def reconcile_portfolio(self):
+        """
+        Check for orphaned positions in IBKR that aren't being tracked.
+
+        Orphaned positions occur when:
+        - Stop orders get filled but position tracking fails
+        - Manual trades are placed
+        - Trader restarts and recovery fails
+
+        These positions are CLOSED IMMEDIATELY to prevent unmanaged risk.
+        """
+        try:
+            # Get all non-zero positions from IBKR
+            ibkr_portfolio = {
+                item.contract.symbol: item
+                for item in self.ib.portfolio()
+                if item.position != 0
+            }
+
+            # Find positions in IBKR but not in our tracking
+            orphaned = []
+            for symbol, portfolio_item in ibkr_portfolio.items():
+                if symbol not in self.positions:
+                    orphaned.append((symbol, portfolio_item))
+
+            if not orphaned:
+                return  # All good
+
+            # Log and close orphaned positions
+            self.logger.warning("")
+            self.logger.warning("="*80)
+            self.logger.warning("⚠️  ORPHANED POSITIONS DETECTED")
+            self.logger.warning("="*80)
+
+            for symbol, portfolio_item in orphaned:
+                position = portfolio_item.position
+                avg_cost = portfolio_item.averageCost
+                market_price = portfolio_item.marketPrice
+                unrealized_pnl = portfolio_item.unrealizedPNL
+
+                side = "LONG" if position > 0 else "SHORT"
+                shares = abs(position)
+
+                self.logger.warning(f"")
+                self.logger.warning(f"📍 {symbol}: {side} {shares} shares @ ${avg_cost:.2f}")
+                self.logger.warning(f"   Current Price: ${market_price:.2f}")
+                self.logger.warning(f"   Unrealized P&L: ${unrealized_pnl:+.2f}")
+                self.logger.warning(f"   ⚠️  This position is NOT being managed by current session")
+                self.logger.warning(f"   🛑 CLOSING IMMEDIATELY to prevent unmanaged risk")
+
+                # Close the orphaned position
+                try:
+                    contract = self.get_smart_contract(portfolio_item.contract)
+                    action = 'SELL' if position > 0 else 'BUY'
+                    order = MarketOrder(action, shares)
+
+                    trade = self.resilience.safe_place_order(
+                        contract, order, f"{symbol} ORPHAN_CLOSE"
+                    )
+
+                    if trade:
+                        self.logger.warning(f"   ✓ Orphan close order placed: {action} {shares} {symbol}")
+                    else:
+                        self.logger.error(f"   ✗ Failed to close orphaned {symbol} position")
+                        self.logger.error(f"   ⚠️  MANUAL INTERVENTION REQUIRED")
+
+                except Exception as e:
+                    self.logger.error(f"   ✗ Error closing orphaned {symbol}: {e}")
+                    self.logger.error(f"   ⚠️  MANUAL INTERVENTION REQUIRED")
+
+            self.logger.warning("="*80)
+            self.logger.warning("")
+
+        except Exception as e:
+            self.logger.error(f"Error during portfolio reconciliation: {e}")
+            self.logger.exception("Full traceback:")
+
     def run(self):
         """Main trading loop with FULL FILTER SYSTEM"""
         # Get current time in Eastern
@@ -1004,12 +1354,31 @@ class PS60Trader:
         self.state_manager.recover_full_state()
 
         # Wait for market open if before 9:30 AM ET
-        market_open = dt_time(9, 30)
-        while now_et.time() < market_open:
-            wait_seconds = (datetime.combine(now_et.date(), market_open) - now_et).total_seconds()
-            self.logger.info(f"Waiting for market open... ({int(wait_seconds/60)} minutes)")
-            time_module.sleep(min(60, wait_seconds))
-            now_et = datetime.now(pytz.UTC).astimezone(eastern)
+        market_open_time = dt_time(9, 30)
+        while now_et.time() < market_open_time:
+            try:
+                # Create timezone-aware market open time
+                market_open_dt = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+                wait_seconds = (market_open_dt - now_et).total_seconds()
+                self.logger.info(f"Waiting for market open... ({int(wait_seconds/60)} minutes)")
+
+                # Check IBKR connection health every 5 minutes
+                if int(wait_seconds/60) % 5 == 0:
+                    if not self.ib.isConnected():
+                        self.logger.error("IBKR connection lost during wait! Attempting reconnect...")
+                        if not self.connect():
+                            self.logger.error("Reconnection failed. Exiting.")
+                            return
+                        self.logger.info("✓ Reconnected to IBKR")
+                    else:
+                        self.logger.info(f"✓ IBKR connection healthy (waiting for market open)")
+
+                time_module.sleep(min(60, wait_seconds))
+                now_et = datetime.now(pytz.UTC).astimezone(eastern)
+            except Exception as e:
+                self.logger.error(f"Error during market open wait: {e}")
+                self.logger.exception("Full traceback:")
+                return
 
         # Check gap filter at market open (CRITICAL - Oct 5, 2025)
         self.check_gap_filter_at_open()
@@ -1067,6 +1436,10 @@ class PS60Trader:
                         self.logger.error("    Please restart the trader")
                         break
 
+                # CRITICAL: Check for orphaned positions every 60 seconds
+                if self.analytics['price_updates'] % 60 == 0:  # Every 60 seconds
+                    self.reconcile_portfolio()
+
                 # Log market activity every 5 minutes
                 if self.analytics['price_updates'] % 300 == 0:  # Every 5 minutes (at 1 update/sec)
                     eastern = pytz.timezone('US/Eastern')
@@ -1076,11 +1449,15 @@ class PS60Trader:
                     self.logger.info(f"   Monitoring: {len(self.watchlist)} symbols")
                     if self.positions:
                         for symbol, pos in self.positions.items():
-                            if pos['side'] == 'LONG':
-                                gain = ((current_price - pos['entry_price']) / pos['entry_price']) * 100
-                            else:
-                                gain = ((pos['entry_price'] - current_price) / pos['entry_price']) * 100
-                            self.logger.info(f"   {symbol}: {pos['side']} @ ${pos['entry_price']:.2f} ({gain:+.2f}%)")
+                            # Get current price from position's stock data
+                            stock_data = pos.get('stock_data')
+                            if stock_data and stock_data['ticker'].last:
+                                current_price = float(stock_data['ticker'].last)
+                                if pos['side'] == 'LONG':
+                                    gain = ((current_price - pos['entry_price']) / pos['entry_price']) * 100
+                                else:
+                                    gain = ((pos['entry_price'] - current_price) / pos['entry_price']) * 100
+                                self.logger.info(f"   {symbol}: {pos['side']} @ ${pos['entry_price']:.2f} -> ${current_price:.2f} ({gain:+.2f}%)")
 
                 # CRITICAL: Update bar buffers with tick data BEFORE checking pivots
                 # This converts tick-by-tick data into 5-second bars for strategy module
@@ -1120,6 +1497,12 @@ class PS60Trader:
                             self.enter_short(stock_data, current_price, entry_reason)
 
                 # Manage existing positions
+                if self.positions:
+                    # Only log if we have positions (avoid spam)
+                    if self.analytics['price_updates'] % 10 == 0:  # Every 10 seconds
+                        eastern = pytz.timezone('US/Eastern')
+                        now_et = datetime.now(pytz.UTC).astimezone(eastern)
+                        self.logger.debug(f"[{now_et.strftime('%I:%M:%S %p')}] Calling manage_positions() for {len(self.positions)} position(s)")
                 self.manage_positions()
 
                 # Small delay

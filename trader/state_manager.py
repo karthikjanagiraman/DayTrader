@@ -278,6 +278,15 @@ class StateManager:
             if isinstance(entry_time, datetime):
                 entry_time = entry_time.isoformat()
 
+            # FIX (Oct 10, 2025): Use correct field names 'stop' and 'stop_order'
+            # Previous code used 'stop_price' and 'stop_order_id' which don't exist
+            stop_order_id = None
+            if 'stop_order' in pos and pos['stop_order']:
+                try:
+                    stop_order_id = pos['stop_order'].order.orderId
+                except (AttributeError, KeyError):
+                    pass  # stop_order doesn't have orderId
+
             positions[symbol] = {
                 'symbol': symbol,
                 'side': pos['side'],
@@ -288,9 +297,9 @@ class StateManager:
                 'pivot': pos['pivot'],
                 'target1': pos['target1'],
                 'target2': pos['target2'],
-                'stop_price': pos.get('stop_price'),
-                'stop_order_id': pos.get('stop_order_id'),
-                'partials_taken': pos.get('partials_taken', [])
+                'stop_price': pos.get('stop'),  # Correct field: 'stop' not 'stop_price'
+                'stop_order_id': stop_order_id,
+                'partials_taken': [p for p in pos.get('partials', [])]  # Full partial history
             }
 
         return positions
