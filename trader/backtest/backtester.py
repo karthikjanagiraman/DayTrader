@@ -13,6 +13,7 @@ import argparse
 from pathlib import Path
 import yaml
 import pytz
+import logging
 
 # Import shared strategy module
 sys.path.append(str(Path(__file__).parent.parent))
@@ -59,7 +60,9 @@ class PS60Backtester:
             self.config = yaml.safe_load(f)
 
         # Initialize strategy and position manager
-        self.strategy = PS60Strategy(self.config)
+        # Note: IB connection will be established later in run() method
+        # Strategy will use it for momentum indicators when available
+        self.strategy = PS60Strategy(self.config, ib_connection=self.ib)
         self.pm = PositionManager()
 
         # Track trades for backtest results
@@ -67,6 +70,10 @@ class PS60Backtester:
 
         # In-memory cache for bars (avoids re-reading from disk)
         self.bars_cache = {}
+
+        # Cache for hourly momentum bars (Oct 7, 2025) - Performance optimization
+        # Hourly bars don't change during backtest day, so fetch once and reuse
+        self.hourly_bars_cache = {}
 
         # Direction filters (for testing scanner quality)
         self.enable_shorts = self.config['trading'].get('enable_shorts', True)
@@ -80,11 +87,18 @@ class PS60Backtester:
         # Commission costs (per requirements)
         self.commission_per_share = self.strategy.commission_per_share if self.strategy.commission_enabled else 0.0
 
+        # Setup logging
+        self._setup_logging()
+
         # Load scanner results
         print(f"\n{'='*80}")
         print(f"PS60 BACKTEST - {self.test_date}")
         print(f"{'='*80}")
         print(f"Scanner file: {scanner_file}")
+        self.logger.info(f"{'='*80}")
+        self.logger.info(f"PS60 BACKTEST - {self.test_date}")
+        self.logger.info(f"{'='*80}")
+        self.logger.info(f"Scanner file: {scanner_file}")
 
         # Check if it's enhanced scoring CSV or regular JSON
         if scanner_file.endswith('.csv'):
@@ -127,6 +141,43 @@ class PS60Backtester:
 
         return results
 
+    def _setup_logging(self):
+        """Setup logging to file and console with DEBUG level"""
+        # Create logs directory
+        logs_dir = Path(__file__).parent / 'logs'
+        logs_dir.mkdir(exist_ok=True)
+
+        # Create log filename with date
+        date_str = self.test_date.strftime('%Y%m%d')
+        timestamp = datetime.now().strftime('%H%M%S')
+        log_file = logs_dir / f'backtest_{date_str}_{timestamp}.log'
+
+        # Setup logger
+        self.logger = logging.getLogger('PS60Backtester')
+        self.logger.setLevel(logging.DEBUG)
+
+        # Remove existing handlers
+        self.logger.handlers.clear()
+
+        # File handler (DEBUG level)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+
+        # Console handler (INFO level to avoid cluttering console)
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_formatter = logging.Formatter('%(levelname)s - %(message)s')
+        console_handler.setFormatter(console_formatter)
+        self.logger.addHandler(console_handler)
+
+        self.logger.info(f"Logging initialized: {log_file}")
+
     def connect(self):
         """Connect to IBKR"""
         try:
@@ -145,6 +196,39 @@ class PS60Backtester:
 
         # Clear in-memory cache to free memory
         self.bars_cache.clear()
+        self.hourly_bars_cache.clear()
+
+    def prefetch_hourly_bars(self, watchlist):
+        """
+        Pre-fetch 1-hour bars for all watchlist stocks (Oct 7, 2025)
+
+        Performance optimization: Hourly bars are static during backtest,
+        so fetch once and cache for reuse in momentum indicator checks.
+
+        Args:
+            watchlist: List of stock dictionaries from scanner
+        """
+        from strategy.momentum_indicators import fetch_1hour_bars
+        from ib_insync import Stock
+
+        print("\n📊 Pre-fetching hourly bars for momentum indicators...")
+
+        for stock in watchlist:
+            symbol = stock['symbol']
+            try:
+                contract = Stock(symbol, 'SMART', 'USD')
+                bars = fetch_1hour_bars(self.ib, contract, lookback_bars=50)
+
+                if bars and len(bars) >= 26:  # Minimum for MACD (26 + 9 = 35)
+                    self.hourly_bars_cache[symbol] = bars
+                    print(f"  ✓ {symbol}: {len(bars)} hourly bars cached")
+                else:
+                    print(f"  ⚠️  {symbol}: Insufficient hourly data ({len(bars) if bars else 0} bars)")
+
+            except Exception as e:
+                print(f"  ✗ {symbol}: Error fetching hourly bars - {e}")
+
+        print(f"✓ Cached hourly bars for {len(self.hourly_bars_cache)}/{len(watchlist)} stocks\n")
 
     def run(self):
         """Run backtest"""
@@ -153,6 +237,7 @@ class PS60Backtester:
 
         try:
             self.backtest_day()
+            self.save_trades_to_json()  # Save trades to JSON file
             self.print_results()
         finally:
             self.disconnect()
@@ -176,6 +261,10 @@ class PS60Backtester:
         print(f"WATCHLIST: {len(watchlist)} tradeable setups (using strategy filters)")
         print(f"{'='*80}")
 
+        # Pre-fetch hourly bars for all stocks ONCE (performance optimization)
+        if watchlist:
+            self.prefetch_hourly_bars(watchlist)
+
         # Print tier breakdown if using enhanced scoring
         if self.using_enhanced_scoring and watchlist:
             from collections import Counter
@@ -198,21 +287,22 @@ class PS60Backtester:
         )
 
         # Print gap analysis
-        if gap_report:
+        if gap_report and any(gap_report.values()):
             print(f"\n{'='*80}")
             print(f"GAP ANALYSIS AT MARKET OPEN (9:30 AM)")
             print(f"{'='*80}")
-            for gap in gap_report:
-                symbol = gap['symbol']
-                action = gap['action']
-                reason = gap['reason']
 
-                if action == 'SKIPPED':
-                    print(f"❌ {symbol}: {reason}")
-                elif action == 'ADJUSTED':
-                    print(f"⚠️  {symbol}: {reason}")
-                elif action == 'NOTED':
-                    print(f"📊 {symbol}: {reason}")
+            # Process skipped stocks
+            for item in gap_report.get('skipped', []):
+                print(f"❌ {item['symbol']}: {item['reason']}")
+
+            # Process adjusted stocks
+            for item in gap_report.get('adjusted', []):
+                print(f"⚠️  {item['symbol']}: {item['reason']}")
+
+            # Process noted stocks
+            for item in gap_report.get('noted', []):
+                print(f"📊 {item['symbol']}: {item['reason']}")
 
         # Final watchlist after gap filtering
         if len(gap_filtered_watchlist) < len(watchlist):
@@ -298,14 +388,24 @@ class PS60Backtester:
         resistance = stock['resistance']
         support = stock['support']
 
+        # STATE MACHINE (Oct 9, 2025): Reset state for this symbol at start of day
+        self.strategy.state_tracker.reset_state(symbol)
+
+        self.logger.debug(f"\n{'='*80}")
+        self.logger.debug(f"Starting backtest for {symbol}")
+        self.logger.debug(f"Resistance: ${resistance:.2f}, Support: ${support:.2f}")
+        self.logger.debug(f"{'='*80}")
+
         # Get 1-minute historical bars from IBKR
         bars = self.get_bars(symbol)
 
         if not bars:
             print(f"  ⚠️  No historical data available")
+            self.logger.warning(f"{symbol}: No historical data available")
             return
 
         print(f"  ✓ Fetched {len(bars)} 5-second bars")
+        self.logger.info(f"{symbol}: Fetched {len(bars)} 5-second bars")
 
         # Gap detection is now handled by strategy.should_enter_long/short() which calls _check_gap_filter()
         # This ensures consistent gap handling between backtesting and live trading
@@ -351,22 +451,47 @@ class PS60Backtester:
                     # Use strategy module's should_enter_long (checks pivot, attempts, gap filter, etc.)
                     should_enter, reason = self.strategy.should_enter_long(stock, price, long_attempts)
 
+                    self.logger.debug(f"{symbol} Bar {bar_count} - LONG check: price=${price:.2f} vs resistance=${resistance:.2f}, should_enter={should_enter}, reason='{reason}'")
+
                     if should_enter:
                         # HYBRID Entry Strategy (Oct 4, 2025)
                         # Momentum breakout OR pullback/retest based on volume + candle strength
+                        # Performance optimization: Pass cached hourly bars for RSI/MACD
+                        cached_bars = self.hourly_bars_cache.get(stock['symbol'])
+
+                        # PHASE 7 (Oct 13, 2025): Dynamic target selection - use highest available target
+                        # Allows delayed momentum entries even after price passes target1
+                        highest_target = stock.get('target3') or stock.get('target2') or stock.get('target1')
+
                         confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
                             bars, bar_count - 1, resistance, side='LONG',
-                            target_price=stock.get('target1')  # For room-to-run filter
+                            target_price=highest_target,  # Use highest available target
+                            symbol=stock['symbol'],  # For RSI/MACD momentum check
+                            cached_hourly_bars=cached_bars  # Pre-fetched hourly bars
                         )
 
-                        if confirmed:
-                            # Use ATR-based stop if enabled, otherwise pivot stop
-                            if self.strategy.use_atr_stops:
-                                atr = self.strategy._calculate_atr(bars, bar_count - 1)
-                                stop_price = price - (atr * self.strategy.atr_stop_multiplier)
-                            else:
-                                stop_price = resistance
+                        self.logger.debug(f"{symbol} Bar {bar_count} - LONG confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
 
+                        if confirmed:
+                            # PHASE 5 (Oct 12, 2025): Use adjusted stop if available (PULLBACK_RETEST entries)
+                            # Otherwise use scanner resistance (MOMENTUM/SUSTAINED_BREAK entries)
+                            adjusted_stop = entry_state.get('adjusted_stop')
+                            pivot_for_stop = adjusted_stop if adjusted_stop is not None else resistance
+
+                            # Use ATR-based stop calculation from strategy
+                            # Create temporary position dict for stop calculation
+                            temp_position = {
+                                'entry_price': price,
+                                'side': 'LONG',
+                                'partials': 0,
+                                'pivot': pivot_for_stop  # PHASE 5: May be adjusted for pullback retests
+                            }
+                            stop_price = self.strategy.calculate_stop_price(temp_position, price, stock)
+
+                            if adjusted_stop is not None:
+                                self.logger.info(f"{symbol} Bar {bar_count} - ENTERING LONG @ ${price:.2f}, stop=${stop_price:.2f} (adjusted from pullback low ${adjusted_stop:.2f}), attempts={long_attempts}/{max_attempts}")
+                            else:
+                                self.logger.info(f"{symbol} Bar {bar_count} - ENTERING LONG @ ${price:.2f}, stop=${stop_price:.2f} (ATR: {stock.get('atr%', 0):.1f}%), attempts={long_attempts}/{max_attempts}")
                             position = self.enter_long(stock, price, timestamp, bar_count, setup_type='BREAKOUT', stop_override=stop_price)
                             long_attempts += 1
 
@@ -376,22 +501,47 @@ class PS60Backtester:
                     # Use strategy module's should_enter_short (checks pivot, attempts, gap filter, etc.)
                     should_enter, reason = self.strategy.should_enter_short(stock, price, short_attempts)
 
+                    self.logger.debug(f"{symbol} Bar {bar_count} - SHORT check: price=${price:.2f} vs support=${support:.2f}, should_enter={should_enter}, reason='{reason}'")
+
                     if should_enter:
                         # HYBRID Entry Strategy (Oct 4, 2025)
                         # Momentum breakout OR pullback/retest based on volume + candle strength
+                        # Performance optimization: Pass cached hourly bars for RSI/MACD
+                        cached_bars = self.hourly_bars_cache.get(stock['symbol'])
+
+                        # PHASE 7 (Oct 13, 2025): Dynamic target selection - use lowest available downside target
+                        # Allows delayed momentum entries even after price passes downside1
+                        lowest_downside = stock.get('downside2') or stock.get('downside1')
+
                         confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
                             bars, bar_count - 1, support, side='SHORT',
-                            target_price=stock.get('downside1')  # For room-to-run filter
+                            target_price=lowest_downside,  # Use lowest available downside target
+                            symbol=stock['symbol'],  # For RSI/MACD momentum check
+                            cached_hourly_bars=cached_bars  # Pre-fetched hourly bars
                         )
 
-                        if confirmed:
-                            # Use ATR-based stop if enabled, otherwise pivot stop
-                            if self.strategy.use_atr_stops:
-                                atr = self.strategy._calculate_atr(bars, bar_count - 1)
-                                stop_price = price + (atr * self.strategy.atr_stop_multiplier)
-                            else:
-                                stop_price = support
+                        self.logger.debug(f"{symbol} Bar {bar_count} - SHORT confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
 
+                        if confirmed:
+                            # PHASE 5 (Oct 12, 2025): Use adjusted stop if available (PULLBACK_RETEST entries)
+                            # Otherwise use scanner support (MOMENTUM/SUSTAINED_BREAK entries)
+                            adjusted_stop = entry_state.get('adjusted_stop')
+                            pivot_for_stop = adjusted_stop if adjusted_stop is not None else support
+
+                            # Use ATR-based stop calculation from strategy
+                            # Create temporary position dict for stop calculation
+                            temp_position = {
+                                'entry_price': price,
+                                'side': 'SHORT',
+                                'partials': 0,
+                                'pivot': pivot_for_stop  # PHASE 5: May be adjusted for pullback retests
+                            }
+                            stop_price = self.strategy.calculate_stop_price(temp_position, price, stock)
+
+                            if adjusted_stop is not None:
+                                self.logger.info(f"{symbol} Bar {bar_count} - ENTERING SHORT @ ${price:.2f}, stop=${stop_price:.2f} (adjusted from pullback high ${adjusted_stop:.2f}), attempts={short_attempts}/{max_attempts}")
+                            else:
+                                self.logger.info(f"{symbol} Bar {bar_count} - ENTERING SHORT @ ${price:.2f}, stop=${stop_price:.2f} (ATR: {stock.get('atr%', 0):.1f}%), attempts={short_attempts}/{max_attempts}")
                             position = self.enter_short(stock, price, timestamp, bar_count,
                                                       setup_type='BREAKOUT', stop_override=stop_price)
                             short_attempts += 1
@@ -421,7 +571,7 @@ class PS60Backtester:
             # Exit logic - manage open position
             elif position is not None:
                 position, closed_trade = self.manage_position(
-                    position, price, timestamp, bar_count
+                    position, price, timestamp, bar_count, bars
                 )
                 if closed_trade:
                     self.trades.append(closed_trade)
@@ -541,14 +691,25 @@ class PS60Backtester:
 
         # Stop placement depends on setup type
         if stop_override is not None:
-            # Use stop price from retest confirmation strategy (includes 0.3% buffer)
+            # Use explicit stop override (e.g., from ATR calculation or retest confirmation)
+            # Don't apply minimum stop logic - the override already accounts for volatility
             stop_price = stop_override
         elif setup_type == 'BOUNCE':
             # For bounce: stop below support
-            stop_price = stock['support'] * 0.995  # Just below support
+            base_stop = stock['support'] * 0.995  # Just below support
+            # Apply minimum stop logic for non-override cases
+            BOUNCE_MIN_STOP_PCT = 0.004
+            min_stop_price = entry_price * (1 - BOUNCE_MIN_STOP_PCT)
+            stop_price = min(base_stop, min_stop_price)
         else:  # BREAKOUT
             # For breakout: stop at resistance (pivot)
-            stop_price = stock['resistance']
+            base_stop = stock['resistance']
+            # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
+            # Prevents getting stopped out by normal price noise
+            MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
+            min_stop_price = entry_price * (1 - MOMENTUM_MIN_STOP_PCT)
+            # Use the LOWER of base_stop or min_stop (provides more protection)
+            stop_price = min(base_stop, min_stop_price)
 
         shares = self.calculate_position_size(entry_price, stop_price)
 
@@ -559,6 +720,7 @@ class PS60Backtester:
             entry_price=entry_price,
             shares=shares,
             pivot=stock['resistance'],
+            stop=stop_price,  # Use calculated ATR-based stop
             target1=stock['target1'],
             target2=stock['target2'],
             entry_time=timestamp,
@@ -577,16 +739,27 @@ class PS60Backtester:
         entry_price = price * (1 - self.entry_slippage)
 
         # Stop placement depends on setup type
-        # If stop_override provided (from retest confirmation), use it
         if stop_override is not None:
-            # Use stop from retest confirmation (includes 0.3% buffer)
+            # Use explicit stop override (e.g., from ATR calculation or retest confirmation)
+            # Don't apply minimum stop logic - the override already accounts for volatility
             stop_price = stop_override
         elif setup_type == 'REJECTION':
             # For rejection: stop above resistance
-            stop_price = stock['resistance'] * 1.005  # Just above resistance
+            base_stop = stock['resistance'] * 1.005  # Just above resistance
+            # Apply minimum stop logic for non-override cases
+            REJECTION_MIN_STOP_PCT = 0.004
+            min_stop_price = entry_price * (1 + REJECTION_MIN_STOP_PCT)
+            stop_price = max(base_stop, min_stop_price)
         else:  # BREAKOUT
             # For breakout: stop at support (pivot)
-            stop_price = stock['support']
+            base_stop = stock['support']
+            # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
+            # Prevents getting stopped out by normal price noise
+            MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
+            # Calculate minimum stop price (ABOVE entry for shorts)
+            min_stop_price = entry_price * (1 + MOMENTUM_MIN_STOP_PCT)
+            # Use the HIGHER of base_stop or min_stop (provides more protection for shorts)
+            stop_price = max(base_stop, min_stop_price)
 
         shares = self.calculate_position_size(stop_price, entry_price)
 
@@ -597,6 +770,7 @@ class PS60Backtester:
             entry_price=entry_price,
             shares=shares,
             pivot=stock['support'],
+            stop=stop_price,  # Use calculated ATR-based stop
             target1=stock.get('downside1', stock['support'] * 0.98),
             target2=stock.get('downside2', stock['support'] * 0.96),
             entry_time=timestamp,
@@ -609,44 +783,42 @@ class PS60Backtester:
         print(f"     Shares: {shares} | Stop: ${stop_price:.2f}")
         return position
 
-    def manage_position(self, pos, price, timestamp, bar_num):
+    def manage_position(self, pos, price, timestamp, bar_num, bars):
         """
         Manage open position per PS60 rules using strategy module:
-        - 8-minute rule: Exit if no progress after 8 minutes
+        - 15-minute rule: Exit if no progress after 15 minutes
         - Take 50% profit on first move
         - Move stop to breakeven
         - Update trailing stop for runners
         - Exit at target or stop
         - Partial profit-taking at 1R and targets
         """
-        # 8-MINUTE RULE (CRITICAL - PS60 Core Rule)
-        # Exit if trade shows no progress after 8 minutes and no partials taken
-        time_in_trade = (timestamp - pos['entry_time']).total_seconds() / 60.0
-
-        if time_in_trade >= 8.0 and pos['remaining'] == 1.0:  # After 8 min, no partials taken
-            # Check if we have favorable movement (gain >= $0.10/share)
-            if pos['side'] == 'LONG':
-                gain_per_share = price - pos['entry_price']
-            else:  # SHORT
-                gain_per_share = pos['entry_price'] - price
-
-            if gain_per_share < 0.10:  # Less than 10 cents gain
-                # No progress - exit immediately
-                exit_price = price  # No additional slippage, market exit
-                print(f"     ⏱️  8-MIN RULE: No progress (${gain_per_share:+.2f}/share) @ ${exit_price:.2f} ({timestamp.strftime('%H:%M')})")
-                return None, self.close_position(pos, exit_price, timestamp, '8MIN_RULE', bar_num)
+        # 7-MINUTE RULE (PS60 Core Rule - configurable threshold, default 7 min)
+        # Use strategy module's check_fifteen_minute_rule method
+        should_exit, reason = self.strategy.check_fifteen_minute_rule(pos, price, timestamp)
+        self.logger.debug(f"{pos['symbol']} Bar {bar_num} - {self.strategy.fifteen_minute_threshold}-min rule check: should_exit={should_exit}, reason='{reason}'")
+        if should_exit:
+            exit_price = price  # No additional slippage, market exit
+            print(f"     ⏱️  {reason} @ ${exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+            # Use actual threshold from strategy config (7 minutes, not 15)
+            rule_name = f"{self.strategy.fifteen_minute_threshold}MIN_RULE"
+            self.logger.info(f"{pos['symbol']} Bar {bar_num} - EXIT ({rule_name}) @ ${exit_price:.2f}, P&L=${(exit_price-pos['entry_price'])*pos['shares']*(1 if pos['side']=='SHORT' else -1):.2f}")
+            return None, self.close_position(pos, exit_price, timestamp, rule_name, bar_num)
 
         # Check for partial profit using strategy module (now uses 1R-based logic)
-        should_partial, pct, reason = self.strategy.should_take_partial(pos, price)
+        # Pass bars for SMA calculation in progressive partial system
+        should_partial, pct, reason = self.strategy.should_take_partial(pos, price, bars=bars)
         if should_partial:
             # Record partial using position manager
             partial_record = self.pm.take_partial(pos['symbol'], price, pct, reason)
             print(f"     💰 PARTIAL {int(pct*100)}% @ ${price:.2f} "
                   f"(+${partial_record['gain']:.2f}, {timestamp.strftime('%H:%M')})")
+            self.logger.info(f"{pos['symbol']} Bar {bar_num} - PARTIAL {int(pct*100)}% @ ${price:.2f}, gain=${partial_record['gain']:.2f}, reason='{reason}'")
 
             # Move stop to breakeven if configured
             if self.strategy.should_move_stop_to_breakeven(pos):
                 pos['stop'] = pos['entry_price']
+                self.logger.debug(f"{pos['symbol']} Bar {bar_num} - Stop moved to breakeven @ ${pos['stop']:.2f}")
 
         # Update trailing stop for runners (per requirements)
         stop_updated, new_stop, trail_reason = self.strategy.update_trailing_stop(pos, price)
@@ -673,6 +845,7 @@ class PS60Backtester:
                 # Apply stop slippage (sell at worse price for longs)
                 stop_exit_price = price * (1 - self.stop_slippage)
                 print(f"     🛑 STOP remaining @ ${stop_exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+                self.logger.info(f"{pos['symbol']} Bar {bar_num} - EXIT (STOP) LONG @ ${stop_exit_price:.2f}, stop=${pos['stop']:.2f}, price=${price:.2f}")
                 return None, self.close_position(pos, stop_exit_price, timestamp, 'STOP', bar_num)
 
         else:  # SHORT
@@ -681,6 +854,7 @@ class PS60Backtester:
                 # Apply stop slippage (buy back at worse price for shorts)
                 stop_exit_price = price * (1 + self.stop_slippage)
                 print(f"     🛑 STOP remaining @ ${stop_exit_price:.2f} ({timestamp.strftime('%H:%M')})")
+                self.logger.info(f"{pos['symbol']} Bar {bar_num} - EXIT (STOP) SHORT @ ${stop_exit_price:.2f}, stop=${pos['stop']:.2f}, price=${price:.2f}")
                 return None, self.close_position(pos, stop_exit_price, timestamp, 'STOP', bar_num)
 
         return pos, None
@@ -743,6 +917,37 @@ class PS60Backtester:
         }
 
         return trade
+
+    def save_trades_to_json(self):
+        """Save all trades to JSON file for analysis"""
+        if not self.trades:
+            return None
+
+        # Create results directory if it doesn't exist
+        results_dir = Path(__file__).parent / 'results'
+        results_dir.mkdir(exist_ok=True)
+
+        # Generate filename with date
+        date_str = self.test_date.strftime('%Y%m%d')
+        filename = results_dir / f'backtest_trades_{date_str}.json'
+
+        # Convert trades to JSON-serializable format
+        trades_json = []
+        for trade in self.trades:
+            trade_copy = trade.copy()
+            # Convert datetime objects to ISO strings
+            if isinstance(trade_copy.get('entry_time'), datetime):
+                trade_copy['entry_time'] = trade_copy['entry_time'].isoformat()
+            if isinstance(trade_copy.get('exit_time'), datetime):
+                trade_copy['exit_time'] = trade_copy['exit_time'].isoformat()
+            trades_json.append(trade_copy)
+
+        # Save to JSON
+        with open(filename, 'w') as f:
+            json.dump(trades_json, f, indent=2)
+
+        print(f"\n💾 Saved {len(trades_json)} trades to: {filename}")
+        return filename
 
     def print_results(self):
         """Print backtest performance metrics"""

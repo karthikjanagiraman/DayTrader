@@ -98,13 +98,17 @@ All trader implementation must follow the official requirements specification. T
 - **Entry position filter** (anti-chasing - skip if >70% of 5-min range)
 - **Choppy filter** (anti-consolidation - skip if range <0.5× ATR)
 
-**Phase 2 (⏳ IN PROGRESS)**:
+**Phase 2 (✅ COMPLETE - October 13, 2025)**:
+- **Volume sustainability filter removed** (was rejecting valid breakouts)
+- **Delayed momentum detection** (re-check volume on every subsequent 1-min candle)
+- **Dynamic target selection** (always use highest available target for room-to-run filter)
+- **Continuous momentum monitoring** (check in WEAK_BREAKOUT_TRACKING and PULLBACK_RETEST states)
+
+**Phase 4 (🔜 PLANNED - Future Enhancements)**:
 - Bounce setup detection (infrastructure ready, logic not implemented)
 - Rejection/fade setup detection (infrastructure ready, logic not implemented)
 - Trailing stop mechanism (not implemented)
-- Adaptive profit targets (partially implemented)
-
-**Phase 3 (🔜 PLANNED)**:
+- Dynamic stop adjustment based on crossed targets (planned)
 - Live paper trading validation
 - Parameter optimization based on results
 - Production deployment
@@ -2085,3 +2089,171 @@ When implementing features that need existing functionality (scanner, strategy, 
 **Note**: Phases 3-7 from original plan (intraday pivots, gap plays) are **deferred** since we're focusing on scanner-identified pivots only.
 
 Each phase must be tested thoroughly before proceeding to the next.
+
+## 🚀 Phase 7: Delayed Momentum Detection & Dynamic Targets (October 13, 2025)
+
+### Problem Discovery: BB Stock Missed Trade
+
+**Scenario**: BB broke resistance ($4.58) on Oct 6 and ran to $4.80 (+4.8%), but wasn't traded.
+- Scanner metrics: Score 105, R/R 5.0:1 (excellent setup)
+- Initial breakout: 0.53x volume (classified as WEAK)
+- Subsequent momentum: 3.63x volume at bar 263 (meets 2.0x threshold!)
+
+**Root Cause Analysis**:
+1. ~~**Volume Sustainability Bug**~~: FIXED - Removed lines 196-210 from breakout_state_tracker.py
+   - Was requiring sustained high volume over 3+ bars
+   - Natural pattern: volume spikes then normalizes
+   - Example: BBBY had 5.78x volume on breakout but downgraded to WEAK because volume decreased afterward
+
+2. **State Machine Never Re-Checked Momentum**: FIXED - Added delayed momentum detection
+   - BB classified as WEAK at bar 192 (initial breakout)
+   - State machine counted bars held but never rechecked volume
+   - BB showed 3.63x volume at bar 263 but wasn't detected
+
+3. **Room-to-Run Filter Used target1 Instead of target3**: FIXED - Dynamic target selection
+   - BB at bar 263: price=$4.63, target1=$4.64 (only 0.22% room) ❌
+   - But target3=$4.77 (2.2% room) ✅
+   - Filter was rejecting entries that already passed target1 but had room to target2/target3
+
+### Solutions Implemented
+
+#### 1. Removed Volume Sustainability Filter (breakout_state_tracker.py:193-204)
+
+**Before (BUGGY)**:
+```python
+if is_strong_volume and is_large_candle:
+    breakout_type = 'MOMENTUM'
+
+    # Check if volume was sustained over last 3 bars
+    recent_vol = sum(bars[i].volume for i in range(current_idx-2, current_idx+1)) / 3
+    avg_vol = sum(bars[i].volume for i in range(current_idx-22, current_idx-2)) / 20
+
+    # Require recent volume to be elevated (≥1.5x average)
+    if recent_vol < avg_vol * 1.5:
+        breakout_type = 'WEAK'  # Downgrade!
+```
+
+**After (FIXED)**:
+```python
+if is_strong_volume and is_large_candle:
+    breakout_type = 'MOMENTUM'
+
+    # REMOVED: Volume Sustainability Check (Oct 13, 2025)
+    # Now: Only check volume on 1-minute breakout candle itself
+```
+
+**Impact**: Stops rejecting valid high-volume breakouts like BBBY (5.78x volume).
+
+#### 2. Delayed Momentum Detection (ps60_entry_state_machine.py:141-205)
+
+**New Logic**: Re-check momentum on EVERY subsequent 1-minute candle after WEAK classification
+
+```python
+# STATE 3/4: WEAK_BREAKOUT_TRACKING or PULLBACK_RETEST
+elif state.state.value in ['WEAK_BREAKOUT_TRACKING', 'PULLBACK_RETEST']:
+    # PHASE 7 (Oct 13, 2025): Re-check for momentum on subsequent 1-minute candles
+    bars_per_candle = 12  # 12 five-second bars = 1 minute
+    bars_into_candle = current_idx % bars_per_candle
+
+    # Check if we're at a new 1-minute candle close
+    if bars_into_candle == (bars_per_candle - 1) and current_idx > state.candle_close_bar:
+        # Calculate this candle's volume and size
+        candle_volume = sum(b.volume for b in candle_bars)
+        volume_ratio = candle_volume / avg_candle_volume
+        candle_size_pct = abs(candle_close - candle_open) / candle_open
+
+        # Check if this candle meets MOMENTUM criteria
+        is_strong_volume = volume_ratio >= strategy.momentum_volume_threshold  # 2.0x
+        is_large_candle = candle_size_pct >= strategy.momentum_candle_min_pct  # 0.3%
+
+        if is_strong_volume and is_large_candle:
+            # Momentum detected on subsequent candle - upgrade to MOMENTUM entry!
+            # Check remaining filters (choppy, room-to-run)
+            if all_filters_pass:
+                return True, f"MOMENTUM_BREAKOUT (delayed, {volume_ratio:.1f}x vol)"
+```
+
+**Key Features**:
+- Checks EVERY 1-minute candle close (bars_into_candle == 11)
+- Works in BOTH WEAK_BREAKOUT_TRACKING and PULLBACK_RETEST states
+- Only checks candles AFTER initial breakout (current_idx > state.candle_close_bar)
+- Still validates all filters (choppy, room-to-run) before entering
+
+**Example with BB**:
+- Bar 192: Initial breakout, 0.53x volume → WEAK
+- Bar 263: 1-min candle close, 3.63x volume → MOMENTUM DETECTED!
+- Bar 347: 1-min candle close, 5.09x volume → Another chance!
+- Bar 383: 1-min candle close, 2.53x volume → Third chance!
+
+#### 3. Dynamic Target Selection (backtester.py:462-470, 512-520)
+
+**Problem**: Room-to-run filter always checked target1, rejecting entries after price passed it.
+
+**Solution**: Always use the highest available target (target3 > target2 > target1).
+
+**LONG Entries** (backtester.py:462-470):
+```python
+# PHASE 7 (Oct 13, 2025): Dynamic target selection - use highest available target
+# Allows delayed momentum entries even after price passes target1
+highest_target = stock.get('target3') or stock.get('target2') or stock.get('target1')
+
+confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
+    bars, bar_count - 1, resistance, side='LONG',
+    target_price=highest_target,  # Use highest available target
+    symbol=stock['symbol'],
+    cached_hourly_bars=cached_bars
+)
+```
+
+**SHORT Entries** (backtester.py:512-520):
+```python
+# PHASE 7 (Oct 13, 2025): Dynamic target selection - use lowest available downside target
+lowest_downside = stock.get('downside2') or stock.get('downside1')
+
+confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
+    bars, bar_count - 1, support, side='SHORT',
+    target_price=lowest_downside,  # Use lowest available downside target
+    symbol=stock['symbol'],
+    cached_hourly_bars=cached_bars
+)
+```
+
+**Impact with BB**:
+- Bar 263: price=$4.63, target1=$4.64 (0.22% room) ❌ BLOCKED BEFORE
+- Bar 263: price=$4.63, target3=$4.77 (2.2% room) ✅ PASSES NOW
+- Allows entry even after target1 is reached if target2/target3 still have room
+
+### Expected Benefits
+
+1. **Capture Delayed Momentum Breakouts**: Stocks like BB that start weak but build momentum
+2. **Multi-Target Optimization**: Can still enter after target1 if target2/target3 have room
+3. **Continuous Monitoring**: Never miss momentum that appears later in the setup
+4. **Natural Volume Patterns**: Accept volume spikes without requiring sustained elevation
+
+### Files Modified
+
+| File | Lines | Change |
+|------|-------|--------|
+| `trader/strategy/breakout_state_tracker.py` | 196-210 | Removed volume sustainability filter |
+| `trader/strategy/ps60_entry_state_machine.py` | 141-205 | Added delayed momentum detection |
+| `trader/backtest/backtester.py` | 462-470 | Dynamic target selection (LONG) |
+| `trader/backtest/backtester.py` | 512-520 | Dynamic target selection (SHORT) |
+
+### Testing Required
+
+1. ✅ Verify BB gets entered on Oct 6 backtest at bar 263 (3.63x volume)
+2. ⏳ Run full Oct 6-9 backtest to measure impact on trade count and P&L
+3. ⏳ Check if other missed opportunities (XLOV, etc.) now get captured
+4. ⏳ Verify no false entries from overly aggressive delayed checks
+
+### Future Enhancement: Dynamic Stop Adjustment
+
+**Planned**: Automatically adjust stops as price crosses intermediate targets.
+
+**Example**:
+- Entry at $4.58 (resistance), stop at $4.58, aiming for target3=$4.77
+- Price reaches $4.65 (crosses target1=$4.64) → Move stop to $4.64 (lock profit)
+- Price reaches $4.71 (crosses target2=$4.70) → Move stop to $4.70 (lock more profit)
+- Now price can run to target3 with reduced risk
+
+**Benefits**: Lock in profits while letting winners run to maximum targets.
