@@ -10,6 +10,14 @@ All trading decisions, entry/exit rules, and risk management are centralized her
 
 from datetime import datetime, time as time_obj
 import pytz
+import logging
+from typing import Dict, List, Optional
+from .breakout_state_tracker import BreakoutStateTracker, BreakoutState
+from .ps60_entry_state_machine import check_entry_state_machine
+from .sma_calculator import SMACalculator, calculate_sma_from_bars
+
+# Setup module logger
+logger = logging.getLogger(__name__)
 
 
 class PS60Strategy:
@@ -22,16 +30,18 @@ class PS60Strategy:
     - Risk: 5-7 min rule for reload sellers, stops at pivot
     """
 
-    def __init__(self, config):
+    def __init__(self, config, ib_connection=None):
         """
         Initialize PS60 strategy with configuration
 
         Args:
             config: Trading configuration dict from trader_config.yaml
+            ib_connection: Optional IB connection for fetching hourly bars (RSI/MACD)
         """
         self.config = config
         self.trading_config = config['trading']
         self.filters = config['filters']
+        self.ib = ib_connection  # For fetching hourly bars for momentum indicators
 
         # Entry timing
         self.min_entry_time = self._parse_time(
@@ -50,6 +60,46 @@ class PS60Strategy:
             self.trading_config['exits']['eod_close_time']
         )
 
+        # Progressive Partial System (Oct 12, 2025)
+        # New: 25% at each technical level (SMA + targets) instead of fixed 1R/2R
+        self.use_sma_target_partials = self.trading_config['exits'].get('use_sma_target_partials', False)
+        self.partial_size = self.trading_config['exits'].get('partial_size', 0.25)
+        self.max_partial_levels = self.trading_config['exits'].get('max_partial_levels', 4)
+
+        # SMA configuration
+        sma_config = self.trading_config['exits'].get('sma', {})
+        self.sma_enabled = sma_config.get('enabled', True)
+        self.sma_periods = sma_config.get('periods', [5, 10, 20])
+        self.sma_timeframe = sma_config.get('timeframe', '1 hour')
+        self.sma_cache_duration = sma_config.get('cache_duration_sec', 300)
+
+        # Scanner targets configuration
+        scanner_targets_config = self.trading_config['exits'].get('scanner_targets', {})
+        self.scanner_targets_enabled = scanner_targets_config.get('enabled', True)
+        self.use_target1 = scanner_targets_config.get('use_target1', True)
+        self.use_target2 = scanner_targets_config.get('use_target2', True)
+        self.use_target3 = scanner_targets_config.get('use_target3', False)
+
+        # Progressive stop management
+        progressive_stops_config = self.trading_config['exits'].get('progressive_stops', {})
+        self.progressive_stops_enabled = progressive_stops_config.get('enabled', True)
+        self.move_stop_to_previous_level = progressive_stops_config.get('move_to_previous_level', True)
+        self.min_stop_distance_pct = progressive_stops_config.get('min_stop_distance_pct', 0.005)
+
+        # Fallback settings
+        self.fallback_to_1r = self.trading_config['exits'].get('fallback_to_1r', True)
+        self.min_levels_required = self.trading_config['exits'].get('min_levels_required', 2)
+
+        # Initialize SMA calculator if enabled and IB connection available
+        self.sma_calculator = None
+        if self.use_sma_target_partials and self.sma_enabled and ib_connection:
+            try:
+                self.sma_calculator = SMACalculator(ib_connection, cache_duration_sec=self.sma_cache_duration)
+                logger.info(f"SMA calculator initialized (timeframe: {self.sma_timeframe}, periods: {self.sma_periods})")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SMA calculator: {e}")
+                self.sma_calculator = None
+
         # Risk management
         self.breakeven_after_partial = self.trading_config['risk']['breakeven_after_partial']
         self.stop_at_pivot = self.trading_config['risk'].get('stop_at_pivot', False)
@@ -59,9 +109,16 @@ class PS60Strategy:
         self.account_size = self.trading_config.get('account_size', 100000)
         self.risk_per_trade = self.trading_config.get('risk_per_trade', 0.01)
 
+        # 7-Minute Rule (PS60) - Changed from 15 to 7 minutes (Oct 11, 2025)
+        # Analysis showed 84% of losers hit 15-min rule, PS60 recommends 5-7 minutes
+        self.fifteen_minute_rule_enabled = self.trading_config['risk'].get('fifteen_minute_rule_enabled', True)
+        self.fifteen_minute_threshold = self.trading_config['risk'].get('fifteen_minute_threshold', 7)  # Default 7 (was 15)
+        self.fifteen_minute_min_gain = self.trading_config['risk'].get('fifteen_minute_min_gain', 0.001)
+
         # Position sizing
         position_sizing = self.trading_config.get('position_sizing', {})
         self.max_position_pct = position_sizing.get('max_position_pct', 10.0)
+        self.max_position_value = position_sizing.get('max_position_value', 20000)  # Adaptive sizing
 
         # Attempts
         self.max_attempts_per_pivot = self.trading_config['attempts']['max_attempts_per_pivot']
@@ -102,6 +159,18 @@ class PS60Strategy:
         self.momentum_candle_min_pct = confirmation_config.get('momentum_candle_min_pct', 0.015)
         self.momentum_candle_min_atr = confirmation_config.get('momentum_candle_min_atr', 2.0)
 
+        # RSI/MACD Momentum Filters (Oct 7, 2025)
+        self.enable_rsi_filter = confirmation_config.get('enable_rsi_filter', False)
+        self.rsi_period = confirmation_config.get('rsi_period', 14)
+        self.rsi_threshold = confirmation_config.get('rsi_threshold', 50)
+        self.rsi_timeframe = confirmation_config.get('rsi_timeframe', '1 hour')
+
+        self.enable_macd_filter = confirmation_config.get('enable_macd_filter', False)
+        self.macd_fast = confirmation_config.get('macd_fast', 12)
+        self.macd_slow = confirmation_config.get('macd_slow', 26)
+        self.macd_signal = confirmation_config.get('macd_signal', 9)
+        self.macd_timeframe = confirmation_config.get('macd_timeframe', '1 hour')
+
         # Pullback/retest thresholds (patient entry)
         self.require_pullback_retest = confirmation_config.get('require_pullback_retest', True)
         self.pullback_distance_pct = confirmation_config.get('pullback_distance_pct', 0.003)
@@ -126,6 +195,11 @@ class PS60Strategy:
 
         # ATR period for stop calculation (needed by _calculate_atr)
         self.atr_period = self.atr_stop_period
+
+        # STATE MACHINE (Oct 9, 2025): Memory-based breakout tracking
+        # Replaces lookback loops with stateful tracking of key moments
+        self.state_tracker = BreakoutStateTracker()
+        self.max_breakout_age_bars = confirmation_config.get('max_breakout_age_bars', 600)  # 50 minutes
 
         # Setup types
         setup_types = self.trading_config.get('setup_types', {})
@@ -832,18 +906,89 @@ class PS60Strategy:
             'entry_bar': current_idx
         }
 
-    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None):
+    def check_momentum_indicators(self, symbol, side='LONG', cached_hourly_bars=None):
         """
-        HYBRID Entry Strategy (Oct 4, 2025)
+        Check RSI and MACD momentum indicators (Oct 7, 2025)
+
+        Uses hourly bars from IBKR to validate trend direction and momentum.
+        This filters out false breakouts and counter-trend entries.
+
+        Args:
+            symbol: Stock symbol (e.g., 'XPEV')
+            side: 'LONG' or 'SHORT'
+            cached_hourly_bars: Pre-fetched hourly bars (performance optimization for backtesting)
+
+        Returns:
+            tuple: (is_confirmed, reason, details)
+        """
+        # Skip if indicators disabled or no IB connection
+        if not self.enable_rsi_filter and not self.enable_macd_filter:
+            return True, "Momentum indicators disabled", {}
+
+        if self.ib is None and cached_hourly_bars is None:
+            return True, "No IB connection for momentum check", {}
+
+        try:
+            # Import momentum indicators module
+            from strategy.momentum_indicators import check_momentum_confirmation_with_bars
+            from ib_insync import Stock
+
+            # If cached bars provided, use them directly (backtesting optimization)
+            if cached_hourly_bars is not None:
+                is_confirmed, reason, details = check_momentum_confirmation_with_bars(
+                    bars=cached_hourly_bars,
+                    side=side,
+                    rsi_enabled=self.enable_rsi_filter,
+                    rsi_period=self.rsi_period,
+                    rsi_threshold=self.rsi_threshold,
+                    macd_enabled=self.enable_macd_filter,
+                    macd_fast=self.macd_fast,
+                    macd_slow=self.macd_slow,
+                    macd_signal=self.macd_signal
+                )
+            else:
+                # Live trading: fetch bars from IBKR
+                from strategy.momentum_indicators import check_momentum_confirmation
+
+                contract = Stock(symbol, 'SMART', 'USD')
+                is_confirmed, reason, details = check_momentum_confirmation(
+                    ib=self.ib,
+                    contract=contract,
+                    side=side,
+                    rsi_enabled=self.enable_rsi_filter,
+                    rsi_period=self.rsi_period,
+                    rsi_threshold=self.rsi_threshold,
+                    rsi_timeframe=self.rsi_timeframe,
+                    macd_enabled=self.enable_macd_filter,
+                    macd_fast=self.macd_fast,
+                    macd_slow=self.macd_slow,
+                    macd_signal=self.macd_signal,
+                    macd_timeframe=self.macd_timeframe
+                )
+
+            return is_confirmed, reason, details
+
+        except Exception as e:
+            print(f"⚠️  Error checking momentum for {symbol}: {e}")
+            return True, f"Momentum check error: {e}", {}
+
+    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None):
+        """
+        HYBRID Entry Strategy (Oct 4, 2025) - STATE MACHINE VERSION (Oct 9, 2025)
 
         Two entry types based on breakout strength:
         1. MOMENTUM BREAKOUT: Strong volume + large candle = immediate entry
         2. PULLBACK/RETEST: Weak initial break = wait for pullback
 
+        STATE MACHINE APPROACH:
+        - Stores key moments in memory (no lookback loops)
+        - Tracks progression through decision tree
+        - Remembers breakout for up to 50 minutes (configurable)
+
         Strategy:
         - Always require 1-min candle close above pivot (filters whipsaws)
         - If breakout candle has strong volume AND large size → MOMENTUM entry
-        - If breakout candle is weak → wait for PULLBACK/RETEST
+        - If breakout candle is weak → wait for PULLBACK/RETEST OR SUSTAINED_BREAK
 
         Args:
             bars: List of 5-second bars
@@ -851,68 +996,78 @@ class PS60Strategy:
             pivot_price: Resistance (long) or support (short)
             side: 'LONG' or 'SHORT'
             target_price: Target price (optional, for room-to-run filter)
+            symbol: Stock symbol (REQUIRED for state tracking)
+            cached_hourly_bars: Hourly bars for RSI/MACD (optional)
 
         Returns:
             tuple: (should_enter, reason, entry_state)
         """
+        # USE STATE MACHINE (Oct 9, 2025)
+        if symbol is not None:
+            return check_entry_state_machine(
+                strategy=self,
+                symbol=symbol,
+                bars=bars,
+                current_idx=current_idx,
+                pivot_price=pivot_price,
+                side=side,
+                target_price=target_price,
+                cached_hourly_bars=cached_hourly_bars
+            )
+
+        # FALLBACK: Old logic if symbol not provided (shouldn't happen)
         if not self.require_candle_close:
             # Candle close disabled, allow immediate entry
             current_price = bars[current_idx].close
             if side == 'LONG':
-                return (current_price > pivot_price), "Immediate entry", None
+                return (current_price > pivot_price), "Immediate entry (no symbol)", None
             else:
-                return (current_price < pivot_price), "Immediate entry", None
+                return (current_price < pivot_price), "Immediate entry (no symbol)", None
 
         bars_per_candle = self.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
 
-        # Find where price first broke the pivot
-        lookback_start = max(0, current_idx - self.max_pullback_bars - bars_per_candle)
+        # FIX (Oct 9, 2025): Don't search for original breakout - just check current price vs pivot
+        # Old logic searched last 36 bars for initial breakout, failed 93% of the time
+        # New logic: If price is currently through pivot, treat current candle as the breakout candle
 
-        breakout_bar = None
-        for i in range(lookback_start, current_idx):
-            bar_price = bars[i].close
-            if side == 'LONG' and bar_price > pivot_price and (i == 0 or bars[i-1].close <= pivot_price):
-                breakout_bar = i
-                break
-            elif side == 'SHORT' and bar_price < pivot_price and (i == 0 or bars[i-1].close >= pivot_price):
-                breakout_bar = i
-                break
+        current_price = bars[current_idx].close
 
-        if breakout_bar is None:
-            return False, "No breakout detected", {'phase': 'no_breakout'}
+        # Check if price is currently through pivot
+        if side == 'LONG':
+            is_through_pivot = current_price > pivot_price
+        else:  # SHORT
+            is_through_pivot = current_price < pivot_price
 
-        # Check if breakout is expired
-        bars_since_breakout = current_idx - breakout_bar
-        if bars_since_breakout > self.max_pullback_bars + bars_per_candle:
-            return False, "Breakout too old", {'phase': 'expired'}
+        if not is_through_pivot:
+            return False, "Price not through pivot", {'phase': 'no_breakout'}
 
-        # STEP 1: Wait for 1-minute candle close
-        candle_start = (breakout_bar // bars_per_candle) * bars_per_candle
-        candle_end = candle_start + bars_per_candle
+        # STEP 1: Check if we're at the end of a 1-minute candle
+        # Only enter at candle boundaries (every 12th bar)
+        bars_into_candle = current_idx % bars_per_candle
 
-        # BOUNDS CHECK: Ensure candle_end doesn't exceed array length
-        if candle_end > len(bars):
-            candle_end = len(bars)
-
-        # Additional safety: Ensure we have enough bars for the candle
-        if candle_end - candle_start < bars_per_candle:
-            return False, "Insufficient bars for candle close", {'phase': 'insufficient_data'}
-
-        if current_idx < candle_end:
-            # Still inside the breakout candle, wait for close
+        if bars_into_candle < (bars_per_candle - 1):
+            # Not at candle close yet, wait
+            candle_start = (current_idx // bars_per_candle) * bars_per_candle
+            candle_end = candle_start + bars_per_candle
             return False, "Waiting for 1-min candle close", {
                 'phase': 'waiting_candle_close',
-                'breakout_bar': breakout_bar,
+                'breakout_bar': candle_start,
                 'candle_closes_at': candle_end
             }
 
-        # Candle has closed - get close price with bounds check
-        candle_close_price = bars[candle_end - 1].close
+        # We're at the last bar of the candle (bar 11, 23, 35, etc.)
+        # Check if this candle closed through the pivot
+        candle_start = (current_idx // bars_per_candle) * bars_per_candle
+        candle_close_price = current_price  # Current bar is the candle close
 
         if side == 'LONG' and candle_close_price <= pivot_price:
             return False, "1-min candle closed below resistance (failed)", {'phase': 'failed_close'}
         elif side == 'SHORT' and candle_close_price >= pivot_price:
             return False, "1-min candle closed above support (failed)", {'phase': 'failed_close'}
+
+        # Candle closed correctly through pivot - proceed to volume/momentum checks
+        candle_end = current_idx + 1  # For volume calculations
+        breakout_bar = candle_start  # For tracking purposes
 
         # STEP 2: Analyze breakout candle strength
         candle_bars = bars[candle_start:candle_end]
@@ -954,9 +1109,15 @@ class PS60Strategy:
             candle_atr_ratio = 1.0
 
         # STEP 3: Determine entry type
+        # Updated Oct 7, 2025: Volume + RSI/MACD filters (candle size disabled)
         is_strong_volume = volume_ratio >= self.momentum_volume_threshold
-        is_large_candle = (candle_size_pct >= self.momentum_candle_min_pct or
-                          candle_atr_ratio >= self.momentum_candle_min_atr)
+
+        # Check if candle filters are disabled (set to 0)
+        if self.momentum_candle_min_pct == 0 and self.momentum_candle_min_atr == 0:
+            is_large_candle = True  # Disabled, always pass
+        else:
+            is_large_candle = (candle_size_pct >= self.momentum_candle_min_pct and
+                              candle_atr_ratio >= self.momentum_candle_min_atr)
 
         if is_strong_volume and is_large_candle:
             # ✅ MOMENTUM BREAKOUT - Enter immediately!
@@ -971,6 +1132,12 @@ class PS60Strategy:
             is_chasing, chasing_reason = self._check_entry_position(bars, current_idx, current_price, side)
             if is_chasing:
                 return False, chasing_reason, {'phase': 'chasing_filter'}
+
+            # NEW (Oct 7, 2025): Check RSI/MACD momentum indicators
+            if symbol and (self.enable_rsi_filter or self.enable_macd_filter):
+                momentum_confirmed, momentum_reason, momentum_details = self.check_momentum_indicators(symbol, side, cached_hourly_bars)
+                if not momentum_confirmed:
+                    return False, f"Momentum filter: {momentum_reason}", {'phase': 'momentum_filter'}
 
             if side == 'LONG':
                 if current_price > pivot_price:
@@ -1317,15 +1484,21 @@ class PS60Strategy:
         if symbol in self.avoid_symbols:
             return False, f"Symbol in avoid list"
 
-        # Check position size (prevents over-concentration in high-priced stocks)
+        # Check position size with adaptive sizing (Oct 7, 2025)
         stop_distance = abs(current_price - resistance)
-        max_risk_dollars = self.account_size * self.risk_per_trade
-        shares = max_risk_dollars / stop_distance if stop_distance > 0 else 0
+
+        # Calculate using adaptive sizing formula
+        shares_by_risk = self.account_size * self.risk_per_trade / stop_distance if stop_distance > 0 else 0
+        shares_by_value = self.max_position_value / current_price
+        shares = min(shares_by_risk, shares_by_value, 1000)  # Apply adaptive limit
+
         position_value = shares * current_price
         position_pct = (position_value / self.account_size) * 100
 
-        if position_pct > self.max_position_pct:
-            return False, f"Position too large ({position_pct:.1f}% > {self.max_position_pct}% max)"
+        # Position value should never exceed max_position_value due to adaptive sizing
+        # This check is now redundant but kept for backwards compatibility
+        if position_value > self.max_position_value * 1.1:  # 10% buffer for rounding
+            return False, f"Position too large (${position_value:,.0f} > ${self.max_position_value:,.0f} max)"
 
         # NOTE: Gap filter is NOT checked here - it's applied at market open
         # by filter_scanner_for_gaps() in the backtester/live trader before
@@ -1335,9 +1508,10 @@ class PS60Strategy:
 
         # CRITICAL: If bars provided (live trader), check hybrid entry confirmation
         if bars is not None and current_idx is not None:
-            target1 = stock_data.get('target1')
+            # PHASE 7 (Oct 13, 2025): Dynamic target selection - use highest available target
+            highest_target = stock_data.get('target3') or stock_data.get('target2') or stock_data.get('target1')
             confirmed, path, reason = self.check_hybrid_entry(
-                bars, current_idx, resistance, side='LONG', target_price=target1
+                bars, current_idx, resistance, side='LONG', target_price=highest_target
             )
 
             if not confirmed:
@@ -1389,21 +1563,28 @@ class PS60Strategy:
         # current_price would incorrectly use intraday price movement instead
         # of the actual overnight gap.
 
-        # Check position size (prevents over-concentration in high-priced stocks)
+        # Check position size with adaptive sizing (Oct 7, 2025)
         stop_distance = abs(current_price - support)
-        max_risk_dollars = self.account_size * self.risk_per_trade
-        shares = max_risk_dollars / stop_distance if stop_distance > 0 else 0
+
+        # Calculate using adaptive sizing formula
+        shares_by_risk = self.account_size * self.risk_per_trade / stop_distance if stop_distance > 0 else 0
+        shares_by_value = self.max_position_value / current_price
+        shares = min(shares_by_risk, shares_by_value, 1000)  # Apply adaptive limit
+
         position_value = shares * current_price
         position_pct = (position_value / self.account_size) * 100
 
-        if position_pct > self.max_position_pct:
-            return False, f"Position too large ({position_pct:.1f}% > {self.max_position_pct}% max)"
+        # Position value should never exceed max_position_value due to adaptive sizing
+        # This check is now redundant but kept for backwards compatibility
+        if position_value > self.max_position_value * 1.1:  # 10% buffer for rounding
+            return False, f"Position too large (${position_value:,.0f} > ${self.max_position_value:,.0f} max)"
 
         # CRITICAL: If bars provided (live trader), check hybrid entry confirmation
         if bars is not None and current_idx is not None:
-            downside1 = stock_data.get('downside1')
+            # PHASE 7 (Oct 13, 2025): Dynamic target selection - use lowest available downside target
+            lowest_downside = stock_data.get('downside2') or stock_data.get('downside1')
             confirmed, path, reason = self.check_hybrid_entry(
-                bars, current_idx, support, side='SHORT', target_price=downside1
+                bars, current_idx, support, side='SHORT', target_price=lowest_downside
             )
 
             if not confirmed:
@@ -1414,14 +1595,114 @@ class PS60Strategy:
         # Backtest path: Pivot broken (hybrid entry checked in backtester loop)
         return True, "Support broken"
 
-    def should_take_partial(self, position, current_price):
+    def should_take_partial(self, position, current_price, bars=None):
         """
-        Check if should take partial profit
+        Check if should take partial profit.
 
-        Per requirements: Take partial at 1R (when profit equals initial risk)
+        Two systems available:
+        1. NEW (Progressive): 25% at each SMA/target level
+        2. LEGACY (Fallback): 50%-25% at 1R/2R
+
+        Args:
+            position: Position dict with entry, stop, side, etc.
+            current_price: Current market price
+            bars: Historical bars for SMA calculation (optional, for backtesting)
 
         Returns:
             (bool, pct, reason) - Should take partial, what %, and reason
+
+        Example (Progressive System):
+            >>> position = {
+            >>>     'entry_price': 100.00,
+            >>>     'exit_levels': [
+            >>>         {'price': 101.20, 'name': 'SMA5'},
+            >>>         {'price': 102.50, 'name': 'SMA10'},
+            >>>         {'price': 103.80, 'name': 'TARGET1'},
+            >>>         {'price': 105.00, 'name': 'SMA20'}
+            >>>     ],
+            >>>     'partials': [],  # None taken yet
+            >>>     'side': 'LONG'
+            >>> }
+            >>> should_take, pct, reason = strategy.should_take_partial(position, 101.25)
+            >>> print(f"{should_take}: Take {pct*100}% at {reason}")
+            True: Take 25.0% at 25%_PARTIAL_SMA5
+        """
+        # Check if progressive system is enabled
+        if self.use_sma_target_partials:
+            return self._progressive_partial_logic(position, current_price, bars)
+        else:
+            return self._legacy_partial_logic(position, current_price)
+
+    def _progressive_partial_logic(self, position, current_price, bars=None):
+        """
+        Progressive 25% partials at SMA/target levels.
+
+        Logic:
+        1. Create exit levels on first call (cached in position)
+        2. Check if price reached next level
+        3. Take 25% partial at each level
+        4. Update stop to previous level after each partial
+
+        Args:
+            position: Position dict
+            current_price: Current market price
+            bars: Historical bars for SMA calculation (optional)
+
+        Returns:
+            (bool, pct, reason) - Whether to take partial
+
+        Implementation Notes:
+            - Exit levels are calculated once and cached in position['exit_levels']
+            - Takes partials sequentially: level 0, then level 1, etc.
+            - Falls back to 1R system if insufficient levels found
+        """
+        # Get or create exit levels
+        if 'exit_levels' not in position:
+            position['exit_levels'] = self._create_exit_levels(position, bars)
+            # Format exit levels for logging
+            levels_str = ', '.join([f"{l['name']}@${l['price']:.2f}" for l in position['exit_levels']])
+            logger.info(
+                f"{position['symbol']}: Created {len(position['exit_levels'])} exit levels: {levels_str}"
+            )
+
+        exit_levels = position['exit_levels']
+        partials_taken = len(position.get('partials', []))
+
+        # Check if we've exhausted all levels
+        if partials_taken >= len(exit_levels):
+            return False, 0, None
+
+        # Get next level to hit
+        next_level = exit_levels[partials_taken]
+
+        # Check if price reached this level
+        if self._price_reached_level(current_price, next_level, position['side']):
+            logger.debug(
+                f"{position['symbol']}: Hit level {partials_taken + 1}/{len(exit_levels)}: "
+                f"{next_level['name']} @ ${next_level['price']:.2f}"
+            )
+            return True, self.partial_size, f"25%_PARTIAL_{next_level['name']}"
+
+        return False, 0, None
+
+    def _legacy_partial_logic(self, position, current_price):
+        """
+        Legacy 1R/2R partial system (50%-25%-25% runner).
+
+        This is the original system used before progressive partials.
+        Kept as fallback and for comparison testing.
+
+        Args:
+            position: Position dict
+            current_price: Current market price
+
+        Returns:
+            (bool, pct, reason)
+
+        Logic:
+            - First partial: 50% at 1R (profit = risk)
+            - Second partial: 25% at 2R/target1
+            - Final 25%: Runner with trailing stop
         """
         entry_price = position['entry_price']
         stop_price = position['stop']
@@ -1468,26 +1749,447 @@ class PS60Strategy:
 
         return False
 
-    def calculate_stop_price(self, position, current_price=None):
+    # ========================================================================
+    # PROGRESSIVE PARTIAL SYSTEM - Helper Methods
+    # ========================================================================
+
+    def _create_exit_levels(self, position, bars=None) -> List[Dict]:
         """
-        Calculate stop price for position
+        Create ordered list of exit levels from SMA + scanner targets.
+
+        This is the core of the progressive partial system. It:
+        1. Fetches SMA levels (hourly/daily)
+        2. Adds scanner targets
+        3. Filters by direction (LONG = levels above entry)
+        4. Sorts by distance from entry
+        5. Limits to max levels (default: 4)
+        6. Falls back to 1R if insufficient levels
+
+        Args:
+            position: Position dict with symbol, entry, side, targets
+            bars: Historical bars for SMA calculation (optional, for backtesting)
+
+        Returns:
+            List of level dicts: [
+                {'price': 101.20, 'type': 'SMA', 'name': 'SMA5'},
+                {'price': 102.50, 'type': 'SMA', 'name': 'SMA10'},
+                ...
+            ]
+
+        Edge Cases:
+            - Returns 1R/2R levels if insufficient technical levels found
+            - Returns empty list if even 1R can't be calculated
+            - Logs warnings for missing data
+        """
+        levels = []
+        entry_price = position['entry_price']
+        side = position['side']
+        symbol = position.get('symbol', 'UNKNOWN')
+
+        # ===== STEP 1: Get SMA Levels (Priority 1) =====
+        if self.sma_enabled:
+            sma_levels = self._get_sma_levels_for_position(position, bars)
+
+            if sma_levels:
+                for name, price in sma_levels.items():
+                    if self._is_level_valid(price, entry_price, side):
+                        levels.append({
+                            'price': price,
+                            'type': 'SMA',
+                            'name': name.upper()  # 'sma5' -> 'SMA5'
+                        })
+                        logger.debug(f"{symbol}: Added {name.upper()} @ ${price:.2f}")
+            else:
+                logger.warning(f"{symbol}: No SMA levels available")
+
+        # ===== STEP 2: Add Scanner Targets (Priority 2) =====
+        if self.scanner_targets_enabled:
+            target_mapping = {
+                'target1': self.use_target1,
+                'target2': self.use_target2,
+                'target3': self.use_target3
+            }
+
+            for target_key, enabled in target_mapping.items():
+                if not enabled:
+                    continue
+
+                if target_key in position:
+                    target_price = position[target_key]
+                    if self._is_level_valid(target_price, entry_price, side):
+                        levels.append({
+                            'price': target_price,
+                            'type': 'TARGET',
+                            'name': target_key.upper()  # 'target1' -> 'TARGET1'
+                        })
+                        logger.debug(f"{symbol}: Added {target_key.upper()} @ ${target_price:.2f}")
+
+        # ===== STEP 3: Sort by Distance from Entry =====
+        levels.sort(key=lambda x: abs(x['price'] - entry_price))
+
+        # ===== STEP 4: Limit to Max Levels =====
+        levels = levels[:self.max_partial_levels]
+
+        # ===== STEP 5: Fallback to 1R if Insufficient Levels =====
+        if len(levels) < self.min_levels_required and self.fallback_to_1r:
+            logger.warning(
+                f"{symbol}: Only {len(levels)} exit levels found (need {self.min_levels_required}), "
+                f"falling back to 1R/2R system"
+            )
+            return self._create_1r_levels(position)
+
+        if not levels:
+            logger.error(f"{symbol}: No exit levels created!")
+            return []
+
+        return levels
+
+    def _get_sma_levels_for_position(self, position, bars=None) -> Optional[Dict[str, float]]:
+        """
+        Get SMA levels for position (live trading or backtesting).
+
+        Two modes:
+        1. Live trading: Fetch from IBKR via SMA calculator
+        2. Backtesting: Calculate from provided bars
+
+        Args:
+            position: Position dict with symbol
+            bars: Historical bars (for backtesting mode)
+
+        Returns:
+            Dict of SMA levels: {'sma5': 150.45, 'sma10': 148.92, 'sma20': 147.33}
+            Returns None if calculation fails
+        """
+        symbol = position.get('symbol', 'UNKNOWN')
+
+        # Mode 1: Backtesting - calculate from bars
+        if bars is not None:
+            logger.debug(f"{symbol}: Calculating SMAs from {len(bars)} bars")
+            sma_levels = {}
+
+            for period in self.sma_periods:
+                sma_value = calculate_sma_from_bars(bars, period)
+                if sma_value:
+                    sma_levels[f'sma{period}'] = sma_value
+
+            return sma_levels if sma_levels else None
+
+        # Mode 2: Live trading - fetch from IBKR
+        if self.sma_calculator:
+            try:
+                return self.sma_calculator.get_sma_levels(
+                    symbol,
+                    periods=self.sma_periods,
+                    timeframe=self.sma_timeframe
+                )
+            except Exception as e:
+                logger.warning(f"{symbol}: Failed to fetch SMAs: {e}")
+                return None
+
+        logger.warning(f"{symbol}: No SMA calculator available and no bars provided")
+        return None
+
+    def _is_level_valid(self, level_price: float, entry_price: float, side: str) -> bool:
+        """
+        Check if exit level is in the right direction.
+
+        Args:
+            level_price: Exit level price
+            entry_price: Entry price
+            side: 'LONG' or 'SHORT'
+
+        Returns:
+            True if level is valid (above entry for LONG, below for SHORT)
+
+        Examples:
+            >>> _is_level_valid(102.0, 100.0, 'LONG')
+            True  # 102 > 100 for LONG ✓
+
+            >>> _is_level_valid(98.0, 100.0, 'LONG')
+            False  # 98 < 100 for LONG ✗
+
+            >>> _is_level_valid(98.0, 100.0, 'SHORT')
+            True  # 98 < 100 for SHORT ✓
+        """
+        if side == 'LONG':
+            return level_price > entry_price
+        else:  # SHORT
+            return level_price < entry_price
+
+    def _price_reached_level(self, current_price: float, level: Dict, side: str) -> bool:
+        """
+        Check if price has reached exit level.
+
+        Args:
+            current_price: Current market price
+            level: Level dict with 'price'
+            side: 'LONG' or 'SHORT'
+
+        Returns:
+            True if price reached or exceeded level
+
+        Logic:
+            - LONG: current >= level (moving up)
+            - SHORT: current <= level (moving down)
+        """
+        level_price = level['price']
+
+        if side == 'LONG':
+            return current_price >= level_price
+        else:  # SHORT
+            return current_price <= level_price
+
+    def _create_1r_levels(self, position) -> List[Dict]:
+        """
+        Create fallback 1R/2R exit levels.
+
+        Used when insufficient SMA/target levels are found.
+
+        Args:
+            position: Position dict
+
+        Returns:
+            List with 1R and 2R levels: [
+                {'price': <entry+1R>, 'type': '1R', 'name': '1R'},
+                {'price': <entry+2R>, 'type': '2R', 'name': '2R'}
+            ]
+
+        Note:
+            Partial sizes are different for 1R system:
+            - 1R: 50% (not 25%)
+            - 2R: 25%
+            - Runner: 25%
+        """
+        entry_price = position['entry_price']
+        stop_price = position['stop']
+        side = position['side']
+
+        # Calculate 1R (initial risk)
+        if side == 'LONG':
+            risk = entry_price - stop_price
+            level_1r = entry_price + risk  # 1:1 profit/risk
+            level_2r = entry_price + (risk * 2)  # 2:1 profit/risk
+        else:  # SHORT
+            risk = stop_price - entry_price
+            level_1r = entry_price - risk
+            level_2r = entry_price - (risk * 2)
+
+        levels = [
+            {'price': level_1r, 'type': '1R', 'name': '1R'},
+            {'price': level_2r, 'type': '2R', 'name': '2R'}
+        ]
+
+        logger.info(
+            f"{position.get('symbol', 'UNKNOWN')}: Using 1R/2R levels: "
+            f"1R@${level_1r:.2f}, 2R@${level_2r:.2f}"
+        )
+
+        return levels
+
+    def update_stop_after_partial(self, position, current_price):
+        """
+        Update stop price after taking partial (progressive system).
+
+        Two modes:
+        1. Progressive: Move stop to previous exit level
+        2. Legacy: Move to breakeven after first partial
+
+        Args:
+            position: Position dict
+            current_price: Current market price
+
+        Returns:
+            New stop price
+
+        Example (Progressive):
+            Partials taken: 2 (at SMA5, SMA10)
+            Exit levels: [SMA5@101.20, SMA10@102.50, TARGET1@103.80]
+            New stop: SMA5 - 0.5% = $100.69
+
+        Example (Legacy):
+            Partials taken: 1
+            New stop: Entry price (breakeven)
+        """
+        if not self.use_sma_target_partials or not self.progressive_stops_enabled:
+            # Legacy mode: breakeven after first partial
+            if position.get('partials'):
+                return position['entry_price']
+            return position['stop']
+
+        # Progressive mode: move to previous level
+        return self._progressive_stop_update(position)
+
+    def _progressive_stop_update(self, position):
+        """
+        Progressive stop management: move stop to previous exit level.
+
+        Logic:
+            - After 1st partial: Move to breakeven
+            - After 2nd partial: Move to 1st level (with buffer)
+            - After 3rd partial: Move to 2nd level (with buffer)
+            - After 4th partial: Keep at 3rd level, let trail work
+
+        Args:
+            position: Position dict
+
+        Returns:
+            New stop price
+        """
+        partials_taken = len(position.get('partials', []))
+        current_stop = position['stop']
+        entry_price = position['entry_price']
+        side = position['side']
+
+        if partials_taken == 0:
+            # No partials yet, keep initial stop
+            return current_stop
+
+        elif partials_taken == 1:
+            # First partial: Move to breakeven
+            logger.debug(f"{position.get('symbol')}: Moving stop to breakeven @ ${entry_price:.2f}")
+            return entry_price
+
+        elif partials_taken >= 2:
+            # Subsequent partials: Move to previous level with buffer
+            exit_levels = position.get('exit_levels', [])
+            previous_level_idx = partials_taken - 2  # 2nd partial -> 0th level
+
+            if previous_level_idx < len(exit_levels):
+                previous_level = exit_levels[previous_level_idx]
+                new_stop = previous_level['price']
+
+                # Add buffer to avoid immediate stop-out
+                if side == 'LONG':
+                    # Stop below level
+                    new_stop = new_stop * (1 - self.min_stop_distance_pct)
+                else:  # SHORT
+                    # Stop above level
+                    new_stop = new_stop * (1 + self.min_stop_distance_pct)
+
+                logger.info(
+                    f"{position.get('symbol')}: Moving stop to {previous_level['name']} "
+                    f"(${previous_level['price']:.2f}) with {self.min_stop_distance_pct*100:.1f}% buffer "
+                    f"= ${new_stop:.2f}"
+                )
+
+                return new_stop
+
+        # Fallback: keep current stop
+        return current_stop
+
+    # ========================================================================
+    # END: PROGRESSIVE PARTIAL SYSTEM
+    # ========================================================================
+
+    def check_fifteen_minute_rule(self, position, current_price, current_time):
+        """
+        Check if 7-minute rule should trigger (PS60 methodology)
+
+        Changed from 15 to 7 minutes (Oct 11, 2025) based on analysis showing:
+        - 84% of losers hit 15-min rule
+        - Only 1 out of 18 (5.6%) was profitable
+        - PS60 recommends 5-7 minutes, not 15
+
+        Exit if position shows no progress after N minutes (configurable) - indicates
+        "reload seller/buyer" blocking the move.
+
+        Args:
+            position: Position dict with entry_time, entry_price, remaining, etc.
+            current_price: Current market price
+            current_time: Current datetime
+
+        Returns:
+            (should_exit, reason) tuple
+        """
+        if not self.fifteen_minute_rule_enabled:
+            return False, None
+
+        # CRITICAL: Only apply BEFORE taking partials
+        # After partials, let the runner work (remaining < 1.0 means partial taken)
+        if position.get('remaining', 1.0) < 1.0:
+            return False, None
+
+        # Calculate time in trade
+        entry_time = position['entry_time']
+        time_in_trade = (current_time - entry_time).total_seconds() / 60  # minutes
+
+        if time_in_trade < self.fifteen_minute_threshold:
+            return False, None
+
+        # Check if position has made progress
+        entry_price = position['entry_price']
+        side = position['side']
+
+        if side == 'LONG':
+            gain_pct = (current_price - entry_price) / entry_price
+        else:  # SHORT
+            gain_pct = (entry_price - current_price) / entry_price
+
+        # If no meaningful progress, exit
+        if gain_pct < self.fifteen_minute_min_gain:
+            # Use actual threshold in message (was hardcoded "15MIN_RULE")
+            return True, f"{self.fifteen_minute_threshold}MIN_RULE: No progress (${gain_pct*entry_price:+.2f}, {gain_pct*100:.2f}%)"
+
+        return False, None
+
+    def calculate_atr_based_stop_width(self, atr_percent):
+        """
+        Calculate stop width based on ATR (volatility)
+
+        Args:
+            atr_percent: ATR as percentage of stock price
+
+        Returns:
+            float: Stop width as decimal (e.g., 0.012 for 1.2%)
+        """
+        if atr_percent < 2.0:
+            return 0.007  # 0.7% for low volatility stocks
+        elif atr_percent < 4.0:
+            return 0.012  # 1.2% for medium volatility
+        elif atr_percent < 6.0:
+            return 0.018  # 1.8% for high volatility
+        else:
+            return 0.025  # 2.5% for very high volatility
+
+    def calculate_stop_price(self, position, current_price=None, stock_data=None):
+        """
+        Calculate stop price for position using ATR-based stops
+
+        Args:
+            position: Position dict with entry_price, side, partials, etc.
+            current_price: Current market price (optional)
+            stock_data: Stock data dict with ATR info (optional)
 
         Returns:
             float - Stop price
         """
         # After partial: breakeven
-        if position['partials'] and self.breakeven_after_partial:
+        if position.get('partials', 0) > 0 and self.breakeven_after_partial:
             return position['entry_price']
 
-        # Initial stop: at pivot
-        if self.stop_at_pivot:
-            if position['side'] == 'LONG':
-                return position['pivot']  # Resistance (entry trigger)
-            else:
-                return position['pivot']  # Support (entry trigger)
+        # Use ATR-based stops if enabled and data available
+        if self.use_atr_stops and stock_data:
+            atr_pct = stock_data.get('atr%', 5.0)  # Default 5% if missing
+            stop_width = self.calculate_atr_based_stop_width(atr_pct)
 
-        # Default: entry price
-        return position['entry_price']
+            entry_price = position['entry_price']
+            if position['side'] == 'LONG':
+                stop_price = entry_price * (1 - stop_width)
+            else:  # SHORT
+                stop_price = entry_price * (1 + stop_width)
+
+            return stop_price
+
+        # Fallback: Initial stop at pivot
+        if self.stop_at_pivot and 'pivot' in position:
+            return position['pivot']
+
+        # Last resort: Use tight stop (not recommended)
+        entry_price = position['entry_price']
+        if position['side'] == 'LONG':
+            return entry_price * 0.995  # 0.5% stop
+        else:
+            return entry_price * 1.005  # 0.5% stop
 
     def update_trailing_stop(self, position, current_price):
         """
@@ -1639,7 +2341,12 @@ class PS60Strategy:
 
     def calculate_position_size(self, account_size, entry_price, stop_price, risk_per_trade=None):
         """
-        Calculate position size based on risk
+        Calculate position size based on risk with adaptive sizing
+
+        ADAPTIVE SIZING (Oct 7, 2025):
+        - Limits position value to prevent over-concentration in high-priced stocks
+        - Formula: shares = min(shares_by_risk, shares_by_value, max_shares)
+        - Example: GS @ $794 with tight stop would create $794k position without this
 
         Args:
             account_size: Total account value
@@ -1659,13 +2366,19 @@ class PS60Strategy:
         if stop_distance == 0:
             return 0
 
-        shares = int(risk_amount / stop_distance)
+        # Calculate shares based on risk (original method)
+        shares_by_risk = int(risk_amount / stop_distance)
 
-        # Apply min/max constraints
+        # ADAPTIVE SIZING: Calculate max shares based on position value limit
+        shares_by_value = int(self.max_position_value / entry_price)
+
+        # Take the minimum of risk-based, value-based, and hard cap
         min_shares = self.trading_config['position_sizing']['min_shares']
         max_shares = self.trading_config['position_sizing']['max_shares']
 
-        shares = max(min_shares, min(shares, max_shares))
+        # Apply all three constraints
+        shares = min(shares_by_risk, shares_by_value, max_shares)
+        shares = max(min_shares, shares)  # Ensure minimum
 
         return shares
 
