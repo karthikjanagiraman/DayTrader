@@ -1,0 +1,252 @@
+# PS60 Live Trader Configuration
+# Based on backtest results from September 30, 2025
+
+trading:
+  account_size: 100000
+  risk_per_trade: 0.01  # 1% risk per trade
+  max_positions: 10     # Maximum concurrent positions (increased for more opportunities)
+  max_daily_loss: 0.03  # 3% max daily loss (circuit breaker)
+
+  position_sizing:
+    min_shares: 10
+    max_shares: 1000          # Hard cap on share count
+    max_position_value: 20000 # Adaptive sizing: $20k max per position (20% of account)
+    max_position_pct: 200.0   # Legacy check - replaced by max_position_value
+
+  entry:
+    use_market_orders: true
+    min_entry_time: "09:45"   # Wait 15 min after open
+    max_entry_time: "15:00"   # No new entries after 3:00 PM
+
+  # Slippage and commissions (per requirements)
+  slippage:
+    enabled: true
+    percentage: 0.001          # 0.1% slippage (configurable 0.1-0.5%)
+
+  commissions:
+    enabled: true
+    per_share: 0.005           # $0.005 per share (IBKR default)
+
+  exits:
+    partial_1_pct: 0.50       # Sell 50% at 1R (profit = risk)
+    partial_2_pct: 0.25       # Sell 25% at target1 (2R)
+    runner_pct: 0.25          # Hold 25% as runner with trailing stop
+    eod_close_time: "15:55"   # Close all positions 5 min before close
+
+  # Trailing stop for runners (per requirements)
+  trailing_stop:
+    enabled: true             # Per requirements - let winners run with protection
+    type: "percentage"        # "percentage" or "atr"
+    percentage: 0.01          # Trail by 1% (wider than initial 0.5% test)
+    atr_multiplier: 2.0       # Trail by 2x ATR (for atr type)
+    min_profit_to_activate: 0.02  # Activate after 2% profit (let position breathe)
+
+  risk:
+    breakeven_after_partial: true   # Move stop to breakeven after taking partial
+    close_all_by_eod: true         # Flat by end of day
+    stop_at_pivot: false           # Initial stop at pivot level (DISABLED - using ATR stops)
+    use_atr_stops: true            # Use ATR-based stops (Oct 4, 2025)
+    atr_stop_multiplier: 2.0       # Stop = Entry - (2.0 × ATR) for longs
+    atr_stop_period: 20            # Calculate ATR from last 20 bars
+
+    # 7-Minute Rule (PS60) - Exit if no progress after 7 minutes
+    # Changed from 15 to 7 minutes per PS60 methodology (Oct 11, 2025)
+    # Analysis showed 84% of losers hit 15-min rule, PS60 recommends 5-7 minutes
+    fifteen_minute_rule_enabled: true    # Enable stuck position exit
+    fifteen_minute_threshold: 7          # Exit after 7 minutes with no progress (was 15)
+    fifteen_minute_min_gain: 0.001       # Minimum 0.1% gain to avoid exit (must show some progress)
+
+  # Trade confirmation (per requirements - avoid false breakouts)
+  confirmation:
+    enabled: true                   # Enable confirmation logic
+    volume_surge_required: true     # Require volume surge
+    volume_surge_multiplier: 1.2    # Volume must be 1.2x average (reduced from 2.0x - Oct 4, 2025)
+    momentum_candle_required: true  # Require strong momentum candle
+    momentum_candle_size: 1.5       # Candle must be 1.5x average range
+    sustained_break_minutes: 2      # Must hold above pivot for N minutes (configurable)
+
+    # HYBRID STRATEGY: Momentum Breakout + Pullback/Retest (Oct 4, 2025)
+    # Two entry types based on breakout strength:
+    # 1. MOMENTUM: Strong volume + large candle = immediate entry (no pullback needed)
+    # 2. PULLBACK: Weak initial break = wait for pullback/retest
+
+    # Always require 1-min candle close (filters most whipsaws)
+    require_candle_close: true      # Wait for 1-min candle to close above resistance
+    candle_timeframe_seconds: 60    # 60 seconds = 1-minute candles
+
+    # MOMENTUM BREAKOUT thresholds (immediate entry, no pullback)
+    # Updated Oct 7, 2025: Volume-only filter (RSI/MACD removed - too slow for intraday)
+    momentum_volume_threshold: 2.0          # Volume ≥2.0x average = strong momentum
+    momentum_candle_min_pct: 0.000          # DISABLED - no candle size requirement
+    momentum_candle_min_atr: 0.0            # DISABLED - no ATR requirement
+
+    # RSI/MACD Momentum Filters (Oct 7, 2025) - DISABLED (ineffective for intraday)
+    enable_rsi_filter: false                # ❌ DISABLED - 1-hour too slow for intraday breakouts
+    rsi_period: 14                          # RSI calculation period
+    rsi_threshold: 60                       # Minimum RSI (50=bias, 60=strong)
+    rsi_timeframe: '1 hour'                 # 1 hour bars (more reliable than 5-min)
+
+    enable_macd_filter: false               # ❌ DISABLED - 1-hour too slow for intraday breakouts
+    macd_fast: 12                           # MACD fast EMA (hourly standard)
+    macd_slow: 26                           # MACD slow EMA (hourly standard)
+    macd_signal: 9                          # MACD signal EMA (hourly standard)
+    macd_timeframe: '1 hour'                # 1 hour bars (same as RSI)
+
+    # PULLBACK/RETEST thresholds (patient entry for weak initial breaks)
+    require_pullback_retest: true           # Enable pullback logic for weak breaks
+    pullback_distance_pct: 0.003            # Must pullback within 0.3% of pivot
+    max_pullback_bars: 24                   # Max 2 minutes (24 × 5-sec bars) to retest
+    pullback_volume_threshold: 1.2          # Require 1.2x volume on retest
+
+    # SUSTAINED BREAK logic (Oct 5, 2025) - Alternative for slow grind breakouts
+    # Catches PLTR-type setups: weak candle but sustained hold with volume
+    sustained_break_enabled: true           # Enable sustained break detection
+    sustained_break_minutes: 1              # Must hold above/below pivot for 1 minute (reduced from 2 - Oct 9 state machine fix)
+    sustained_break_max_pullback_pct: 0.003 # Allow 0.3% pullback (was 0.1%, too strict for 5-sec bars)
+
+    # ENTRY QUALITY FILTERS (Applied during entry decision)
+    # --------------------------------------------------------------------------
+
+    # RANGE-BASED CHASING FILTER (Oct 4, 2025) - For MOMENTUM entries only
+    # Purpose: Prevent entering momentum breakouts when already at top of range
+    # When: Checked for MOMENTUM entries ONLY (not pullback/sustained)
+    # How: Measures entry position as % of recent 5-minute range
+    # Impact: Winners entered at 36% of range, losers at 81%
+    # Note: Pullback/sustained use room-to-run filter instead
+    enable_entry_position_filter: false     # DISABLED - superseded by room-to-run filter
+    max_entry_position_pct: 70              # Don't enter above 70% of 5-min range
+    entry_position_lookback_bars: 60        # 5 minutes (60 × 5-sec bars)
+
+    # CHOPPY MARKET FILTER (Oct 4, 2025) ⭐ CRITICAL
+    # Purpose: Avoid entering during consolidation/sideways markets (high whipsaw risk)
+    # When: Checked for ALL entry types (momentum, pullback, sustained)
+    # How: Compares recent 5-min range to ATR (volatility measure)
+    # Impact: 61% of losses came from choppy conditions, lost $15,425 in one week
+    # Logic: If range < 0.5× ATR → CHOPPY (block), else TRENDING (allow)
+    # Documentation: See FILTER_DOCUMENTATION.md "Choppy Market Filter"
+    enable_choppy_filter: true              # ENABLED - prevents consolidation entries
+    choppy_atr_multiplier: 0.5              # Recent range must be >0.5× ATR
+    choppy_lookback_bars: 60                # 5 minutes (60 × 5-sec bars)
+
+  # Setup types to trade
+  setup_types:
+    breakout: true                  # Trade breakout entries
+    bounce: false                   # DISABLED (Oct 5, 2025): 98.7% failure rate, requires human discretion per PS60
+    rejection: false                # Trade rejection/fade setups (shorts on failed breakouts)
+
+  # Direction filter
+  enable_shorts: true               # ENABLED - Using same two-scenario stop logic
+  enable_longs: true                # ENABLED
+
+  attempts:
+    max_attempts_per_pivot: 2  # Max 2 tries per pivot (backtest optimal)
+
+filters:
+  # ============================================================================
+  # FILTER CONFIGURATION MATRIX (Oct 6, 2025 - Enhanced Scoring Update)
+  # ============================================================================
+  # Each filter can be independently enabled/disabled for testing and tuning.
+  # Filters are applied in order during entry decision process.
+  # See FILTER_DOCUMENTATION.md for detailed explanation of each filter.
+  # ============================================================================
+
+  # SCANNER-BASED FILTERS (Pre-entry screening)
+  # ----------------------------------------------------------------------------
+  # LEGACY FILTERS (Used when enhanced scoring CSV not available)
+  min_score: 0                 # Minimum scanner score (0-100, 0 = disabled)
+  min_risk_reward: 1.0         # Minimum R/R ratio from scanner (per trading plan)
+  max_dist_to_pivot: 100.0     # Max distance to pivot % (100 = disabled)
+
+  # ENHANCED SCORING FILTERS (Oct 6, 2025) ⭐ NEW
+  # ----------------------------------------------------------------------------
+  # Based on validation showing 70% accuracy in top 10 ranked setups
+  # These filters apply when using enhanced scoring CSV (rescored_YYYYMMDD.csv)
+
+  # Enhanced score thresholds
+  min_enhanced_score: 85       # Minimum enhanced score (0-100+)
+                               # 85+ captures top-tier setups
+                               # TIER 1 stocks typically score 100
+                               # TIER 2 stocks typically score 85-100
+
+  # Pivot width filter (KEY INSIGHT: tight pivots = winners)
+  # Winners averaged 2.51% pivot width vs 4.92% for false breakouts
+  min_pivot_width_pct: 0.0     # Minimum pivot width % (0 = no min)
+  max_pivot_width_pct: 5.0     # Maximum pivot width %
+                               # 5.0% = avoid very wide pivots (high false breakout risk)
+                               # Per validation: >5% = likely false breakout
+
+  # Test count filter (KEY INSIGHT: heavily tested = higher success)
+  # Tested ≥10x = 80% success rate, <5x = 47% success rate
+  min_test_count: 5            # Minimum number of times resistance/support tested
+                               # 5+ = 58% success rate
+                               # 10+ = 80% success rate (TIER 1)
+
+  # Tier-based filtering
+  tier_filter:                 # Which tiers to trade
+    - 'TIER 1'                 # Always trade (70-80% expected success)
+    - 'TIER 2'                 # Trade with normal position size (50-60% success)
+    - 'TIER 3'                 # Trade selectively (40-50% success)
+    # 'AVOID' tier is never traded (blacklisted or too wide pivots)
+
+  # GAP FILTER (Overnight gap detection)
+  # ----------------------------------------------------------------------------
+  # Purpose: Skip trades where overnight gaps ate up the move
+  # When: Checked at market open before monitoring begins
+  # Impact: Prevents entering setups with insufficient room after gaps
+  # Documentation: See CLAUDE.md "Gap Handling" section
+  enable_gap_filter: false     # DISABLED for testing
+  max_gap_through_pivot: 1.0   # Max 1% gap through pivot (small gap OK)
+  min_room_to_target: 3.0      # Min 3% room to target after gap
+
+  # ROOM-TO-RUN FILTER (Oct 5, 2025) ⭐ NEW
+  # ----------------------------------------------------------------------------
+  # Purpose: Ensure sufficient room to target at entry time
+  # When: Checked for pullback/retest and sustained break entries ONLY
+  #       NOT checked for momentum entries (immediate entries don't need this)
+  # How: Calculates (target - entry_price) / entry_price as percentage
+  # Impact: Blocks marginal setups where confirmation delay ate the move
+  # Example: PLTR Oct 1 had 0.61% room vs 1.5% minimum → BLOCKED
+  # Documentation: See FILTER_DOCUMENTATION.md "Room-to-Run Filter"
+  enable_room_to_run_filter: true
+  min_room_to_target_pct: 1.5  # Require 1.5% minimum room to target
+                               # Entry $183, Target $184.14 = 0.6% → BLOCK
+                               # Entry $100, Target $103 = 3.0% → ALLOW
+
+  # SYMBOL FILTERS (Blacklist/Whitelist)
+  # ----------------------------------------------------------------------------
+  # Purpose: Avoid specific symbols or categories with poor characteristics
+  # When: Checked during watchlist filtering
+  # Impact: Completely removes symbols from consideration
+  avoid_index_shorts: true     # Skip SPY/QQQ/DIA shorts (saved $700/day in backtest)
+  avoid_symbols:               # Complete blacklist
+    - "SPY"    # Index ETFs - too choppy, whipsaw frequently
+    - "QQQ"
+    - "DIA"
+    - "IWM"
+
+ibkr:
+  host: "127.0.0.1"
+  port: 7497                   # Paper trading port (7496 for live)
+  client_id: 2002              # Changed from 2001 (old session still connected)
+
+scanner:
+  output_dir: "../stockscanner/output/"
+  results_file: "scanner_results_20251002.json"
+  enhanced_scoring_dir: "../scanner_validation/"  # Directory with rescored_YYYYMMDD.csv files
+
+logging:
+  log_dir: "./logs/"
+  log_level: "DEBUG"          # DEBUG, INFO, WARNING, ERROR (changed to DEBUG for full visibility - Oct 10, 2025)
+  log_trades: true
+  log_positions: true
+  save_daily_report: true
+
+notifications:
+  enabled: false              # Email/SMS notifications
+  on_trade: false
+  on_daily_close: true
+  on_error: true
+
+# Development/Testing
+paper_trading: true          # MUST be true for initial testing
+dry_run: false               # Set to true to monitor without trading

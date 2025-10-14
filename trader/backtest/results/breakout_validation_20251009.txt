@@ -1,0 +1,791 @@
+BREAKOUT VALIDATION - DETAILED REPORT
+====================================================================================================
+
+
+TRADE #1: BB LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $4.79
+Breakout: 2025-10-09 09:33:00-04:00 @ $4.82
+Follow-through: 1.88%
+Our Entry: 2025-10-09T14:14:45-04:00 @ $4.81
+Entry Delay: 282 bars after breakout
+Entry Position: 27.6% of range
+Exit: 2025-10-09T18:28:25+00:00 @ $4.78
+P&L: $-44.39
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.46% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 342 failed attempts
+   Reasons: No breakout detected, No breakout detected, No breakout detected, No breakout detected, No breakout detected
+
+Log Data:
+  Entries attempted: 1
+    Bar 3418: LONG @ $4.81 (attempt 1)
+
+
+TRADE #2: COIN LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $390.49
+Breakout: 2025-10-09 09:58:00-04:00 @ $391.01
+Follow-through: 0.19%
+Our Entry: 2025-10-09T10:00:20-04:00 @ $390.90
+Entry Delay: 3 bars after breakout
+Entry Position: 54.0% of range
+Exit: 2025-10-09T14:00:25+00:00 @ $389.46
+P&L: $-1339.26
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.69% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 34 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 365: LONG @ $390.51 (attempt 1)
+    Bar 421: LONG @ $391.74 (attempt 2)
+
+
+TRADE #3: COIN LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $390.49
+Breakout: 2025-10-09 09:58:00-04:00 @ $391.01
+Follow-through: 0.19%
+Our Entry: 2025-10-09T10:05:00-04:00 @ $392.13
+Entry Delay: 7 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T14:08:35+00:00 @ $389.14
+P&L: $-2944.55
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.78% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 34 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 365: LONG @ $390.51 (attempt 1)
+    Bar 421: LONG @ $391.74 (attempt 2)
+
+
+TRADE #4: OXY SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $44.66
+Breakout: 2025-10-09 11:00:00-04:00 @ $44.64
+Follow-through: 0.09%
+Our Entry: 2025-10-09T14:07:00-04:00 @ $44.61
+Entry Delay: 187 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T19:54:10+00:00 @ $44.70
+P&L: $-19.26
+Exit Reason: TRAIL_STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+⚠️  REVERSAL: Price moved 0.49% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 27 failed attempts
+   Reasons: No breakout detected, Waiting for pullback or sustained break (weak: 1.3x vol, 0.1% candle), Insufficient room to target: 0.94% < 1.5% minimum, Insufficient room to target: 0.94% < 1.5% minimum, Insufficient room to target: 0.87% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 1
+    Bar 3325: SHORT @ $44.65 (attempt 1)
+
+
+TRADE #5: PYPL SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $75.27
+Breakout: 2025-10-09 11:09:00-04:00 @ $75.26
+Follow-through: 0.15%
+Our Entry: 2025-10-09T13:06:00-04:00 @ $75.15
+Entry Delay: 117 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T17:06:25+00:00 @ $75.43
+P&L: $-285.79
+Exit Reason: STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 261 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 2593: SHORT @ $75.23 (attempt 1)
+    Bar 2600: SHORT @ $75.25 (attempt 2)
+
+
+TRADE #6: PYPL SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $75.27
+Breakout: 2025-10-09 11:09:00-04:00 @ $75.26
+Follow-through: 0.15%
+Our Entry: 2025-10-09T13:06:35-04:00 @ $75.17
+Entry Delay: 118 bars after breakout
+Entry Position: 86.6% of range
+Exit: 2025-10-09T17:06:55+00:00 @ $75.42
+P&L: $-255.79
+Exit Reason: STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 261 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 2593: SHORT @ $75.23 (attempt 1)
+    Bar 2600: SHORT @ $75.25 (attempt 2)
+
+
+TRADE #7: ROKU SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $99.75
+Breakout: 2025-10-09 10:22:00-04:00 @ $99.73
+Follow-through: 0.03%
+Our Entry: 2025-10-09T10:45:00-04:00 @ $99.37
+Entry Delay: 23 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T14:49:20+00:00 @ $99.96
+P&L: $-598.99
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.86% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 820 failed attempts
+   Reasons: No breakout detected, 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 901: SHORT @ $99.47 (attempt 1)
+    Bar 1897: SHORT @ $99.72 (attempt 2)
+
+
+TRADE #8: ROKU SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $99.75
+Breakout: 2025-10-09 10:22:00-04:00 @ $99.73
+Follow-through: 0.03%
+Our Entry: 2025-10-09T12:08:00-04:00 @ $99.62
+Entry Delay: 106 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T16:19:50+00:00 @ $100.02
+P&L: $-409.36
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.78% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 820 failed attempts
+   Reasons: No breakout detected, 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 901: SHORT @ $99.47 (attempt 1)
+    Bar 1897: SHORT @ $99.72 (attempt 2)
+
+
+TRADE #9: AVGO LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $347.10
+Breakout: 2025-10-09 11:05:00-04:00 @ $347.26
+Follow-through: 0.06%
+Our Entry: 2025-10-09T11:06:05-04:00 @ $347.51
+Entry Delay: 2 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T15:06:20+00:00 @ $346.41
+P&L: $-1111.36
+Exit Reason: STOP
+
+CLASSIFICATION: FALSE_IMMEDIATE
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 3 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 1154: LONG @ $347.16 (attempt 1)
+    Bar 1158: LONG @ $347.24 (attempt 2)
+
+
+TRADE #10: AVGO LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $347.10
+Breakout: 2025-10-09 11:05:00-04:00 @ $347.26
+Follow-through: 0.06%
+Our Entry: 2025-10-09T11:06:25-04:00 @ $347.59
+Entry Delay: 2 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T15:06:45+00:00 @ $346.37
+P&L: $-1231.36
+Exit Reason: STOP
+
+CLASSIFICATION: FALSE_IMMEDIATE
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 3 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 1154: LONG @ $347.16 (attempt 1)
+    Bar 1158: LONG @ $347.24 (attempt 2)
+
+
+TRADE #11: TSLA SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $429.28
+Breakout: 2025-10-09 09:41:00-04:00 @ $428.59
+Follow-through: 0.41%
+Our Entry: 2025-10-09T10:42:00-04:00 @ $427.82
+Entry Delay: 61 bars after breakout
+Entry Position: 82.4% of range
+Exit: 2025-10-09T14:50:45+00:00 @ $430.24
+P&L: $-1781.43
+Exit Reason: STOP
+
+CLASSIFICATION: FALSE_AFTER_MOVE
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 179 failed attempts
+   Reasons: 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 865: SHORT @ $428.25 (attempt 1)
+    Bar 2929: SHORT @ $429.15 (attempt 2)
+
+
+TRADE #12: TSLA SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $429.28
+Breakout: 2025-10-09 09:41:00-04:00 @ $428.59
+Follow-through: 0.41%
+Our Entry: 2025-10-09T13:34:00-04:00 @ $428.72
+Entry Delay: 233 bars after breakout
+Entry Position: 31.6% of range
+Exit: 2025-10-09T17:37:50+00:00 @ $429.61
+P&L: $-12.90
+Exit Reason: TRAIL_STOP
+
+CLASSIFICATION: FALSE_AFTER_MOVE
+
+⚠️  CONFIRMATION FAILURES: 179 failed attempts
+   Reasons: 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 865: SHORT @ $428.25 (attempt 1)
+    Bar 2929: SHORT @ $429.15 (attempt 2)
+
+
+TRADE #13: QCOM SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $163.88
+Breakout: 2025-10-09 11:59:00-04:00 @ $163.81
+Follow-through: 0.16%
+Our Entry: 2025-10-09T12:00:00-04:00 @ $163.62
+Entry Delay: 1 bars after breakout
+Entry Position: 97.7% of range
+Exit: 2025-10-09T16:00:40+00:00 @ $164.23
+P&L: $-621.58
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.61% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 7 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 1801: SHORT @ $163.78 (attempt 1)
+    Bar 1814: SHORT @ $163.86 (attempt 2)
+
+
+TRADE #14: QCOM SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $163.88
+Breakout: 2025-10-09 11:59:00-04:00 @ $163.81
+Follow-through: 0.16%
+Our Entry: 2025-10-09T12:01:05-04:00 @ $163.70
+Entry Delay: 3 bars after breakout
+Entry Position: 68.1% of range
+Exit: 2025-10-09T16:05:40+00:00 @ $164.23
+P&L: $-541.66
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.61% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 7 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 1801: SHORT @ $163.78 (attempt 1)
+    Bar 1814: SHORT @ $163.86 (attempt 2)
+
+
+TRADE #15: BA SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $221.47
+Breakout: 2025-10-09 10:19:00-04:00 @ $220.90
+Follow-through: 0.75%
+Our Entry: 2025-10-09T10:21:40-04:00 @ $219.92
+Entry Delay: 3 bars after breakout
+Entry Position: 93.4% of range
+Exit: 2025-10-09T19:59:55+00:00 @ $216.04
+P&L: $1544.86
+Exit Reason: EOD
+
+CLASSIFICATION: FALSE_AFTER_MOVE
+
+⚠️  CONFIRMATION FAILURES: 35 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, 1-min candle closed above support (failed), 1-min candle closed above support (failed), 1-min candle closed above support (failed)
+
+Log Data:
+  Entries attempted: 1
+    Bar 621: SHORT @ $220.14 (attempt 1)
+
+
+TRADE #16: PLTR LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $184.67
+Breakout: 2025-10-09 14:46:00-04:00 @ $184.99
+Follow-through: 0.53%
+Our Entry: 2025-10-09T14:47:00-04:00 @ $185.37
+Entry Delay: 1 bars after breakout
+Entry Position: 71.7% of range
+Exit: 2025-10-09T19:02:00+00:00 @ $185.46
+P&L: $84.82
+Exit Reason: 15MIN_RULE
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.16% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 10 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 1
+    Bar 3805: LONG @ $185.18 (attempt 1)
+
+
+TRADE #17: META LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $727.16
+Breakout: 2025-10-09 12:03:00-04:00 @ $727.23
+Follow-through: 0.17%
+Our Entry: 2025-10-09T13:41:00-04:00 @ $728.38
+Entry Delay: 98 bars after breakout
+Entry Position: 98.2% of range
+Exit: 2025-10-09T17:56:00+00:00 @ $728.78
+P&L: $392.35
+Exit Reason: 15MIN_RULE
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.65% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 1045 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, No breakout detected, Insufficient room to target: 1.27% < 1.5% minimum, Insufficient room to target: 1.28% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 1
+    Bar 3013: LONG @ $727.65 (attempt 1)
+
+
+TRADE #18: C SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $96.59
+Breakout: 2025-10-09 09:47:00-04:00 @ $96.57
+Follow-through: 0.65%
+Our Entry: 2025-10-09T09:50:50-04:00 @ $96.19
+Entry Delay: 4 bars after breakout
+Entry Position: 62.9% of range
+Exit: 2025-10-09T14:06:40+00:00 @ $96.10
+P&L: $83.71
+Exit Reason: 15MIN_RULE
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.67% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 3555 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Insufficient room to target: 0.78% < 1.5% minimum, Insufficient room to target: 0.78% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 1
+    Bar 251: SHORT @ $96.29 (attempt 1)
+
+
+TRADE #19: GS SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $774.34
+Breakout: 2025-10-09 10:15:00-04:00 @ $774.21
+Follow-through: 0.23%
+Our Entry: 2025-10-09T10:22:55-04:00 @ $771.79
+Entry Delay: 8 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T14:37:55+00:00 @ $774.22
+P&L: $-2442.56
+Exit Reason: 15MIN_RULE
+
+CLASSIFICATION: FALSE_AFTER_MOVE
+⚠️  REVERSAL: Price moved 0.32% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 292 failed attempts
+   Reasons: No breakout detected, No breakout detected, No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 1
+    Bar 636: SHORT @ $772.56 (attempt 1)
+
+
+TRADE #20: SOFI LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $28.24
+Breakout: 2025-10-09 11:26:00-04:00 @ $28.34
+Follow-through: 0.35%
+Our Entry: 2025-10-09T11:27:00-04:00 @ $28.36
+Entry Delay: 1 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T15:28:40+00:00 @ $28.18
+P&L: $-184.81
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.80% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 15 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 1405: LONG @ $28.33 (attempt 1)
+    Bar 1426: LONG @ $28.25 (attempt 2)
+
+
+TRADE #21: SOFI LONG
+----------------------------------------------------------------------------------------------------
+Pivot: $28.24
+Breakout: 2025-10-09 11:26:00-04:00 @ $28.34
+Follow-through: 0.35%
+Our Entry: 2025-10-09T11:28:45-04:00 @ $28.28
+Entry Delay: 3 bars after breakout
+Entry Position: 38.2% of range
+Exit: 2025-10-09T15:28:50+00:00 @ $28.17
+P&L: $-114.71
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.83% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 15 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed), 1-min candle closed below resistance (failed)
+
+Log Data:
+  Entries attempted: 2
+    Bar 1405: LONG @ $28.33 (attempt 1)
+    Bar 1426: LONG @ $28.25 (attempt 2)
+
+
+TRADE #22: LYFT SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $20.78
+Breakout: 2025-10-09 09:45:00-04:00 @ $20.76
+Follow-through: 0.63%
+Our Entry: 2025-10-09T09:46:10-04:00 @ $20.75
+Entry Delay: 2 bars after breakout
+Entry Position: 23.7% of range
+Exit: 2025-10-09T13:49:00+00:00 @ $20.80
+P&L: $-6.53
+Exit Reason: TRAIL_STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 2.17% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 12 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 195: SHORT @ $20.77 (attempt 1)
+    Bar 230: SHORT @ $20.71 (attempt 2)
+
+
+TRADE #23: LYFT SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $20.78
+Breakout: 2025-10-09 09:45:00-04:00 @ $20.76
+Follow-through: 0.63%
+Our Entry: 2025-10-09T09:49:05-04:00 @ $20.69
+Entry Delay: 5 bars after breakout
+Entry Position: 69.8% of range
+Exit: 2025-10-09T13:52:10+00:00 @ $20.84
+P&L: $-162.31
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 2.36% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 12 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 195: SHORT @ $20.77 (attempt 1)
+    Bar 230: SHORT @ $20.71 (attempt 2)
+
+
+TRADE #24: CVX SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $152.84
+Breakout: 2025-10-09 10:20:00-04:00 @ $152.81
+Follow-through: 0.04%
+Our Entry: 2025-10-09T10:28:25-04:00 @ $152.64
+Entry Delay: 9 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T14:48:10+00:00 @ $152.96
+P&L: $-55.44
+Exit Reason: TRAIL_STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+⚠️  REVERSAL: Price moved 0.34% in profit direction after stop!
+
+⚠️  CONFIRMATION FAILURES: 1036 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for pullback or sustained break (weak: 1.2x vol, 0.2% candle), Insufficient room to target: 0.80% < 1.5% minimum, Insufficient room to target: 0.80% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 2
+    Bar 702: SHORT @ $152.79 (attempt 1)
+    Bar 2017: SHORT @ $152.82 (attempt 2)
+
+
+TRADE #25: CVX SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $152.84
+Breakout: 2025-10-09 10:20:00-04:00 @ $152.81
+Follow-through: 0.04%
+Our Entry: 2025-10-09T12:18:00-04:00 @ $152.67
+Entry Delay: 118 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T16:18:10+00:00 @ $153.15
+P&L: $-488.50
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 0.65% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 1036 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for pullback or sustained break (weak: 1.2x vol, 0.2% candle), Insufficient room to target: 0.80% < 1.5% minimum, Insufficient room to target: 0.80% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 2
+    Bar 702: SHORT @ $152.79 (attempt 1)
+    Bar 2017: SHORT @ $152.82 (attempt 2)
+
+
+TRADE #26: BAC SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $49.78
+Breakout: 2025-10-09 09:51:00-04:00 @ $49.77
+Follow-through: 0.12%
+Our Entry: 2025-10-09T11:46:00-04:00 @ $49.71
+Entry Delay: 115 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T15:47:30+00:00 @ $49.88
+P&L: $-179.32
+Exit Reason: STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+⚠️  REVERSAL: Price moved 0.44% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 473 failed attempts
+   Reasons: No breakout detected, Insufficient room to target: 0.68% < 1.5% minimum, Insufficient room to target: 0.70% < 1.5% minimum, Insufficient room to target: 0.70% < 1.5% minimum, Insufficient room to target: 0.72% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 2
+    Bar 1633: SHORT @ $49.76 (attempt 1)
+    Bar 1654: SHORT @ $49.76 (attempt 2)
+
+
+TRADE #27: BAC SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $49.78
+Breakout: 2025-10-09 09:51:00-04:00 @ $49.77
+Follow-through: 0.12%
+Our Entry: 2025-10-09T11:47:45-04:00 @ $49.71
+Entry Delay: 117 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T15:48:10+00:00 @ $49.88
+P&L: $-179.32
+Exit Reason: STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+⚠️  REVERSAL: Price moved 0.44% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 473 failed attempts
+   Reasons: No breakout detected, Insufficient room to target: 0.68% < 1.5% minimum, Insufficient room to target: 0.70% < 1.5% minimum, Insufficient room to target: 0.70% < 1.5% minimum, Insufficient room to target: 0.72% < 1.5% minimum
+
+Log Data:
+  Entries attempted: 2
+    Bar 1633: SHORT @ $49.76 (attempt 1)
+    Bar 1654: SHORT @ $49.76 (attempt 2)
+
+
+TRADE #28: MS SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $154.02
+Breakout: 2025-10-09 10:23:00-04:00 @ $153.96
+Follow-through: 0.12%
+Our Entry: 2025-10-09T10:45:00-04:00 @ $153.81
+Entry Delay: 22 bars after breakout
+Entry Position: 100.0% of range
+Exit: 2025-10-09T14:46:10+00:00 @ $154.43
+P&L: $-632.20
+Exit Reason: STOP
+
+CLASSIFICATION: TRUE_BREAKOUT
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 80 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 1
+    Bar 901: SHORT @ $153.96 (attempt 1)
+
+
+TRADE #29: JD SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $34.24
+Breakout: 2025-10-09 09:47:00-04:00 @ $34.18
+Follow-through: 0.38%
+Our Entry: 2025-10-09T09:48:00-04:00 @ $34.19
+Entry Delay: 1 bars after breakout
+Entry Position: 41.7% of range
+Exit: 2025-10-09T13:48:10+00:00 @ $34.31
+P&L: $-132.70
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.07% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 8 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 217: SHORT @ $34.22 (attempt 1)
+    Bar 225: SHORT @ $34.23 (attempt 2)
+
+
+TRADE #30: JD SHORT
+----------------------------------------------------------------------------------------------------
+Pivot: $34.24
+Breakout: 2025-10-09 09:47:00-04:00 @ $34.18
+Follow-through: 0.38%
+Our Entry: 2025-10-09T09:48:40-04:00 @ $34.20
+Entry Delay: 2 bars after breakout
+Entry Position: 34.0% of range
+Exit: 2025-10-09T13:49:00+00:00 @ $34.31
+P&L: $-122.71
+Exit Reason: STOP
+
+CLASSIFICATION: WHIPSAW
+⚠️  REVERSAL: Price moved 1.07% in profit direction after stop!
+
+Whipsaw Test:
+  +0.5% wider: STOPPED
+  +1.0% wider: STOPPED
+
+⚠️  CONFIRMATION FAILURES: 8 failed attempts
+   Reasons: No breakout detected, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close, Waiting for 1-min candle close
+
+Log Data:
+  Entries attempted: 2
+    Bar 217: SHORT @ $34.22 (attempt 1)
+    Bar 225: SHORT @ $34.23 (attempt 2)
+

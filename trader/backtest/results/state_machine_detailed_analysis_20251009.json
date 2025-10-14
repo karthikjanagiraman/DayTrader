@@ -1,0 +1,1158 @@
+{
+  "summary": {
+    "total_symbols": 36,
+    "entered": 2,
+    "stuck_pullback": 23,
+    "stuck_tracking": 9,
+    "never_broke": 2,
+    "total_rejections": 72551
+  },
+  "rejection_counts": {
+    "Waiting for 1-min candle close": 32629,
+    "Waiting for bounce from pullback": 3720,
+    "Breakout detected, waiting for candle close": 3536,
+    "Tracking weak breakout (held 1/12 bars)": 2330,
+    "Tracking weak breakout (held 2/12 bars)": 2302,
+    "Tracking weak breakout (held 3/12 bars)": 2289,
+    "Tracking weak breakout (held 4/12 bars)": 2278,
+    "Tracking weak breakout (held 5/12 bars)": 2274,
+    "Tracking weak breakout (held 6/12 bars)": 2265,
+    "Tracking weak breakout (held 7/12 bars)": 2257,
+    "Tracking weak breakout (held 8/12 bars)": 2248,
+    "Tracking weak breakout (held 9/12 bars)": 2238,
+    "Tracking weak breakout (held 10/12 bars)": 2234,
+    "Tracking weak breakout (held 11/12 bars)": 2231,
+    "Pullback detected, waiting for bounce": 999,
+    "Weak breakout, tracking for pullback/sustained (0.7x vol)": 320,
+    "Weak breakout, tracking for pullback/sustained (0.6x vol)": 311,
+    "Weak breakout, tracking for pullback/sustained (0.5x vol)": 295,
+    "Weak breakout, tracking for pullback/sustained (0.8x vol)": 292,
+    "Weak breakout, tracking for pullback/sustained (0.9x vol)": 243,
+    "Weak breakout, tracking for pullback/sustained (0.4x vol)": 233,
+    "Weak breakout, tracking for pullback/sustained (1.0x vol)": 215,
+    "Weak breakout, tracking for pullback/sustained (1.1x vol)": 183,
+    "Weak breakout, tracking for pullback/sustained (1.2x vol)": 168,
+    "Weak breakout, tracking for pullback/sustained (0.3x vol)": 166,
+    "Weak breakout, tracking for pullback/sustained (1.3x vol)": 148,
+    "Weak breakout, tracking for pullback/sustained (0.2x vol)": 128,
+    "Weak breakout, tracking for pullback/sustained (1.4x vol)": 117,
+    "Weak breakout, tracking for pullback/sustained (1.5x vol)": 75,
+    "Weak breakout, tracking for pullback/sustained (1.8x vol)": 71,
+    "Weak breakout, tracking for pullback/sustained (1.7x vol)": 63,
+    "Weak breakout, tracking for pullback/sustained (1.6x vol)": 61,
+    "Weak breakout, tracking for pullback/sustained (0.1x vol)": 61,
+    "Insufficient room to target: 0.64% < 1.5% minimum": 56,
+    "Insufficient room to target: 0.54% < 1.5% minimum": 54,
+    "Weak breakout, tracking for pullback/sustained (1.9x vol)": 44,
+    "Insufficient room to target: 1.03% < 1.5% minimum": 42,
+    "Insufficient room to target: 1.08% < 1.5% minimum": 36,
+    "Insufficient room to target: 1.05% < 1.5% minimum": 35,
+    "Insufficient room to target: -0.80% < 1.5% minimum": 34,
+    "Insufficient room to target: 0.62% < 1.5% minimum": 34,
+    "Insufficient room to target: 0.67% < 1.5% minimum": 34,
+    "Insufficient room to target: 0.72% < 1.5% minimum": 33,
+    "Insufficient room to target: 0.56% < 1.5% minimum": 33,
+    "Insufficient room to target: 0.69% < 1.5% minimum": 30,
+    "Insufficient room to target: -0.93% < 1.5% minimum": 29,
+    "Insufficient room to target: 0.46% < 1.5% minimum": 29,
+    "Insufficient room to target: 0.73% < 1.5% minimum": 29,
+    "Insufficient room to target: 0.19% < 1.5% minimum": 29,
+    "Insufficient room to target: 0.25% < 1.5% minimum": 29,
+    "Insufficient room to target: 1.04% < 1.5% minimum": 27,
+    "Insufficient room to target: -0.31% < 1.5% minimum": 27,
+    "Insufficient room to target: 0.68% < 1.5% minimum": 27,
+    "Insufficient room to target: 0.16% < 1.5% minimum": 27,
+    "Insufficient room to target: 0.22% < 1.5% minimum": 26,
+    "Insufficient room to target: 0.85% < 1.5% minimum": 25,
+    "Weak breakout, tracking for pullback/sustained (2.0x vol)": 24,
+    "Insufficient room to target: 0.10% < 1.5% minimum": 24,
+    "Insufficient room to target: 0.60% < 1.5% minimum": 24,
+    "Insufficient room to target: -1.06% < 1.5% minimum": 22,
+    "Insufficient room to target: -1.20% < 1.5% minimum": 22,
+    "Insufficient room to target: 0.66% < 1.5% minimum": 22,
+    "Insufficient room to target: 0.41% < 1.5% minimum": 21,
+    "Insufficient room to target: -0.54% < 1.5% minimum": 21,
+    "Insufficient room to target: -0.29% < 1.5% minimum": 21,
+    "Insufficient room to target: 0.38% < 1.5% minimum": 21,
+    "Insufficient room to target: 1.00% < 1.5% minimum": 21,
+    "Insufficient room to target: 0.76% < 1.5% minimum": 20,
+    "Insufficient room to target: 0.31% < 1.5% minimum": 20,
+    "Insufficient room to target: -0.13% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.63% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.58% < 1.5% minimum": 19,
+    "Insufficient room to target: -1.09% < 1.5% minimum": 19,
+    "Insufficient room to target: -0.39% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.49% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.32% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.13% < 1.5% minimum": 19,
+    "Insufficient room to target: 1.20% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.71% < 1.5% minimum": 19,
+    "Insufficient room to target: 0.70% < 1.5% minimum": 18,
+    "Insufficient room to target: 0.00% < 1.5% minimum": 18,
+    "Insufficient room to target: 0.40% < 1.5% minimum": 18,
+    "Insufficient room to target: -0.22% < 1.5% minimum": 18,
+    "Insufficient room to target: -0.28% < 1.5% minimum": 18,
+    "Insufficient room to target: -1.33% < 1.5% minimum": 17,
+    "Weak breakout, tracking for pullback/sustained (0.0x vol)": 17,
+    "Insufficient room to target: 0.65% < 1.5% minimum": 17,
+    "Insufficient room to target: -0.47% < 1.5% minimum": 17,
+    "Insufficient room to target: 0.88% < 1.5% minimum": 17,
+    "Insufficient room to target: 0.55% < 1.5% minimum": 17,
+    "Insufficient room to target: -0.19% < 1.5% minimum": 17,
+    "Insufficient room to target: 0.42% < 1.5% minimum": 17,
+    "Insufficient room to target: 0.28% < 1.5% minimum": 17,
+    "Insufficient room to target: -4.97% < 1.5% minimum": 16,
+    "Insufficient room to target: -0.59% < 1.5% minimum": 16,
+    "Insufficient room to target: 0.23% < 1.5% minimum": 16,
+    "Insufficient room to target: -0.06% < 1.5% minimum": 16,
+    "Insufficient room to target: 1.11% < 1.5% minimum": 16,
+    "Insufficient room to target: -0.62% < 1.5% minimum": 15,
+    "Insufficient room to target: 0.80% < 1.5% minimum": 15,
+    "Insufficient room to target: 0.57% < 1.5% minimum": 15,
+    "Insufficient room to target: 0.39% < 1.5% minimum": 15,
+    "Insufficient room to target: -0.25% < 1.5% minimum": 15,
+    "Insufficient room to target: 0.34% < 1.5% minimum": 15,
+    "Insufficient room to target: -0.92% < 1.5% minimum": 14,
+    "Insufficient room to target: -0.32% < 1.5% minimum": 14,
+    "Insufficient room to target: -0.35% < 1.5% minimum": 14,
+    "Insufficient room to target: 0.47% < 1.5% minimum": 14,
+    "Insufficient room to target: 0.33% < 1.5% minimum": 14,
+    "Insufficient room to target: -0.33% < 1.5% minimum": 14,
+    "Insufficient room to target: 0.75% < 1.5% minimum": 13,
+    "Insufficient room to target: -0.46% < 1.5% minimum": 13,
+    "Insufficient room to target: 0.92% < 1.5% minimum": 13,
+    "Insufficient room to target: -0.15% < 1.5% minimum": 13,
+    "Insufficient room to target: 0.78% < 1.5% minimum": 13,
+    "Insufficient room to target: 0.82% < 1.5% minimum": 13,
+    "Insufficient room to target: 0.14% < 1.5% minimum": 13,
+    "Insufficient room to target: -2.47% < 1.5% minimum": 13,
+    "Insufficient room to target: 1.14% < 1.5% minimum": 13,
+    "Insufficient room to target: -0.53% < 1.5% minimum": 12,
+    "Insufficient room to target: -1.60% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.61% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.74% < 1.5% minimum": 12,
+    "Insufficient room to target: -4.24% < 1.5% minimum": 12,
+    "Insufficient room to target: -0.94% < 1.5% minimum": 12,
+    "Insufficient room to target: -0.71% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.81% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.77% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.53% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.20% < 1.5% minimum": 12,
+    "Insufficient room to target: -0.16% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.59% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.48% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.52% < 1.5% minimum": 12,
+    "Insufficient room to target: 0.96% < 1.5% minimum": 12,
+    "Insufficient room to target: -2.15% < 1.5% minimum": 11,
+    "Insufficient room to target: 0.79% < 1.5% minimum": 11,
+    "Insufficient room to target: -4.28% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.30% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.70% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.50% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.61% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.56% < 1.5% minimum": 11,
+    "Insufficient room to target: 0.50% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.20% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.21% < 1.5% minimum": 11,
+    "Insufficient room to target: 0.30% < 1.5% minimum": 11,
+    "Insufficient room to target: -1.78% < 1.5% minimum": 11,
+    "Insufficient room to target: -2.40% < 1.5% minimum": 11,
+    "Insufficient room to target: 1.35% < 1.5% minimum": 11,
+    "Insufficient room to target: -0.66% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.40% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.26% < 1.5% minimum": 10,
+    "Insufficient room to target: -1.74% < 1.5% minimum": 10,
+    "Insufficient room to target: -4.15% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.75% < 1.5% minimum": 10,
+    "Insufficient room to target: -1.04% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.63% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.38% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.86% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.87% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.51% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.44% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.35% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.29% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.24% < 1.5% minimum": 10,
+    "Insufficient room to target: 0.27% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.84% < 1.5% minimum": 10,
+    "Insufficient room to target: -0.10% < 1.5% minimum": 10,
+    "Insufficient room to target: -1.47% < 1.5% minimum": 9,
+    "Insufficient room to target: -2.29% < 1.5% minimum": 9,
+    "Insufficient room to target: -2.43% < 1.5% minimum": 9,
+    "Insufficient room to target: -4.88% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.83% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.77% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.64% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.52% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.58% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.57% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.15% < 1.5% minimum": 9,
+    "Insufficient room to target: -0.27% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.43% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.36% < 1.5% minimum": 9,
+    "Insufficient room to target: 1.30% < 1.5% minimum": 9,
+    "Insufficient room to target: 1.19% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.09% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.26% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.06% < 1.5% minimum": 9,
+    "Insufficient room to target: 1.45% < 1.5% minimum": 9,
+    "Insufficient room to target: 0.94% < 1.5% minimum": 8,
+    "Insufficient room to target: -4.79% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.60% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.99% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.86% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.65% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.44% < 1.5% minimum": 8,
+    "Insufficient room to target: 0.02% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.34% < 1.5% minimum": 8,
+    "Insufficient room to target: 0.45% < 1.5% minimum": 8,
+    "Insufficient room to target: -2.25% < 1.5% minimum": 8,
+    "Insufficient room to target: -0.24% < 1.5% minimum": 8,
+    "Insufficient room to target: 0.18% < 1.5% minimum": 8,
+    "Insufficient room to target: 1.09% < 1.5% minimum": 8,
+    "Insufficient room to target: -5.06% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.69% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.48% < 1.5% minimum": 7,
+    "Insufficient room to target: -1.05% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.97% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.79% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.49% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.37% < 1.5% minimum": 7,
+    "Insufficient room to target: 0.84% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.88% < 1.5% minimum": 7,
+    "Insufficient room to target: -2.34% < 1.5% minimum": 7,
+    "Insufficient room to target: 1.16% < 1.5% minimum": 7,
+    "Insufficient room to target: -2.36% < 1.5% minimum": 7,
+    "Insufficient room to target: -2.35% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.87% < 1.5% minimum": 7,
+    "Insufficient room to target: 0.17% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.04% < 1.5% minimum": 7,
+    "Insufficient room to target: 0.07% < 1.5% minimum": 7,
+    "Insufficient room to target: -0.03% < 1.5% minimum": 7,
+    "Insufficient room to target: 0.03% < 1.5% minimum": 7,
+    "Insufficient room to target: 0.12% < 1.5% minimum": 7,
+    "Insufficient room to target: -4.74% < 1.5% minimum": 6,
+    "Insufficient room to target: -4.83% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.89% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.51% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.67% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.36% < 1.5% minimum": 6,
+    "Insufficient room to target: 0.97% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.23% < 1.5% minimum": 6,
+    "Insufficient room to target: -1.48% < 1.5% minimum": 6,
+    "Insufficient room to target: -1.39% < 1.5% minimum": 6,
+    "Insufficient room to target: -1.13% < 1.5% minimum": 6,
+    "Insufficient room to target: -2.21% < 1.5% minimum": 6,
+    "Insufficient room to target: 1.31% < 1.5% minimum": 6,
+    "Insufficient room to target: 1.21% < 1.5% minimum": 6,
+    "Insufficient room to target: 1.23% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.11% < 1.5% minimum": 6,
+    "Insufficient room to target: -0.09% < 1.5% minimum": 6,
+    "Insufficient room to target: 0.37% < 1.5% minimum": 6,
+    "Insufficient room to target: 0.11% < 1.5% minimum": 6,
+    "Insufficient room to target: 0.05% < 1.5% minimum": 6,
+    "Insufficient room to target: -1.88% < 1.5% minimum": 5,
+    "Insufficient room to target: 0.83% < 1.5% minimum": 5,
+    "Insufficient room to target: -4.19% < 1.5% minimum": 5,
+    "Insufficient room to target: -5.11% < 1.5% minimum": 5,
+    "Insufficient room to target: -5.44% < 1.5% minimum": 5,
+    "Insufficient room to target: -5.72% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.24% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.15% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.85% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.01% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.07% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.00% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.26% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.18% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.19% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.91% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.55% < 1.5% minimum": 5,
+    "Insufficient room to target: 0.08% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.81% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.42% < 1.5% minimum": 5,
+    "Insufficient room to target: -1.69% < 1.5% minimum": 5,
+    "Insufficient room to target: -2.30% < 1.5% minimum": 5,
+    "Insufficient room to target: 1.02% < 1.5% minimum": 5,
+    "Insufficient room to target: 1.29% < 1.5% minimum": 5,
+    "Insufficient room to target: 1.13% < 1.5% minimum": 5,
+    "Insufficient room to target: 1.17% < 1.5% minimum": 5,
+    "Insufficient room to target: -2.32% < 1.5% minimum": 5,
+    "Insufficient room to target: -2.28% < 1.5% minimum": 5,
+    "Insufficient room to target: -3.07% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.82% < 1.5% minimum": 5,
+    "Insufficient room to target: 0.01% < 1.5% minimum": 5,
+    "Insufficient room to target: 1.06% < 1.5% minimum": 5,
+    "Insufficient room to target: 0.91% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.07% < 1.5% minimum": 5,
+    "Insufficient room to target: -0.05% < 1.5% minimum": 5,
+    "Insufficient room to target: -4.51% < 1.5% minimum": 4,
+    "Insufficient room to target: -4.56% < 1.5% minimum": 4,
+    "Insufficient room to target: -4.60% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.74% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.41% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.54% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.90% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.29% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.14% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.34% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.10% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.12% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.65% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.10% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.07% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.33% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.22% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.15% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.62% < 1.5% minimum": 4,
+    "Insufficient room to target: -1.79% < 1.5% minimum": 4,
+    "Insufficient room to target: -2.39% < 1.5% minimum": 4,
+    "Insufficient room to target: -2.68% < 1.5% minimum": 4,
+    "Insufficient room to target: -2.61% < 1.5% minimum": 4,
+    "Insufficient room to target: -2.64% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.12% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.68% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.73% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.18% < 1.5% minimum": 4,
+    "Insufficient room to target: 0.95% < 1.5% minimum": 4,
+    "Insufficient room to target: 0.04% < 1.5% minimum": 4,
+    "Insufficient room to target: -0.14% < 1.5% minimum": 4,
+    "Insufficient room to target: 0.21% < 1.5% minimum": 4,
+    "Insufficient room to target: 1.26% < 1.5% minimum": 4,
+    "Insufficient room to target: -4.33% < 1.5% minimum": 3,
+    "Insufficient room to target: -4.10% < 1.5% minimum": 3,
+    "Insufficient room to target: -4.65% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.16% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.30% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.39% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.48% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.58% < 1.5% minimum": 3,
+    "Insufficient room to target: -5.62% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.17% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.41% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.38% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.36% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.22% < 1.5% minimum": 3,
+    "Insufficient room to target: -0.76% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.31% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.52% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.91% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.86% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.04% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.08% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.56% < 1.5% minimum": 3,
+    "Insufficient room to target: 1.25% < 1.5% minimum": 3,
+    "Insufficient room to target: 1.27% < 1.5% minimum": 3,
+    "Insufficient room to target: 1.24% < 1.5% minimum": 3,
+    "Insufficient room to target: 1.28% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.19% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.26% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.51% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.27% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.42% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.45% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.83% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.88% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.82% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.99% < 1.5% minimum": 3,
+    "Insufficient room to target: -3.04% < 1.5% minimum": 3,
+    "Insufficient room to target: -3.00% < 1.5% minimum": 3,
+    "Insufficient room to target: -3.02% < 1.5% minimum": 3,
+    "Insufficient room to target: -3.13% < 1.5% minimum": 3,
+    "Insufficient room to target: -1.02% < 1.5% minimum": 3,
+    "Insufficient room to target: -0.43% < 1.5% minimum": 3,
+    "Insufficient room to target: -0.72% < 1.5% minimum": 3,
+    "Insufficient room to target: -0.78% < 1.5% minimum": 3,
+    "Insufficient room to target: 1.12% < 1.5% minimum": 3,
+    "Insufficient room to target: 0.98% < 1.5% minimum": 3,
+    "Insufficient room to target: -0.02% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.00% < 1.5% minimum": 3,
+    "Insufficient room to target: -2.05% < 1.5% minimum": 3,
+    "Insufficient room to target: -4.70% < 1.5% minimum": 2,
+    "Insufficient room to target: -4.93% < 1.5% minimum": 2,
+    "Insufficient room to target: -5.34% < 1.5% minimum": 2,
+    "Insufficient room to target: -5.53% < 1.5% minimum": 2,
+    "Insufficient room to target: -5.67% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.08% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.27% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.30% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.21% < 1.5% minimum": 2,
+    "Insufficient room to target: -0.96% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.23% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.28% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.16% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.03% < 1.5% minimum": 2,
+    "Insufficient room to target: -0.45% < 1.5% minimum": 2,
+    "Insufficient room to target: 0.90% < 1.5% minimum": 2,
+    "Insufficient room to target: 0.89% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.56% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.35% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.73% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.95% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.99% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.38% < 1.5% minimum": 2,
+    "Insufficient room to target: 1.18% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.11% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.22% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.24% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.71% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.41% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.67% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.33% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.92% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.97% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.93% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.96% < 1.5% minimum": 2,
+    "Insufficient room to target: -3.03% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.95% < 1.5% minimum": 2,
+    "Insufficient room to target: -3.01% < 1.5% minimum": 2,
+    "Insufficient room to target: -0.01% < 1.5% minimum": 2,
+    "Insufficient room to target: -0.08% < 1.5% minimum": 2,
+    "Insufficient room to target: -0.17% < 1.5% minimum": 2,
+    "Insufficient room to target: 1.40% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.44% < 1.5% minimum": 2,
+    "Insufficient room to target: -1.89% < 1.5% minimum": 2,
+    "Insufficient room to target: -3.44% < 1.5% minimum": 2,
+    "Insufficient room to target: -3.39% < 1.5% minimum": 2,
+    "Insufficient room to target: -2.01% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.74% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.92% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.87% < 1.5% minimum": 1,
+    "Insufficient room to target: -4.01% < 1.5% minimum": 1,
+    "Insufficient room to target: -4.37% < 1.5% minimum": 1,
+    "Insufficient room to target: -4.06% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.97% < 1.5% minimum": 1,
+    "Insufficient room to target: -4.42% < 1.5% minimum": 1,
+    "Insufficient room to target: -5.20% < 1.5% minimum": 1,
+    "Insufficient room to target: -5.25% < 1.5% minimum": 1,
+    "Insufficient room to target: -5.02% < 1.5% minimum": 1,
+    "Insufficient room to target: -5.81% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.59% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.57% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.42% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.45% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.37% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.43% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.82% < 1.5% minimum": 1,
+    "Insufficient room to target: 1.39% < 1.5% minimum": 1,
+    "Insufficient room to target: 1.32% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.32% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.53% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.90% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.17% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.23% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.09% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.18% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.69% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.72% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.76% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.54% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.57% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.78% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.62% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.31% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.20% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.44% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.49% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.48% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.52% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.46% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.55% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.65% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.74% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.79% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.86% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.05% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.98% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.94% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.12% < 1.5% minimum": 1,
+    "Insufficient room to target: -0.98% < 1.5% minimum": 1,
+    "Insufficient room to target: -0.95% < 1.5% minimum": 1,
+    "Insufficient room to target: 0.99% < 1.5% minimum": 1,
+    "Insufficient room to target: 0.93% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.64% < 1.5% minimum": 1,
+    "Insufficient room to target: -1.94% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.10% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.28% < 1.5% minimum": 1,
+    "Insufficient room to target: -2.87% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.23% < 1.5% minimum": 1,
+    "Insufficient room to target: -3.18% < 1.5% minimum": 1
+  },
+  "symbols_by_outcome": {
+    "STUCK_IN_BREAKOUT_DETECTED": [
+      "NIO",
+      "OXY",
+      "XPEV",
+      "NVDA",
+      "RIVN",
+      "LI",
+      "AAPL",
+      "META",
+      "SOFI",
+      "CVX",
+      "BABA",
+      "GOOGL",
+      "JD"
+    ],
+    "STUCK_IN_WEAK_BREAKOUT_TRACKING": [
+      "BB",
+      "ROKU",
+      "XOM",
+      "BIDU",
+      "BA",
+      "C",
+      "NFLX",
+      "LYFT"
+    ],
+    "ENTERED LONG": [
+      "COIN",
+      "AVGO"
+    ],
+    "STUCK_IN_PULLBACK_RETEST": [
+      "PYPL",
+      "WFC",
+      "TSLA",
+      "QCOM",
+      "PLTR",
+      "MSFT",
+      "GS",
+      "PINS",
+      "AMZN",
+      "MS"
+    ],
+    "STUCK_IN_UNKNOWN": [
+      "INTC",
+      "RBLX",
+      "BAC"
+    ]
+  },
+  "symbol_details": {
+    "NIO": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1680,
+        "Breakout detected, waiting for candle close": 169,
+        "Tracking weak breakout (held 1/12 bars)": 147,
+        "Tracking weak breakout (held 2/12 bars)": 147,
+        "Tracking weak breakout (held 3/12 bars)": 147
+      },
+      "final_outcome": null
+    },
+    "BB": {
+      "total_checks": 506,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 506,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 271,
+        "Breakout detected, waiting for candle close": 36,
+        "Insufficient room to target: 1.04% < 1.5% minimum": 23,
+        "Pullback detected, waiting for bounce": 22,
+        "Tracking weak breakout (held 1/12 bars)": 12
+      },
+      "final_outcome": null
+    },
+    "COIN": {
+      "total_checks": 26,
+      "unique_states": [
+        "BREAKOUT_DETECTED",
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "READY_TO_ENTER",
+        "UNKNOWN"
+      ],
+      "rejection_count": 24,
+      "top_rejections": {
+        "Waiting for bounce from pullback": 13,
+        "Waiting for 1-min candle close": 8,
+        "Breakout detected, waiting for candle close": 1,
+        "Weak breakout, tracking for pullback/sustained (1.1x vol)": 1,
+        "Pullback detected, waiting for bounce": 1
+      },
+      "final_outcome": "ENTERED LONG"
+    },
+    "OXY": {
+      "total_checks": 749,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 749,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 401,
+        "Breakout detected, waiting for candle close": 43,
+        "Tracking weak breakout (held 1/12 bars)": 21,
+        "Tracking weak breakout (held 2/12 bars)": 20,
+        "Tracking weak breakout (held 3/12 bars)": 19
+      },
+      "final_outcome": null
+    },
+    "XPEV": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1660,
+        "Breakout detected, waiting for candle close": 167,
+        "Tracking weak breakout (held 1/12 bars)": 149,
+        "Tracking weak breakout (held 2/12 bars)": 149,
+        "Tracking weak breakout (held 3/12 bars)": 149
+      },
+      "final_outcome": null
+    },
+    "NVDA": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1590,
+        "Breakout detected, waiting for candle close": 160,
+        "Tracking weak breakout (held 1/12 bars)": 156,
+        "Tracking weak breakout (held 2/12 bars)": 156,
+        "Tracking weak breakout (held 3/12 bars)": 156
+      },
+      "final_outcome": null
+    },
+    "PYPL": {
+      "total_checks": 306,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 306,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 158,
+        "Waiting for bounce from pullback": 74,
+        "Breakout detected, waiting for candle close": 21,
+        "Pullback detected, waiting for bounce": 17,
+        "Insufficient room to target: 0.81% < 1.5% minimum": 4
+      },
+      "final_outcome": null
+    },
+    "RIVN": {
+      "total_checks": 2912,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 2912,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1316,
+        "Waiting for bounce from pullback": 173,
+        "Breakout detected, waiting for candle close": 145,
+        "Tracking weak breakout (held 1/12 bars)": 90,
+        "Tracking weak breakout (held 2/12 bars)": 88
+      },
+      "final_outcome": null
+    },
+    "ROKU": {
+      "total_checks": 2764,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 2764,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1275,
+        "Waiting for bounce from pullback": 207,
+        "Breakout detected, waiting for candle close": 140,
+        "Tracking weak breakout (held 1/12 bars)": 77,
+        "Tracking weak breakout (held 2/12 bars)": 76
+      },
+      "final_outcome": null
+    },
+    "INTC": {
+      "total_checks": 6,
+      "unique_states": [
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 6,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 5,
+        "Breakout detected, waiting for candle close": 1
+      },
+      "final_outcome": null
+    },
+    "XOM": {
+      "total_checks": 975,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 975,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 395,
+        "Waiting for bounce from pullback": 234,
+        "Breakout detected, waiting for candle close": 48,
+        "Pullback detected, waiting for bounce": 31,
+        "Tracking weak breakout (held 1/12 bars)": 18
+      },
+      "final_outcome": null
+    },
+    "WFC": {
+      "total_checks": 25,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 25,
+      "top_rejections": {
+        "Waiting for bounce from pullback": 18,
+        "Breakout detected, waiting for candle close": 2,
+        "Pullback detected, waiting for bounce": 2,
+        "Weak breakout, tracking for pullback/sustained (0.4x vol)": 1,
+        "Waiting for 1-min candle close": 1
+      },
+      "final_outcome": null
+    },
+    "LI": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1680,
+        "Breakout detected, waiting for candle close": 169,
+        "Tracking weak breakout (held 1/12 bars)": 147,
+        "Tracking weak breakout (held 2/12 bars)": 147,
+        "Tracking weak breakout (held 3/12 bars)": 147
+      },
+      "final_outcome": null
+    },
+    "AVGO": {
+      "total_checks": 4,
+      "unique_states": [
+        "READY_TO_ENTER",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 2,
+      "top_rejections": {
+        "Breakout detected, waiting for candle close": 1,
+        "Waiting for 1-min candle close": 1
+      },
+      "final_outcome": "ENTERED LONG"
+    },
+    "RBLX": {
+      "total_checks": 2,
+      "unique_states": [
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 2,
+      "top_rejections": {
+        "Breakout detected, waiting for candle close": 1,
+        "Insufficient room to target: 1.02% < 1.5% minimum": 1
+      },
+      "final_outcome": null
+    },
+    "TSLA": {
+      "total_checks": 348,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 348,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 158,
+        "Waiting for bounce from pullback": 90,
+        "Breakout detected, waiting for candle close": 19,
+        "Pullback detected, waiting for bounce": 13,
+        "Insufficient room to target: 1.29% < 1.5% minimum": 4
+      },
+      "final_outcome": null
+    },
+    "QCOM": {
+      "total_checks": 1116,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 1116,
+      "top_rejections": {
+        "Waiting for bounce from pullback": 653,
+        "Waiting for 1-min candle close": 298,
+        "Breakout detected, waiting for candle close": 38,
+        "Pullback detected, waiting for bounce": 33,
+        "Weak breakout, tracking for pullback/sustained (0.6x vol)": 6
+      },
+      "final_outcome": null
+    },
+    "BIDU": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1680,
+        "Breakout detected, waiting for candle close": 168,
+        "Tracking weak breakout (held 1/12 bars)": 148,
+        "Tracking weak breakout (held 2/12 bars)": 147,
+        "Tracking weak breakout (held 3/12 bars)": 147
+      },
+      "final_outcome": null
+    },
+    "BA": {
+      "total_checks": 3376,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3376,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1473,
+        "Breakout detected, waiting for candle close": 147,
+        "Tracking weak breakout (held 1/12 bars)": 135,
+        "Tracking weak breakout (held 2/12 bars)": 134,
+        "Tracking weak breakout (held 3/12 bars)": 134
+      },
+      "final_outcome": null
+    },
+    "AAPL": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1600,
+        "Breakout detected, waiting for candle close": 161,
+        "Tracking weak breakout (held 1/12 bars)": 155,
+        "Tracking weak breakout (held 2/12 bars)": 155,
+        "Tracking weak breakout (held 3/12 bars)": 155
+      },
+      "final_outcome": null
+    },
+    "PLTR": {
+      "total_checks": 677,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 677,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 344,
+        "Breakout detected, waiting for candle close": 39,
+        "Waiting for bounce from pullback": 38,
+        "Pullback detected, waiting for bounce": 19,
+        "Tracking weak breakout (held 1/12 bars)": 19
+      },
+      "final_outcome": null
+    },
+    "MSFT": {
+      "total_checks": 3303,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3303,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1384,
+        "Waiting for bounce from pullback": 323,
+        "Breakout detected, waiting for candle close": 149,
+        "Tracking weak breakout (held 1/12 bars)": 104,
+        "Tracking weak breakout (held 2/12 bars)": 102
+      },
+      "final_outcome": null
+    },
+    "META": {
+      "total_checks": 1226,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 1226,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 589,
+        "Waiting for bounce from pullback": 173,
+        "Breakout detected, waiting for candle close": 73,
+        "Pullback detected, waiting for bounce": 46,
+        "Tracking weak breakout (held 1/12 bars)": 21
+      },
+      "final_outcome": null
+    },
+    "C": {
+      "total_checks": 3746,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3746,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1644,
+        "Breakout detected, waiting for candle close": 166,
+        "Tracking weak breakout (held 1/12 bars)": 148,
+        "Tracking weak breakout (held 2/12 bars)": 147,
+        "Tracking weak breakout (held 3/12 bars)": 147
+      },
+      "final_outcome": null
+    },
+    "GS": {
+      "total_checks": 473,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 473,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 255,
+        "Waiting for bounce from pullback": 81,
+        "Breakout detected, waiting for candle close": 29,
+        "Pullback detected, waiting for bounce": 27,
+        "Weak breakout, tracking for pullback/sustained (0.2x vol)": 6
+      },
+      "final_outcome": null
+    },
+    "PINS": {
+      "total_checks": 3208,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3208,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1457,
+        "Waiting for bounce from pullback": 374,
+        "Breakout detected, waiting for candle close": 171,
+        "Pullback detected, waiting for bounce": 91,
+        "Tracking weak breakout (held 1/12 bars)": 77
+      },
+      "final_outcome": null
+    },
+    "SOFI": {
+      "total_checks": 1285,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 1285,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 624,
+        "Waiting for bounce from pullback": 81,
+        "Breakout detected, waiting for candle close": 71,
+        "Pullback detected, waiting for bounce": 36,
+        "Tracking weak breakout (held 1/12 bars)": 33
+      },
+      "final_outcome": null
+    },
+    "NFLX": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1680,
+        "Breakout detected, waiting for candle close": 168,
+        "Tracking weak breakout (held 1/12 bars)": 148,
+        "Tracking weak breakout (held 2/12 bars)": 147,
+        "Tracking weak breakout (held 3/12 bars)": 147
+      },
+      "final_outcome": null
+    },
+    "AMZN": {
+      "total_checks": 23,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 23,
+      "top_rejections": {
+        "Waiting for bounce from pullback": 14,
+        "Waiting for 1-min candle close": 6,
+        "Breakout detected, waiting for candle close": 1,
+        "Weak breakout, tracking for pullback/sustained (1.8x vol)": 1,
+        "Pullback detected, waiting for bounce": 1
+      },
+      "final_outcome": null
+    },
+    "LYFT": {
+      "total_checks": 3684,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3684,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1605,
+        "Breakout detected, waiting for candle close": 170,
+        "Tracking weak breakout (held 1/12 bars)": 143,
+        "Tracking weak breakout (held 2/12 bars)": 142,
+        "Tracking weak breakout (held 3/12 bars)": 140
+      },
+      "final_outcome": null
+    },
+    "CVX": {
+      "total_checks": 3049,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3049,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1563,
+        "Waiting for bounce from pullback": 435,
+        "Breakout detected, waiting for candle close": 191,
+        "Pullback detected, waiting for bounce": 142,
+        "Tracking weak breakout (held 1/12 bars)": 36
+      },
+      "final_outcome": null
+    },
+    "BAC": {
+      "total_checks": 1389,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 1389,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 686,
+        "Waiting for bounce from pullback": 355,
+        "Breakout detected, waiting for candle close": 90,
+        "Pullback detected, waiting for bounce": 85,
+        "Insufficient room to target: 0.64% < 1.5% minimum": 42
+      },
+      "final_outcome": null
+    },
+    "BABA": {
+      "total_checks": 3781,
+      "unique_states": [
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3781,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1610,
+        "Breakout detected, waiting for candle close": 162,
+        "Tracking weak breakout (held 1/12 bars)": 154,
+        "Tracking weak breakout (held 2/12 bars)": 154,
+        "Tracking weak breakout (held 3/12 bars)": 154
+      },
+      "final_outcome": null
+    },
+    "MS": {
+      "total_checks": 94,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 94,
+      "top_rejections": {
+        "Waiting for bounce from pullback": 57,
+        "Waiting for 1-min candle close": 30,
+        "Breakout detected, waiting for candle close": 2,
+        "Pullback detected, waiting for bounce": 2,
+        "Weak breakout, tracking for pullback/sustained (1.3x vol)": 1
+      },
+      "final_outcome": null
+    },
+    "GOOGL": {
+      "total_checks": 3351,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3351,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1605,
+        "Breakout detected, waiting for candle close": 188,
+        "Waiting for bounce from pullback": 134,
+        "Pullback detected, waiting for bounce": 100,
+        "Tracking weak breakout (held 1/12 bars)": 94
+      },
+      "final_outcome": null
+    },
+    "JD": {
+      "total_checks": 3684,
+      "unique_states": [
+        "PULLBACK_RETEST",
+        "WEAK_BREAKOUT_TRACKING",
+        "BREAKOUT_DETECTED",
+        "UNKNOWN"
+      ],
+      "rejection_count": 3684,
+      "top_rejections": {
+        "Waiting for 1-min candle close": 1897,
+        "Breakout detected, waiting for candle close": 229,
+        "Pullback detected, waiting for bounce": 141,
+        "Waiting for bounce from pullback": 139,
+        "Tracking weak breakout (held 1/12 bars)": 88
+      },
+      "final_outcome": null
+    }
+  }
+}

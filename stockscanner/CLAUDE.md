@@ -4,12 +4,16 @@
 
 This project is a **PS60 Breakout Scanner** designed for identifying high-probability trading setups. The scanner analyzes stocks for breakout opportunities, providing detailed reasoning for resistance/support levels and calculating price targets using measured moves. It's optimized for day trading with real-time IBKR data integration.
 
-**Latest Update**: September 29, 2025
-- Single unified scanner implementation (scanner.py)
-- Enhanced breakout analysis with reasoning
-- Room-to-run calculations with 3 target levels
-- Risk/reward ratio analysis
-- Smart support/resistance detection filtering outliers
+**Latest Update**: October 8, 2025
+- ✅ **Pivot Rejection Detection with Tiered Recency Weighting** (Oct 8, 2025)
+- ✅ **Multi-Timeframe Analysis** (Weekly, Daily, Hourly bars)
+- ✅ **SMA Confluence Detection** (5, 10, 20, 50, 100, 200-day)
+- ✅ **Tight Channel Detection** for day trading consolidation patterns
+- ✅ Single unified scanner implementation (scanner.py)
+- ✅ Enhanced breakout analysis with reasoning
+- ✅ Room-to-run calculations with 3 target levels
+- ✅ Risk/reward ratio analysis
+- ✅ Smart support/resistance detection filtering outliers
 
 ## Core Requirements
 
@@ -383,6 +387,635 @@ stockscanner/
 └── src/                  # Module structure (if needed)
     └── modules/
 ```
+
+## Advanced Support/Resistance Detection System (October 8-9, 2025)
+
+### Overview
+
+The scanner implements a sophisticated multi-tier support/resistance detection system that prioritizes the most recent and relevant price action. The system analyzes price action across multiple timeframes, from intraday hourly bars to weekly charts, to identify the most significant levels where price is likely to react.
+
+### Core Philosophy
+
+**Problem**: Traditional scanners use statistical highs/lows (e.g., "20-day high") which may not reflect where price is ACTUALLY being rejected or supported.
+
+**Solution**: Multi-tier analysis that prioritizes:
+1. **TODAY's intraday action** (most immediate)
+2. **Recent daily rejections** (last 3-5 days)
+3. **Multi-day patterns** (5-20 days with recency weighting)
+4. **Weekly context** (broader timeframe)
+
+**Real Example (TSLA Oct 8, 2025)**:
+- ❌ Statistical approach: "20-day high at $479" (too far, not tradeable)
+- ✅ Tier 0 approach: "TODAY's high at $441.33" (0.8% away, actionable!)
+- ✅ Multi-tier approach: "Rejected 3x at $441 zone" (Oct 8 intraday + historical)
+
+### Complete Tiered Detection System
+
+The scanner analyzes price action in a **cascading priority order**, starting with the most immediate timeframe and falling back to broader contexts only when no pattern is found at higher tiers.
+
+---
+
+## TIER 0: TODAY's Intraday Hourly Analysis (HIGHEST PRIORITY)
+
+**Implementation Date**: October 9, 2025
+**Priority**: Absolute highest - overrides all other tiers
+**Data Source**: 1-hour bars for TODAY's session only
+**Code Location**: `scanner.py` lines 404-541
+
+### Purpose
+
+Detect resistance/support levels from TODAY's trading session that are being actively tested intraday. These levels represent the most immediate and relevant price action.
+
+### Detection Logic
+
+#### Step 1: Collect Hourly Rejections/Bounces
+
+**For Resistance:**
+```python
+# Scan each 1-hour bar from TODAY (9:30 AM - 4:00 PM)
+for bar in todays_hourly_bars:
+    high = bar['high']
+    close = bar['close']
+
+    # Rejection signature: close 0.5%+ below high
+    if (high - close) / close > 0.005:
+        hourly_rejections.append(high)
+```
+
+**For Support:**
+```python
+# Same logic but for bounces
+for bar in todays_hourly_bars:
+    low = bar['low']
+    close = bar['close']
+
+    # Bounce signature: close 0.5%+ above low
+    if (close - low) / close > 0.005:
+        hourly_bounces.append(low)
+```
+
+**Rejection/Bounce Signature**: A 0.5% spread between high/low and close indicates sellers/buyers are actively defending that level.
+
+#### Step 2: Find Intraday Clusters or Session Extremes
+
+**Option A - Multiple Tests (Preferred):**
+If 2+ hourly bars tested the same zone (±$2):
+```python
+median_rejection = sorted(hourly_rejections)[len // 2]
+cluster = [h for h in hourly_rejections
+          if abs(h - median_rejection) <= 2.0]
+
+if len(cluster) >= 2:
+    # Multiple intraday tests = strong level
+    intraday_resistance = median_rejection
+    test_count = len(cluster)
+```
+
+**Option B - Single Test (Fallback):**
+If no cluster found, use session high/low:
+```python
+# Session high represents today's resistance
+intraday_resistance = max(hourly_rejections)
+test_count = 1
+```
+
+#### Step 3: Check for SMA Confluence
+
+Detect if the intraday level aligns with a major moving average:
+
+```python
+for sma_label, sma_price in [(SMA5, price5), (SMA10, price10), ...]:
+    # Check if SMA is within 1% of intraday level
+    if abs(sma_price - intraday_resistance) / intraday_resistance < 0.01:
+        sma_confluence = True
+        sma_bonus = 2.0  # Add weight for confluence
+        nearby_sma = sma_price
+        break
+```
+
+**Why SMA confluence matters**: When price rejection aligns with a major moving average, it indicates institutional support/resistance at that level.
+
+#### Step 4: Maximum Confirmation Rule
+
+**For Resistance (LONG positions):** Pick the **HIGHER** value
+**For Support (SHORT positions):** Pick the **LOWER** value
+
+**Only applied when levels are within 1% of each other:**
+
+```python
+# Resistance example
+candidates = [intraday_resistance]  # e.g., $441.33 (session high)
+
+if nearby_sma and within_1_percent:
+    candidates.append(nearby_sma)  # e.g., $439.65 (SMA5)
+
+if todays_daily_high and within_1_percent:
+    candidates.append(todays_daily_high)  # e.g., $441.33
+
+# If levels are close (within 1%), pick HIGHEST for resistance
+if len(candidates) > 1:
+    final_resistance = max(candidates)  # $441.33
+else:
+    final_resistance = intraday_resistance
+```
+
+**Rationale**:
+- **For longs**: Breaking $441.33 means it also broke $439.65 → stronger confirmation
+- **For shorts**: Breaking $428.00 means it also broke $429.50 → stronger confirmation
+
+**When NOT to apply**: If levels are >1% apart (e.g., session high $441 vs SMA $430), just use the primary level without max/min selection.
+
+### Real Example: TSLA October 8, 2025
+
+**TODAY's Hourly Bars:**
+```
+09:30: High $437.80, Close $432.27 → 1.28% rejection ✅
+10:00: High $435.59, Close $432.27 → 0.77% rejection ✅
+11:00: High $436.19, Close $434.85 → 0.31% (no rejection)
+12:00: High $435.98, Close $435.61 → 0.08% (no rejection)
+13:00: High $437.30, Close $436.25 → 0.24% (no rejection)
+14:00: High $441.33, Close $437.16 → 0.95% rejection ✅ ← SESSION HIGH
+15:00: High $440.09, Close $438.60 → 0.34% (no rejection)
+```
+
+**Analysis:**
+- **Hourly rejections detected**: 3 bars (09:30, 10:00, 14:00)
+- **Session high**: $441.33 (at 14:00)
+- **Cluster check**: Median = $437.80, only 1 in ±$2 zone → No cluster
+- **Fallback**: Use session high $441.33
+
+**SMA Confluence Check:**
+- SMA5: $439.65 (0.38% away from $441.33) ✅ Within 1%
+- SMA10: $440.64 (0.16% away from $441.33) ✅ Within 1%
+
+**Maximum Confirmation Rule:**
+- Candidates: [$441.33, $439.65, $440.64]
+- All within 1% of each other
+- Pick **max($441.33, $439.65, $440.64) = $441.33**
+
+**Final Result:**
+- **Tier 0 Resistance**: $441.33 (TODAY's intraday high)
+- **Distance from price**: 0.77% (very close, tradeable)
+- **Confirmation**: 3 hourly rejections + SMA5/SMA10 confluence
+
+### When Tier 0 Applies
+
+✅ **Tier 0 is used when:**
+- At least 1 hourly rejection/bounce detected TODAY
+- Creates a clear intraday resistance/support level
+- Overrides all other tiers (daily, weekly, etc.)
+
+❌ **Tier 0 is skipped when:**
+- No hourly bars available (pre-market scan)
+- No rejection/bounce signatures detected (0.5% threshold not met)
+- Then falls back to Tier 1 (last 3 days)
+
+---
+
+## TIER 1-3: Multi-Day Daily Analysis (If no Tier 0 pattern)
+
+**Priority**: Second highest
+**Data Source**: Daily bars with tiered lookback
+**Code Location**: `scanner.py` lines 543-658
+
+### Purpose
+
+When TODAY's intraday action doesn't show a clear pattern, analyze recent daily bars to find levels that have been repeatedly tested over the past few days.
+
+### Tiered Lookback Strategy
+
+The scanner tries progressively longer lookback periods until a pattern is found:
+
+#### Tier 1: Last 3 Days ("Immediate Hot Zone")
+- **Lookback**: 3 trading days
+- **Weight**: Highest for daily analysis
+- **Use Case**: Stocks in tight consolidation, testing same level repeatedly
+- **Example**: AAPL rejected at $175 on Oct 6, 7, 8 → Primary resistance
+
+#### Tier 2: Last 5 Days ("Hot Zone")
+- **Lookback**: 5 trading days (1 week)
+- **Weight**: High priority
+- **Use Case**: Stock breaking out of week-long range
+- **Example**: If no 3-day pattern, check last 5 days
+
+#### Tier 3: Last 10 Days ("Recent Memory")
+- **Lookback**: 10 trading days (2 weeks)
+- **Weight**: Medium priority
+- **Use Case**: Broader consolidation patterns
+- **Example**: Used only if no 3-day or 5-day pattern
+
+#### Tier 4: Last 20 Days ("Historical Context")
+- **Lookback**: 20 trading days (~1 month)
+- **Weight**: Lower priority (with decay)
+- **Use Case**: Long-term support/resistance zones
+- **Example**: Final fallback before weekly analysis
+
+### Detection Logic for Daily Tiers
+
+#### Step 1: Collect Daily Rejections/Bounces
+
+For each tier's lookback period:
+
+```python
+for lookback_days in [3, 5, 10, 20]:  # Try each tier
+    rejection_prices = []
+
+    for i in range(-lookback_days, 0):  # Last N days
+        bar = daily_bars[i]
+        high = bar['high']
+        close = bar['close']
+        days_ago = abs(i)
+
+        # Rejection signature: close 0.5%+ below high
+        if (high - close) / close > 0.005:
+            rejection_prices.append((high, days_ago))
+```
+
+#### Step 2: Smart Clustering with Median
+
+Find tight clusters of rejections:
+
+```python
+# Only look at rejections above current price and within 5%
+valid_rejections = [(p, days) for p, days in rejection_prices
+                   if p > current_price and
+                   (p - current_price) / current_price < 0.05]
+
+if len(valid_rejections) >= 2:
+    # Find median of rejection prices (center of cluster)
+    valid_prices = [p for p, _ in valid_rejections]
+    median_rejection = sorted(valid_prices)[len(valid_prices) // 2]
+
+    # Count rejections within ±1% of median (tight cluster)
+    cluster_range = median_rejection * 0.01
+    cluster = [(p, days) for p, days in valid_rejections
+              if abs(p - median_rejection) <= cluster_range]
+```
+
+**Why ±1% clustering**: Stocks rarely reject at the exact same penny. A 1% zone captures the same technical level while filtering noise.
+
+#### Step 3: Apply Recency Weighting
+
+Recent rejections are MORE ACCURATE than old ones:
+
+```python
+# Recency weight formula
+weight = max(1.0 - (days_ago * 0.2), 0.2)
+
+# Calculate weighted count
+weighted_count = sum(max(1.0 - (days * 0.2), 0.2)
+                    for _, days in cluster)
+```
+
+**Examples:**
+- TODAY (day 0): weight = 1.0 (100%)
+- 1 day ago: weight = 0.8 (80%)
+- 2 days ago: weight = 0.6 (60%)
+- 3 days ago: weight = 0.4 (40%)
+- 4+ days ago: weight = 0.2 (20% minimum)
+
+**Why this matters:**
+- 3 rejections yesterday = 3.0 weighted count (very strong!)
+- 3 rejections 10 days ago = 0.6 weighted count (weak signal)
+
+#### Step 4: Check SMA Confluence
+
+If rejection cluster aligns with a major SMA (within ±0.5%), add +2.0 to weight:
+
+```python
+for sma_label, sma_price in sma_levels:
+    if abs(sma_price - median_rejection) / median_rejection < 0.005:
+        # SMA aligns with rejection cluster!
+        sma_confluence_bonus = 2.0
+        # Use SMA price as exact level (more precise)
+        final_resistance = sma_price
+        break
+```
+
+**Example:**
+- Rejection cluster median: $175.25
+- SMA50: $175.10 (0.09% away) ✅ CONFLUENCE
+- Result: Use $175.10 as resistance + add 2.0 weight bonus
+
+#### Step 5: Exit Tier Loop if Pattern Found
+
+```python
+if weighted_count + sma_confluence_bonus >= 2.0:
+    # Found significant pattern, stop checking older tiers
+    pivot_resistance = final_resistance
+    rejection_found = True
+    break  # Don't check 10-day or 20-day if 3-day worked
+```
+
+### Real Example: Multi-Day Analysis
+
+**Scenario**: Stock shows no clear intraday pattern (Tier 0 skipped)
+
+**Tier 1 (3 days) - Check Oct 6, 7, 8:**
+```
+Oct 6: High $176.50, Close $175.20 → 0.74% rejection ✅
+Oct 7: High $175.80, Close $175.60 → 0.11% (no rejection)
+Oct 8: High $176.20, Close $175.50 → 0.40% (no rejection)
+
+Result: Only 1 rejection → Not enough, try next tier
+```
+
+**Tier 2 (5 days) - Check Oct 4-8:**
+```
+Oct 4: High $175.90, Close $174.80 → 0.63% rejection ✅
+Oct 5: High $176.80, Close $175.50 → 0.74% rejection ✅
+Oct 6: High $176.50, Close $175.20 → 0.74% rejection ✅
+Oct 7: High $175.80, Close $175.60 → 0.11% (no rejection)
+Oct 8: High $176.20, Close $175.50 → 0.40% (no rejection)
+
+Rejections: 3 total
+Median: $176.50
+Cluster (±1%): [$175.90, $176.80, $176.50] = 3 rejections
+Days ago: [4, 3, 2]
+Weighted count: 0.2 + 0.4 + 0.6 = 1.2
+
+SMA Check: SMA20 at $176.45 (0.03% away) ✅ CONFLUENCE
+Final weight: 1.2 + 2.0 = 3.2 ✅ THRESHOLD MET
+
+RESISTANCE: $176.45 (SMA20 with 3 recent rejections)
+```
+
+### When Each Tier is Used
+
+| Tier | Lookback | When Used | Example Scenario |
+|------|----------|-----------|------------------|
+| **0** | TODAY hourly | Intraday rejection detected | Stock tested $175 at 2 PM and 3 PM |
+| **1** | 3 days | Tight 3-day consolidation | Stock range-bound $174-176 for 3 days |
+| **2** | 5 days | Week-long pattern | Stock building base last 5 days |
+| **3** | 10 days | 2-week consolidation | Broader resistance zone forming |
+| **4** | 20 days | Monthly pattern | Long-term S/R from last month |
+
+---
+
+## TIER 5: Weekly Analysis (Broadest Context)
+
+**Priority**: Lowest (only if no pattern found in Tier 0-4)
+**Data Source**: Weekly bars (1 year = ~52 weeks)
+**Code Location**: `scanner.py` lines 264-280
+
+### Purpose
+
+Provide broader context for swing trading or when stock is breaking out of a multi-week consolidation. Weekly levels are far from current price but show major institutional support/resistance zones.
+
+### Detection Logic
+
+```python
+# Get last 8 weeks of weekly bars
+if len(weekly_bars) >= 8:
+    weekly_resistance = max(weekly_bars[-8:]['high'])
+    weekly_support = min(weekly_bars[-8:]['low'])
+```
+
+### When Weekly Levels Are Used
+
+✅ **Used when:**
+- No pattern found in Tier 0-4 (daily analysis)
+- Stock is within 10% of weekly high/low
+- Provides swing trading context
+
+❌ **Not used when:**
+- Weekly level is >10% away from current price
+- Daily tiers found a clear pattern
+
+**Example:**
+- Current price: $175
+- Weekly high (last 8 weeks): $192 (+9.7%)
+- Use: Yes, within 10% threshold
+- Context: "Breaking out of 8-week range"
+
+---
+
+## Complete Priority Hierarchy
+
+The scanner selects resistance/support using this cascading priority:
+
+### For Resistance (LONG breakouts):
+
+1. **✅ TIER 0: TODAY's Intraday** (if hourly rejection detected)
+2. **TIER 1: Pivot rejections (3 days)** (2+ weighted rejections)
+3. **TIER 2: Pivot rejections (5 days)** (if no 3-day pattern)
+4. **TIER 3: Pivot rejections (10 days)** (if no 5-day pattern)
+5. **TIER 4: Pivot rejections (20 days)** (if no 10-day pattern)
+6. **Tight channels** (3-5 day consolidation with <3% range)
+7. **SMA confluence** (Major MA acting as resistance)
+8. **TIER 5: Weekly levels** (if within 10% and no daily pattern)
+9. **Statistical highs** (5-day or 10-day high, last resort)
+
+### For Support (SHORT breakdowns):
+
+Same hierarchy but looking for bounces instead of rejections:
+1. TODAY's intraday lows
+2. Multi-day pivot bounces (3, 5, 10, 20 days)
+3. Tight channel lows
+4. SMA support
+5. Weekly lows
+6. Statistical lows
+
+---
+
+## Configuration Parameters
+
+### Thresholds and Tolerances
+
+```python
+# Rejection/Bounce Signature
+rejection_threshold = 0.005  # 0.5% (close below high)
+bounce_threshold = 0.005     # 0.5% (close above low)
+
+# Clustering
+cluster_tolerance = 0.01     # ±1% for tight clusters
+intraday_zone = 2.0          # ±$2 for hourly clustering
+
+# SMA Confluence
+sma_confluence_tolerance = 0.005   # ±0.5% for daily SMAs
+sma_confluence_tolerance_hourly = 0.01  # ±1% for hourly
+
+# Weighting
+min_weighted_count = 2.0     # Minimum to be significant
+sma_confluence_bonus = 2.0   # Bonus weight for SMA alignment
+recency_decay = 0.2          # 20% decay per day
+
+# Maximum Confirmation Rule
+max_confirmation_tolerance = 0.01  # 1% for max/min selection
+
+# Weekly Context
+max_weekly_distance = 0.10   # 10% max from current price
+```
+
+### Lookback Tiers
+
+```python
+lookback_tiers = [
+    (3, "3day_hot"),      # Last 3 days - immediate
+    (5, "hot_zone"),      # Last 5 days - week
+    (10, "recent"),       # Last 10 days - 2 weeks
+    (20, "historical")    # Last 20 days - month
+]
+```
+
+---
+
+## Benefits of Multi-Tier System
+
+1. **✅ Prioritizes immediate action**: TODAY's intraday levels trump everything
+2. **✅ Recency bias**: Recent rejections weighted 5x more than old ones
+3. **✅ Adaptive timeframes**: Automatically finds the right lookback period
+4. **✅ SMA integration**: Detects institutional support at moving averages
+5. **✅ Tight clustering**: Only counts rejections at the same technical level
+6. **✅ Maximum confirmation**: Picks higher resistance / lower support when close
+7. **✅ Context awareness**: Weekly levels provide swing trading perspective
+
+---
+
+## Validation Examples
+
+### Example 1: TSLA October 8, 2025
+
+**Result**: Tier 0 intraday detected $441.33
+- Tier 0 found: 3 hourly rejections, session high $441.33
+- SMA confluence: SMA5 $439.65, SMA10 $440.64
+- Maximum confirmation: max($441.33, $439.65) = $441.33
+- **Output**: Resistance $441.33 (0.77% away)
+
+### Example 2: Stock with No Intraday Pattern
+
+**Result**: Tier 2 (5-day) detected $176.45
+- Tier 0: Skipped (no hourly rejections)
+- Tier 1 (3-day): Only 1 rejection, not enough
+- Tier 2 (5-day): 3 rejections at $176 zone
+- SMA confluence: SMA20 $176.45
+- **Output**: Resistance $176.45 (SMA20, tested 3x in 5 days)
+
+### Example 3: Long-Term Consolidation
+
+**Result**: Tier 4 (20-day) detected $180.50
+- Tier 0-2: No clear pattern
+- Tier 3 (10-day): Only scattered rejections
+- Tier 4 (20-day): 5 rejections clustered at $180.50 over 3 weeks
+- Weighted count: 2.6 (older rejections, lower weight)
+- **Output**: Resistance $180.50 (tested 5x over 20 days)
+
+---
+
+## Recency Weighting Formula
+
+```python
+# Weight formula: Recent rejections count MORE
+weight = max(1.0 - (days_ago * 0.2), 0.2)
+
+# Examples:
+# Today (day 0):     weight = 1.0  (100%)
+# 1 day ago:         weight = 0.8  (80%)
+# 2 days ago:         weight = 0.6  (60%)
+# 3 days ago:        weight = 0.4  (40%)
+# 4+ days ago:       weight = 0.2  (20% minimum)
+```
+
+**Why this matters**:
+- 3 rejections yesterday = 3.0 weighted count (very strong!)
+- 3 rejections 10 days ago = 0.6 weighted count (weak signal)
+
+#### Smart Clustering Algorithm
+
+1. **Collect rejections**: Find all days where close is 0.5%+ below high
+2. **Filter by tier**: Start with last 5 days
+3. **Find median**: Center of rejection cluster (not simple average or rounding)
+4. **Identify tight cluster**: Rejections within ±1% of median
+5. **Apply recency weights**: Recent rejections weighted higher
+6. **Check SMA confluence**: Is rejection cluster near a major SMA?
+7. **Calculate total weight**: Recency weight + SMA confluence bonus
+
+#### SMA Confluence Bonus
+
+If rejection cluster aligns with a major SMA (within ±0.5%), add +2.0 to weight:
+
+**Example (TSLA)**:
+- Rejection cluster median: $441.25
+- SMA50: $440.64 (0.14% away)
+- **CONFLUENCE!** Resistance has both:
+  - Multiple rejections at this level
+  - Major moving average support
+- Result: Much stronger resistance signal
+
+#### Priority Hierarchy
+
+The scanner selects resistance/support using this priority order:
+
+1. **✅ HIGHEST: Pivot rejections** (2+ weighted rejections found)
+2. **Tight channels** (3-5 day consolidation patterns)
+3. **SMA confluence** (Major MA acting as support/resistance)
+4. **Weekly levels** (Broader timeframe context)
+5. **Daily levels** (5-10 day statistical highs/lows)
+6. **Hourly levels** (Intraday pivots, backup only)
+
+#### Real-World Example: TSLA (October 8, 2025)
+
+**Manual Analysis**:
+- Stock rejected at ~$441 on Sept 23, Sept 26, Oct 8
+- Clear pattern: Price keeps hitting ceiling around this level
+
+**Scanner Detection**:
+```
+Tier 1 (5 days): Check Oct 3-8
+  - Oct 8: Rejected at $441.33
+  - Oct 7: Rejected at $456.03
+  - Oct 3: Rejected at $446.77
+  - Result: Too spread out ($441-$456), no tight cluster
+
+Tier 2 (10 days): Check Sept 29 - Oct 8
+  - Multiple rejections but spread across $440-$456 range
+  - Median: $446.25
+  - Cluster (±1%): 4 rejections at $444-$447
+  - Recency weights: 0.6 + 0.4 + 0.8 + 0.4 = 2.2
+  - SMA confluence: None within ±0.5%
+  - Total weight: 2.2 (threshold met!)
+
+RESISTANCE SELECTED: $446.25 (median of cluster)
+```
+
+**Before vs After**:
+- **Before**: $456.03 resistance (tight channel high, +4.1% away)
+- **After**: $446.25 resistance (pivot rejection cluster, +1.9% away)
+- **Improvement**: $10 closer, much more tradeable!
+
+#### Configuration Parameters
+
+Adjustable in scanner code (lines 390-394):
+
+```python
+lookback_tiers = [
+    (5, "hot_zone"),      # Last 5 days - most recent
+    (10, "recent"),       # Last 10 days - fallback
+    (20, "historical")    # Last 20 days - final fallback
+]
+
+cluster_range = median * 0.01  # ±1% cluster tolerance
+sma_confluence_threshold = 0.005  # ±0.5% for SMA alignment
+min_weighted_count = 2.0  # Minimum weight to be significant
+```
+
+#### Benefits
+
+1. **More accurate levels**: Based on actual price rejection behavior
+2. **Recency bias**: Recent rejections weighted higher than old ones
+3. **Adaptive timeframes**: Finds patterns in 5, 10, or 20 days automatically
+4. **SMA integration**: Detects when rejections align with moving averages
+5. **Tight clustering**: Only counts rejections near the same level (±1%)
+
+#### Validation
+
+Tested on TSLA (Oct 8, 2025):
+- ✅ Detected $446 resistance cluster (vs your observed $441)
+- ✅ Applied recency weighting (recent rejections count more)
+- ✅ Found SMA20 at $429.28 as support (with confluence bonus)
+- ✅ Tiered approach worked: checked 5-day, then 10-day, found pattern in 10-day
+
+---
 
 ## Recent Fixes & Improvements (Sept 29, 2025)
 

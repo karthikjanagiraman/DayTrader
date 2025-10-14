@@ -1,0 +1,38 @@
+[
+  {
+    "symbol": "JD",
+    "side": "LONG",
+    "entry_price": 36.02599,
+    "entry_time": "2025-10-01T10:18:55-04:00",
+    "exit_price": 36.05,
+    "exit_time": "2025-10-01T14:25:55+00:00",
+    "shares": 1000,
+    "pnl": 14.009999999996978,
+    "reason": "15MIN_RULE",
+    "partials": 0,
+    "duration_min": 7.0,
+    "pnl_per_share": 0.014009999999996978,
+    "pnl_pct": 0.03888859126424278,
+    "entry_bar": 588,
+    "exit_bar": 672,
+    "commission": 10.0
+  },
+  {
+    "symbol": "JD",
+    "side": "LONG",
+    "entry_price": 36.106069999999995,
+    "entry_time": "2025-10-01T10:26:00-04:00",
+    "exit_price": 35.92,
+    "exit_time": "2025-10-01T14:33:00+00:00",
+    "shares": 1000,
+    "pnl": -196.06999999999374,
+    "reason": "15MIN_RULE",
+    "partials": 0,
+    "duration_min": 7.0,
+    "pnl_per_share": -0.19606999999999375,
+    "pnl_pct": -0.5430388851514268,
+    "entry_bar": 673,
+    "exit_bar": 757,
+    "commission": 10.0
+  }
+]

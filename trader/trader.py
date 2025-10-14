@@ -36,6 +36,8 @@ from pathlib import Path
 from collections import defaultdict, namedtuple
 import time as time_module
 import pytz
+import signal
+import sys
 
 # Import shared strategy module
 from strategy import PS60Strategy, PositionManager
@@ -211,23 +213,140 @@ class PS60Trader:
         self.logger.info(f"Paper Trading: {self.config['paper_trading']}")
         self.logger.info(f"Account Size: ${self.account_size:,.0f}")
 
+        # FIX GAP #7: Register graceful shutdown handler (Oct 13, 2025)
+        signal.signal(signal.SIGINT, self.handle_shutdown)
+        signal.signal(signal.SIGTERM, self.handle_shutdown)
+        self.shutdown_requested = False
+
     def setup_logging(self):
-        """Setup logging configuration"""
+        """Setup logging configuration - FIX GAP #10: Text-only logging (Oct 13, 2025)"""
         log_dir = Path(self.config['logging']['log_dir'])
         log_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.now().strftime('%Y%m%d')
         log_file = log_dir / f'trader_{timestamp}.log'
 
+        # FIX GAP #10: Ensure text-only logging (no binary data)
         logging.basicConfig(
             level=getattr(logging, self.config['logging']['log_level']),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(log_file),
+                logging.FileHandler(log_file, encoding='utf-8', errors='replace'),  # Force UTF-8, replace bad chars
                 logging.StreamHandler()
             ]
         )
         self.logger = logging.getLogger('PS60Trader')
+
+    def handle_shutdown(self, signum, frame):
+        """
+        FIX GAP #7: Graceful shutdown handler (Oct 13, 2025)
+        Handle Ctrl+C and termination signals gracefully
+        """
+        signal_name = 'SIGINT' if signum == signal.SIGINT else 'SIGTERM'
+        self.logger.info(f"\n{'='*80}")
+        self.logger.info(f"🛑 SHUTDOWN SIGNAL RECEIVED ({signal_name})")
+        self.logger.info(f"{'='*80}")
+        self.logger.info("Closing all positions gracefully...")
+
+        self.shutdown_requested = True
+
+        # Close all open positions at market prices
+        if self.positions:
+            self.close_all_positions('SHUTDOWN')
+
+        # Save final state
+        self.save_session_report()
+
+        self.logger.info("✓ Shutdown complete - exiting")
+        sys.exit(0)
+
+    def validate_startup(self):
+        """
+        FIX GAP #6: Startup validation checklist (Oct 13, 2025)
+        Validates all prerequisites before starting trading
+
+        Returns:
+            (bool, str) - (success, error_message)
+        """
+        self.logger.info("\n" + "="*80)
+        self.logger.info("🔍 STARTUP VALIDATION CHECKLIST")
+        self.logger.info("="*80)
+
+        checks_passed = []
+        checks_failed = []
+
+        # CHECK 1: IBKR Connection
+        if self.ib.isConnected():
+            checks_passed.append("✓ IBKR Connection: Active")
+        else:
+            checks_failed.append("✗ IBKR Connection: NOT CONNECTED")
+
+        # CHECK 2: Scanner File Exists
+        scanner_file = Path(self.scanner_results_file)
+        if scanner_file.exists():
+            checks_passed.append(f"✓ Scanner File: {scanner_file.name}")
+
+            # CHECK 3: Scanner File Age (should be recent)
+            import time
+            file_age_hours = (time.time() - scanner_file.stat().st_mtime) / 3600
+            if file_age_hours < 24:
+                checks_passed.append(f"✓ Scanner Age: {file_age_hours:.1f} hours (fresh)")
+            else:
+                checks_failed.append(f"⚠️  Scanner Age: {file_age_hours:.1f} hours (stale)")
+        else:
+            checks_failed.append(f"✗ Scanner File: NOT FOUND ({scanner_file})")
+
+        # CHECK 4: FIX GAP #3 - Account Size Validation
+        if self.account_size >= 10000:  # Minimum $10k
+            checks_passed.append(f"✓ Account Size: ${self.account_size:,.0f}")
+        else:
+            checks_failed.append(f"✗ Account Size: ${self.account_size:,.0f} (too small)")
+
+        # CHECK 5: Watchlist has valid symbols
+        if self.watchlist and len(self.watchlist) > 0:
+            checks_passed.append(f"✓ Watchlist: {len(self.watchlist)} symbols loaded")
+        else:
+            checks_failed.append("✗ Watchlist: EMPTY")
+
+        # CHECK 6: Market hours
+        eastern = pytz.timezone('US/Eastern')
+        now_et = datetime.now(pytz.UTC).astimezone(eastern)
+        market_open = dt_time(9, 30)
+        market_close = dt_time(16, 0)
+        current_time = now_et.time()
+
+        if market_open <= current_time < market_close:
+            checks_passed.append(f"✓ Market Hours: {now_et.strftime('%I:%M %p')} ET (OPEN)")
+        else:
+            checks_failed.append(f"⚠️  Market Hours: {now_et.strftime('%I:%M %p')} ET (CLOSED)")
+
+        # CHECK 7: No open positions from previous session
+        portfolio = self.ib.portfolio()
+        if len(portfolio) == 0:
+            checks_passed.append("✓ Portfolio: Clean (no open positions)")
+        else:
+            checks_failed.append(f"⚠️  Portfolio: {len(portfolio)} open positions (cleanup needed)")
+
+        # Print results
+        for check in checks_passed:
+            self.logger.info(f"  {check}")
+        for check in checks_failed:
+            self.logger.warning(f"  {check}")
+
+        self.logger.info("="*80)
+
+        # Determine if we can proceed
+        critical_failures = [f for f in checks_failed if f.startswith("✗")]
+
+        if critical_failures:
+            self.logger.error(f"❌ STARTUP VALIDATION FAILED: {len(critical_failures)} critical issue(s)")
+            return False, "\n".join(critical_failures)
+        elif checks_failed:
+            self.logger.warning(f"⚠️  STARTUP VALIDATION PASSED WITH WARNINGS: {len(checks_failed)} warning(s)")
+            return True, "Warnings present but can proceed"
+        else:
+            self.logger.info(f"✅ STARTUP VALIDATION PASSED: All {len(checks_passed)} checks OK")
+            return True, "All checks passed"
 
     def connect(self):
         """Connect to IBKR with retry logic"""
@@ -237,6 +356,82 @@ class PS60Trader:
 
         # Use resilience layer for connection with retry
         return self.resilience.connect_with_retry(host, port, client_id)
+
+    def cleanup_session(self):
+        """
+        Clean up at startup - close all open positions and cancel all orders
+        Ensures we start fresh each session (Oct 13, 2025)
+        """
+        if not self.ib.isConnected():
+            self.logger.warning("Cannot cleanup - not connected to IBKR")
+            return
+
+        self.logger.info("=" * 80)
+        self.logger.info("🧹 SESSION CLEANUP - Preparing for fresh start...")
+        self.logger.info("=" * 80)
+
+        # 1. Cancel all open orders
+        open_orders = self.ib.openOrders()
+        if open_orders:
+            self.logger.info(f"📋 Found {len(open_orders)} open orders - cancelling...")
+            for order in open_orders:
+                try:
+                    self.ib.cancelOrder(order)
+                    self.logger.info(f"   ✓ Cancelled order {order.orderId} for {order.contract.symbol}")
+                except Exception as e:
+                    self.logger.error(f"   ✗ Failed to cancel order {order.orderId}: {e}")
+
+            # Wait for cancellations to process
+            self.ib.sleep(2)
+        else:
+            self.logger.info("✓ No open orders to cancel")
+
+        # 2. Close all open positions
+        positions = self.ib.positions()
+        active_positions = [p for p in positions if p.position != 0]
+
+        if active_positions:
+            self.logger.info(f"📊 Found {len(active_positions)} open positions - closing...")
+            for position in active_positions:
+                symbol = position.contract.symbol
+                shares = abs(position.position)
+                side = 'SHORT' if position.position < 0 else 'LONG'
+
+                self.logger.info(f"   Closing {side} {symbol}: {shares} shares @ avg ${position.avgCost:.2f}")
+
+                # Create closing order (opposite side)
+                action = 'BUY' if position.position < 0 else 'SELL'
+                contract = Stock(symbol, 'SMART', 'USD')
+                order = MarketOrder(action, shares)
+
+                try:
+                    trade = self.ib.placeOrder(contract, order)
+                    self.ib.sleep(1)  # Wait for fill
+
+                    if trade.orderStatus.status in ['Filled', 'PreSubmitted']:
+                        self.logger.info(f"   ✓ Closed {symbol}")
+                    else:
+                        self.logger.warning(f"   ⚠️  {symbol} order status: {trade.orderStatus.status}")
+                except Exception as e:
+                    self.logger.error(f"   ✗ Failed to close {symbol}: {e}")
+
+            # Wait for all closes to complete
+            self.ib.sleep(3)
+        else:
+            self.logger.info("✓ No open positions to close")
+
+        # 3. Verify cleanup
+        final_positions = [p for p in self.ib.positions() if p.position != 0]
+        final_orders = self.ib.openOrders()
+
+        if not final_positions and not final_orders:
+            self.logger.info("=" * 80)
+            self.logger.info("✅ SESSION CLEANUP COMPLETE - Starting fresh!")
+            self.logger.info("=" * 80)
+        else:
+            self.logger.warning("=" * 80)
+            self.logger.warning(f"⚠️  CLEANUP INCOMPLETE - {len(final_positions)} positions, {len(final_orders)} orders remain")
+            self.logger.warning("=" * 80)
 
     def disconnect(self):
         """Disconnect from IBKR"""
@@ -1197,7 +1392,12 @@ class PS60Trader:
         trade_record = self.pm.close_position(symbol, price, reason)
 
         self.logger.info(f"  🛑 CLOSE {symbol} @ ${price:.2f} ({reason})")
-        self.logger.info(f"     P&L: ${trade_record['pnl']:.2f}")
+
+        # Check if trade_record is valid before accessing
+        if trade_record:
+            self.logger.info(f"     P&L: ${trade_record['pnl']:.2f}")
+        else:
+            self.logger.warning(f"     ⚠️  Trade record not available for {symbol}")
 
         # Remove from local positions dict
         del self.positions[symbol]
@@ -1341,6 +1541,9 @@ class PS60Trader:
         if not self.connect():
             return
 
+        # CRITICAL: Clean up any existing positions/orders before starting (Oct 13, 2025)
+        self.cleanup_session()
+
         # Load scanner results
         if not self.load_scanner_results():
             self.disconnect()
@@ -1352,6 +1555,15 @@ class PS60Trader:
         # CRITICAL: Recover state from previous session (crash recovery)
         # This must happen AFTER connecting to IBKR and subscribing to data
         self.state_manager.recover_full_state()
+
+        # FIX GAP #6: Run startup validation (Oct 13, 2025)
+        validation_ok, validation_msg = self.validate_startup()
+        if not validation_ok:
+            self.logger.error("\n❌ STARTUP VALIDATION FAILED")
+            self.logger.error(validation_msg)
+            self.logger.error("\n🛑 Cannot start trading - fix issues above and restart")
+            self.disconnect()
+            return
 
         # Wait for market open if before 9:30 AM ET
         market_open_time = dt_time(9, 30)
@@ -1403,6 +1615,11 @@ class PS60Trader:
 
         try:
             while True:
+                # FIX GAP #7: Check for shutdown signal (Oct 13, 2025)
+                if self.shutdown_requested:
+                    self.logger.info("Shutdown signal detected in main loop")
+                    break
+
                 # Check if within trading hours
                 in_market, in_entry = self.is_trading_hours()
 
@@ -1697,11 +1914,18 @@ class PS60Trader:
             trade_file = log_dir / f'trades_{datetime.now().strftime("%Y%m%d")}.json'
 
             # Add analytics to save file
+            # FIX GAP #8: Calculate session duration (Oct 13, 2025)
+            duration_seconds = 0
+            if self.analytics['session_start'] and self.analytics['session_end']:
+                duration_seconds = (self.analytics['session_end'] - self.analytics['session_start']).total_seconds()
+
             save_data = {
                 'summary': summary,
                 'analytics': {
                     'session_start': self.analytics['session_start'].isoformat() if self.analytics['session_start'] else None,
                     'session_end': self.analytics['session_end'].isoformat() if self.analytics['session_end'] else None,
+                    'duration_seconds': duration_seconds,
+                    'duration_minutes': round(duration_seconds / 60, 2),
                     'filter_blocks': dict(self.analytics['filter_blocks']),
                     'entry_paths': dict(self.analytics['entry_paths']),
                     'pivot_checks': dict(self.analytics['pivot_checks']),
@@ -1747,15 +1971,84 @@ class PS60Trader:
         self.logger.info("\n" + "="*80)
 
 
+# Global trader instance for signal handlers
+trader_instance = None
+
+def graceful_shutdown(signum, frame):
+    """
+    Graceful shutdown handler for SIGINT (Ctrl+C) and SIGTERM
+    Closes all positions, saves state, and exits cleanly (Oct 13, 2025)
+    """
+    global trader_instance
+
+    if trader_instance is None:
+        print("\n⚠️  No active trader session to shut down")
+        sys.exit(0)
+
+    print("\n" + "="*80)
+    print("🛑 GRACEFUL SHUTDOWN INITIATED")
+    print("="*80)
+
+    try:
+        # 1. Close all open positions
+        if trader_instance.positions:
+            trader_instance.logger.info(f"📊 Closing {len(trader_instance.positions)} open positions...")
+            trader_instance.close_all_positions('SHUTDOWN')
+
+        # 2. Save current state
+        trader_instance.logger.info("💾 Saving session state...")
+        trader_instance.state_manager.save_state()
+
+        # 3. Generate final report
+        trader_instance.logger.info("📊 Generating final report...")
+        trader_instance.print_session_summary()
+
+        # 4. Disconnect from IBKR
+        trader_instance.logger.info("🔌 Disconnecting from IBKR...")
+        trader_instance.disconnect()
+
+        print("="*80)
+        print("✅ GRACEFUL SHUTDOWN COMPLETE")
+        print("   Session state saved for potential restart")
+        print("="*80)
+
+    except Exception as e:
+        print(f"❌ Error during shutdown: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        sys.exit(0)
+
+
 def main():
+    global trader_instance
+
     parser = argparse.ArgumentParser(description='PS60 Live Trader')
     parser.add_argument('--config', default='config/trader_config.yaml',
                        help='Path to configuration file')
 
     args = parser.parse_args()
 
-    trader = PS60Trader(args.config)
-    trader.run()
+    # Setup signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, graceful_shutdown)   # Ctrl+C
+    signal.signal(signal.SIGTERM, graceful_shutdown)  # kill command
+
+    try:
+        trader_instance = PS60Trader(args.config)
+        trader_instance.run()
+    except KeyboardInterrupt:
+        # This shouldn't normally be reached due to signal handler
+        graceful_shutdown(None, None)
+    except Exception as e:
+        if trader_instance:
+            trader_instance.logger.error(f"Fatal error in main: {e}")
+            trader_instance.logger.exception("Full traceback:")
+            # Try to save state even on error
+            try:
+                trader_instance.state_manager.save_state()
+            except:
+                pass
+        raise
 
 
 if __name__ == '__main__':

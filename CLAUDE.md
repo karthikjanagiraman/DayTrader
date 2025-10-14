@@ -1336,23 +1336,191 @@ python3 trader.py
 python3 trader.py --config config/trader_config.yaml
 ```
 
+### 🚦 Session Management (October 13, 2025)
+
+The trader includes robust session management for clean startup and graceful shutdown.
+
+#### **Starting a Trading Session**
+
+```bash
+cd trader
+python3 trader.py
+```
+
+**What happens at startup:**
+1. ✅ **Connects to IBKR** (port 7497 for paper trading)
+2. 🧹 **Automatic cleanup:**
+   - Cancels all pending orders
+   - Closes all open positions from previous crashes
+   - Verifies clean slate before trading
+3. 📊 **Loads scanner results** for today's date
+4. 📡 **Subscribes to market data** for watchlist symbols
+5. 🔄 **Recovers state** from previous session (if any)
+6. ▶️ **Starts monitoring** at 9:30 AM ET
+
+**Startup logs to expect:**
+```
+================================================================================
+🧹 SESSION CLEANUP - Preparing for fresh start...
+================================================================================
+✓ No open orders to cancel
+📊 Found 2 open positions - closing...
+   Closing SHORT BB: 3000 shares @ avg $4.62
+   ✓ Closed BB
+   Closing SHORT SNAP: 1000 shares @ avg $8.61
+   ✓ Closed SNAP
+================================================================================
+✅ SESSION CLEANUP COMPLETE - Starting fresh!
+================================================================================
+✓ Loaded 53 setups from scanner_results_20251013.json
+✓ Subscribed to 53/53 symbols
+```
+
+#### **Stopping a Trading Session (Graceful Shutdown)**
+
+**Method 1: Ctrl+C (Recommended)**
+```bash
+# Press Ctrl+C in the terminal where trader is running
+^C
+```
+
+**Method 2: Kill Command**
+```bash
+# Find the trader process ID
+ps aux | grep "python3 trader.py"
+
+# Send graceful shutdown signal
+kill <pid>
+```
+
+**Method 3: Kill All Python Traders**
+```bash
+pkill -f "python3 trader.py"
+```
+
+**What happens during graceful shutdown:**
+1. 🛑 **Catches shutdown signal** (SIGINT/SIGTERM)
+2. 📊 **Closes all open positions** with market orders
+3. 💾 **Saves session state** to `logs/trader_state.json`
+4. 📋 **Generates final P&L report**
+5. 🔌 **Disconnects from IBKR** cleanly
+6. ✅ **Exits with success**
+
+**Shutdown logs to expect:**
+```
+================================================================================
+🛑 GRACEFUL SHUTDOWN INITIATED
+================================================================================
+📊 Closing 5 open positions...
+  🛑 CLOSE TSLA @ $447.13 (SHUTDOWN)
+     P&L: $-15.95
+  🛑 CLOSE AAPL @ $225.50 (SHUTDOWN)
+     P&L: $+8.25
+  ...
+💾 Saving session state...
+📊 Generating final report...
+  Total Trades: 12
+  Daily P&L: $245.67
+  Win Rate: 41.7%
+🔌 Disconnecting from IBKR...
+================================================================================
+✅ GRACEFUL SHUTDOWN COMPLETE
+   Session state saved for potential restart
+================================================================================
+```
+
+#### **Mid-Session Restart**
+
+If you need to restart the trader during market hours (e.g., after code changes):
+
+```bash
+# 1. Stop current session (Ctrl+C)
+^C
+# Wait for graceful shutdown to complete
+
+# 2. Make any code/config changes
+vim config/trader_config.yaml
+
+# 3. Restart trader
+python3 trader.py
+# Automatic cleanup will close any orphaned positions
+# State recovery will restore context from previous session
+```
+
+**Benefits of graceful shutdown:**
+- ✅ No orphaned positions left in IBKR account
+- ✅ All orders cancelled before exit
+- ✅ State saved for audit trail
+- ✅ P&L calculated and logged
+- ✅ Can resume trading immediately after restart
+
+#### **Emergency Stop (Not Recommended)**
+
+If the trader becomes unresponsive:
+
+```bash
+# Force kill (use only if graceful shutdown fails)
+kill -9 <pid>
+
+# Manually close positions in TWS/Gateway
+# Run cleanup on next startup
+```
+
+⚠️ **Note:** Force kill (`kill -9`) bypasses graceful shutdown and may leave positions open. The automatic cleanup on next startup will handle this, but it's better to use graceful shutdown when possible.
+
+#### **Checking Session Status**
+
+```bash
+# Check if trader is running
+ps aux | grep "python3 trader.py"
+
+# Check recent logs
+tail -50 trader/logs/trader_$(date +%Y%m%d).log
+
+# Check saved state
+cat trader/logs/trader_state.json | python3 -m json.tool
+```
+
+#### **Account Size Configuration**
+
+**Current setting:** $50,000 (changed from $100,000 on Oct 13, 2025)
+
+**Why 50K:**
+- Prevents margin errors in paper account
+- Reduces position sizes by 50%
+- Matches typical paper account balance
+
+**To change:**
+```yaml
+# trader/config/trader_config.yaml
+trading:
+  account_size: 50000  # Change this value
+```
+
 ### Daily Trading Workflow
 
 **Morning (8:00-9:30 AM):**
 1. Run scanner: `cd stockscanner && python3 scanner.py --category quick`
 2. Review scanner results in `stockscanner/output/scanner_results.json`
 3. Start TWS/Gateway on port 7497 (paper trading)
+4. Start trader: `cd trader && python3 trader.py`
+   - Automatic cleanup runs at startup
+   - Closes any orphaned positions from previous day
+   - Loads today's scanner results
 
 **Trading Hours (9:30 AM - 4:00 PM):**
-4. Start trader: `cd trader && python3 trader.py`
 5. Trader monitors pivots and executes trades automatically
-6. Entry window: 9:45 AM - 3:00 PM
-7. EOD close: 3:55 PM (all positions closed)
+6. Entry window: 9:45 AM - 3:00 PM ET
+7. EOD close: 3:55 PM ET (all positions auto-closed)
+8. **To stop early:** Press **Ctrl+C** for graceful shutdown
 
 **After Market (4:00+ PM):**
-8. Review logs in `trader/logs/trader_YYYYMMDD.log`
-9. Review trades in `trader/logs/trades_YYYYMMDD.json`
-10. Compare performance vs backtest expectations
+9. Graceful shutdown completes automatically at EOD
+10. Review logs in `trader/logs/trader_YYYYMMDD.log`
+11. Review trades in `trader/logs/trades_YYYYMMDD.json`
+12. Compare performance vs backtest expectations
+
+**See [Session Management](#-session-management-october-13-2025) for detailed startup/shutdown procedures.**
 
 ## Backtest Results (September 30, 2025)
 

@@ -2,7 +2,7 @@
 # Based on backtest results from September 30, 2025
 
 trading:
-  account_size: 100000
+  account_size: 50000   # Changed from 100000 to 50000 (Oct 13, 2025)
   risk_per_trade: 0.01  # 1% risk per trade
   max_positions: 10     # Maximum concurrent positions (increased for more opportunities)
   max_daily_loss: 0.03  # 3% max daily loss (circuit breaker)
@@ -28,10 +28,42 @@ trading:
     per_share: 0.005           # $0.005 per share (IBKR default)
 
   exits:
+    # ===== LEGACY 1R/2R SYSTEM (Fallback) =====
     partial_1_pct: 0.50       # Sell 50% at 1R (profit = risk)
     partial_2_pct: 0.25       # Sell 25% at target1 (2R)
     runner_pct: 0.25          # Hold 25% as runner with trailing stop
     eod_close_time: "15:55"   # Close all positions 5 min before close
+
+    # ===== PROGRESSIVE PARTIAL SYSTEM (Oct 12, 2025) =====
+    # NEW: 25% partials at SMA/target levels instead of fixed 1R/2R
+    # Set to false to use legacy 1R/2R system above
+    use_sma_target_partials: true     # ENABLED for testing
+    partial_size: 0.25                # 25% at each level (4 exits total)
+    max_partial_levels: 4             # Max exit levels to use
+
+    # SMA Configuration (Priority 1 - real market structure)
+    sma:
+      enabled: true
+      periods: [5, 10, 20]            # SMA5, SMA10, SMA20
+      timeframe: '1 hour'             # '1 hour' (recommended) or '1 day'
+      cache_duration_sec: 300         # Cache SMAs for 5 minutes
+
+    # Scanner Targets (Priority 2 - fill gaps between SMAs)
+    scanner_targets:
+      enabled: true
+      use_target1: true               # Include scanner target1
+      use_target2: true               # Include scanner target2
+      use_target3: false              # Usually too far away
+
+    # Progressive Stop Management
+    progressive_stops:
+      enabled: true
+      move_to_previous_level: true    # Stop follows previous exit level
+      min_stop_distance_pct: 0.005    # Keep 0.5% buffer below level
+
+    # Fallback Settings
+    fallback_to_1r: true              # Use 1R system if insufficient levels
+    min_levels_required: 2            # Need at least 2 levels to use progressive
 
   # Trailing stop for runners (per requirements)
   trailing_stop:
@@ -49,9 +81,11 @@ trading:
     atr_stop_multiplier: 2.0       # Stop = Entry - (2.0 × ATR) for longs
     atr_stop_period: 20            # Calculate ATR from last 20 bars
 
-    # 15-Minute Rule (PS60) - Exit if no progress after 15 minutes
-    fifteen_minute_rule_enabled: true    # Enable 15-minute stuck position exit
-    fifteen_minute_threshold: 15         # Exit after 15 minutes with no progress
+    # 7-Minute Rule (PS60) - Exit if no progress after 7 minutes
+    # Changed from 15 to 7 minutes per PS60 methodology (Oct 11, 2025)
+    # Analysis showed 84% of losers hit 15-min rule, PS60 recommends 5-7 minutes
+    fifteen_minute_rule_enabled: true    # Enable stuck position exit
+    fifteen_minute_threshold: 7           # Exit after 7 minutes with no progress (per PS60)
     fifteen_minute_min_gain: 0.001       # Minimum 0.1% gain to avoid exit (must show some progress)
 
   # Trade confirmation (per requirements - avoid false breakouts)
@@ -152,7 +186,7 @@ filters:
   # ----------------------------------------------------------------------------
   # LEGACY FILTERS (Used when enhanced scoring CSV not available)
   min_score: 0                 # Minimum scanner score (0-100, 0 = disabled)
-  min_risk_reward: 1.0         # Minimum R/R ratio from scanner (per trading plan)
+  min_risk_reward: 0.0         # DISABLED - Calculate R/R dynamically at entry time instead (Oct 13, 2025)
   max_dist_to_pivot: 100.0     # Max distance to pivot % (100 = disabled)
 
   # ENHANCED SCORING FILTERS (Oct 6, 2025) ⭐ NEW
@@ -225,16 +259,16 @@ filters:
 ibkr:
   host: "127.0.0.1"
   port: 7497                   # Paper trading port (7496 for live)
-  client_id: 2002              # Changed from 2001 (old session still connected)
+  client_id: 2003              # Changed from 2002 (Oct 13, 2025)
 
 scanner:
   output_dir: "../stockscanner/output/"
   results_file: "scanner_results_20251002.json"
-  enhanced_scoring_dir: "../scanner_validation/"  # Directory with rescored_YYYYMMDD.csv files
+  enhanced_scoring_dir: "../scanner_validation_DISABLED/"  # DISABLED - Use regular scanner output (min_score=0)
 
 logging:
   log_dir: "./logs/"
-  log_level: "DEBUG"          # DEBUG, INFO, WARNING, ERROR (changed to DEBUG for full visibility - Oct 10, 2025)
+  log_level: "INFO"          # DEBUG, INFO, WARNING, ERROR (changed to INFO for faster backtest - Oct 13, 2025)
   log_trades: true
   log_positions: true
   save_daily_report: true
