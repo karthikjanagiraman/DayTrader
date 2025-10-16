@@ -1,0 +1,1423 @@
+[
+  {
+    "symbol": "QCOM",
+    "entry_time": "09:58:55 ET",
+    "entry_price": 162.74258,
+    "exit_price": 161.28,
+    "pnl": -347.52888000000064,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.717043225112335,
+        "volume": 21466.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 5.706582277034863,
+        "volume": 49950.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.8269882435863838,
+        "volume": 20218.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "AMAT",
+    "entry_time": "10:02:55 ET",
+    "entry_price": 170.13996999999998,
+    "exit_price": 169.35,
+    "pnl": -180.79321999999604,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.4033507719993947,
+        "volume": 15091.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.6640727104353216,
+        "volume": 4446.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.2576061715275317,
+        "volume": 7988.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "BBBY",
+    "entry_time": "09:59:30 ET",
+    "entry_price": 10.59058,
+    "exit_price": 10.43,
+    "pnl": -170.5799999999995,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 0.7364341085271318,
+        "volume": 4845.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 2.509344783911526,
+        "volume": 16246.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.06828454210416522,
+        "volume": 491.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "C",
+    "entry_time": "10:00:55 ET",
+    "entry_price": 99.9999,
+    "exit_price": 99.61,
+    "pnl": -153.96149999999895,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.041934719860744,
+        "volume": 53022.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.4945466804867639,
+        "volume": 13789.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6499116649779986,
+        "volume": 17768.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "XPEV",
+    "entry_time": "10:46:55 ET",
+    "entry_price": 21.681659999999997,
+    "exit_price": 21.54,
+    "pnl": -151.65999999999812,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.884897415006296,
+        "volume": 38949.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.9956613110975527,
+        "volume": 29438.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 2.4353324930961904,
+        "volume": 38935.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "LRCX",
+    "entry_time": "10:30:55 ET",
+    "entry_price": 117.70759,
+    "exit_price": 117.27,
+    "pnl": -146.36193000000006,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.793464836984159,
+        "volume": 36530.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.9454465554068006,
+        "volume": 28554.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6690796776217364,
+        "volume": 10398.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "PYPL",
+    "entry_time": "09:53:00 ET",
+    "entry_price": 67.88781999999999,
+    "exit_price": 67.67,
+    "pnl": -129.17393999999376,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 0.5727049703239726,
+        "volume": 16563.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.36057654957625435,
+        "volume": 10443.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.34618288286536175,
+        "volume": 9790.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "JPM",
+    "entry_time": "10:35:55 ET",
+    "entry_price": 309.20889999999997,
+    "exit_price": 308.58,
+    "pnl": -129.05779999999746,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.887302080099348,
+        "volume": 17670.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.7102741268699551,
+        "volume": 4888.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.46551031586635017,
+        "volume": 3187.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "AMD",
+    "entry_time": "11:16:55 ET",
+    "entry_price": 160.65049,
+    "exit_price": 159.88,
+    "pnl": -127.21986999999922,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.147059517032536,
+        "volume": 159351.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.412468543635671,
+        "volume": 113491.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.1498068602012388,
+        "volume": 96115.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "MS",
+    "entry_time": "10:30:55 ET",
+    "entry_price": 157.94778999999997,
+    "exit_price": 157.64,
+    "pnl": -125.84483999999323,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.8873963858464786,
+        "volume": 25395.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.4382325817618047,
+        "volume": 10761.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.2791225906937504,
+        "volume": 9855.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "BA",
+    "entry_time": "10:15:55 ET",
+    "entry_price": 214.83495000000002,
+    "exit_price": 215.53,
+    "pnl": -125.49889999999655,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.2109618613576396,
+        "volume": 25809.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.3905917428632926,
+        "volume": 17444.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.8326134519590193,
+        "volume": 10313.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "LRCX",
+    "entry_time": "09:58:55 ET",
+    "entry_price": 117.91779999999999,
+    "exit_price": 117.55,
+    "pnl": -123.16279999999621,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.125546038778333,
+        "volume": 29122.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.0853845441734642,
+        "volume": 15828.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.668599618311681,
+        "volume": 24962.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "ARM",
+    "entry_time": "10:30:55 ET",
+    "entry_price": 153.66350999999997,
+    "exit_price": 153.21,
+    "pnl": -115.87749999999147,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.3983087695098733,
+        "volume": 7998.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.6056723545512783,
+        "volume": 2080.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.0907273030252533,
+        "volume": 3600.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "META",
+    "entry_time": "10:36:55 ET",
+    "entry_price": 759.7589999999999,
+    "exit_price": 758.42,
+    "pnl": -110.61799999999522,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.1153106616830497,
+        "volume": 24546.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 3.1089793992766155,
+        "volume": 27678.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.0072146882844197,
+        "volume": 9570.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "JPM",
+    "entry_time": "10:27:55 ET",
+    "entry_price": 309.16886,
+    "exit_price": 308.45186,
+    "pnl": -109.57792999999752,
+    "reason": "TRAIL_STOP",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.4891442891399684,
+        "volume": 11522.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.558255608772372,
+        "volume": 7727.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.5681339264809175,
+        "volume": 8037.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "META",
+    "entry_time": "10:02:55 ET",
+    "entry_price": 757.2565,
+    "exit_price": 756.02,
+    "pnl": -102.2129999999982,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.005210212414438,
+        "volume": 40295.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.2430383663366336,
+        "volume": 24105.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.31937422208032246,
+        "volume": 6402.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "MS",
+    "entry_time": "11:00:55 ET",
+    "entry_price": 158.00785,
+    "exit_price": 157.77,
+    "pnl": -97.90074999999224,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.9935583212080976,
+        "volume": 28270.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.403362936793658,
+        "volume": 11480.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.524378716472142,
+        "volume": 3911.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "SOFI",
+    "entry_time": "11:21:55 ET",
+    "entry_price": 27.18716,
+    "exit_price": 27.1,
+    "pnl": -94.05087999999733,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.688001433492867,
+        "volume": 186014.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 4.316821275371795,
+        "volume": 312924.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 8.251940065976996,
+        "volume": 699158.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "RBLX",
+    "entry_time": "12:57:55 ET",
+    "entry_price": 136.24611,
+    "exit_price": 135.81,
+    "pnl": -86.09922999999714,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 9.711135555824024,
+        "volume": 76364.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 11.774386140118539,
+        "volume": 135585.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.6127449771295297,
+        "volume": 29423.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "RIVN",
+    "entry_time": "10:02:55 ET",
+    "entry_price": 13.64363,
+    "exit_price": 13.57,
+    "pnl": -83.62999999999964,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.458676151186138,
+        "volume": 221763.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.6102766075867551,
+        "volume": 56085.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6917631324078771,
+        "volume": 59998.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "AMZN",
+    "entry_time": "11:10:30 ET",
+    "entry_price": 233.29305999999997,
+    "exit_price": 232.81,
+    "pnl": -81.35489999999444,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 0.9582887663986386,
+        "volume": 112170.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.8943346528325485,
+        "volume": 107327.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.29220768731241303,
+        "volume": 36178.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "AAPL",
+    "entry_time": "10:42:55 ET",
+    "entry_price": 236.76653,
+    "exit_price": 236.28,
+    "pnl": -80.43785999999801,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.1598329921433925,
+        "volume": 247969.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.1902270386521647,
+        "volume": 100945.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.7834559671595558,
+        "volume": 66569.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "AAPL",
+    "entry_time": "10:26:55 ET",
+    "entry_price": 236.48624999999998,
+    "exit_price": 236.0,
+    "pnl": -80.39249999999743,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.256111196071435,
+        "volume": 165968.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.823071142767227,
+        "volume": 141927.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.9573051885616167,
+        "volume": 77161.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "BBBY",
+    "entry_time": "09:46:55 ET",
+    "entry_price": 10.610599999999998,
+    "exit_price": 10.55,
+    "pnl": -70.59999999999732,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.9111873060832782,
+        "volume": 26236.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.20555842561188353,
+        "volume": 1615.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.026631552471556023,
+        "volume": 200.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "NVDA",
+    "entry_time": "10:45:55 ET",
+    "entry_price": 174.79503,
+    "exit_price": 175.09,
+    "pnl": -66.7884300000014,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.7017882129223905,
+        "volume": 641349.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.474639050983835,
+        "volume": 377756.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.1312533743083686,
+        "volume": 294710.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "INTC",
+    "entry_time": "12:55:55 ET",
+    "entry_price": 24.854829999999996,
+    "exit_price": 24.8,
+    "pnl": -64.8299999999955,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.2599382751919217,
+        "volume": 403922.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.714021692593121,
+        "volume": 240203.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.5334794917583765,
+        "volume": 226660.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "AVGO",
+    "entry_time": "14:11:55 ET",
+    "entry_price": 365.25488999999993,
+    "exit_price": 364.41,
+    "pnl": -61.55207999999331,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.7470942737630435,
+        "volume": 67053.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.8236054641323216,
+        "volume": 47745.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.5490201645747302,
+        "volume": 15469.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "HOOD",
+    "entry_time": "10:53:55 ET",
+    "entry_price": 113.15673,
+    "exit_price": 113.38,
+    "pnl": -54.118639999999864,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.0514038810957325,
+        "volume": 239900.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 2.2617989108516254,
+        "volume": 191801.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.2963749207693576,
+        "volume": 118318.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "MSFT",
+    "entry_time": "11:08:00 ET",
+    "entry_price": 514.0134999999999,
+    "exit_price": 513.58,
+    "pnl": -53.663499999983934,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 0.9786430505745444,
+        "volume": 16714.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.6074081671526324,
+        "volume": 27426.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.1602136143629798,
+        "volume": 20411.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "LYFT",
+    "entry_time": "10:16:55 ET",
+    "entry_price": 19.3193,
+    "exit_price": 19.28,
+    "pnl": -49.299999999997226,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.8151163889184803,
+        "volume": 189807.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.9904473876697062,
+        "volume": 54299.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6457820999721279,
+        "volume": 34059.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "AMD",
+    "entry_time": "11:27:10 ET",
+    "entry_price": 160.65049,
+    "exit_price": 160.37,
+    "pnl": -47.34986999999774,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 0.7511346984473704,
+        "volume": 68431.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.737631337014325,
+        "volume": 68119.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.5537220114359002,
+        "volume": 51809.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "ROKU",
+    "entry_time": "09:56:55 ET",
+    "entry_price": 95.07498,
+    "exit_price": 94.97,
+    "pnl": -46.45191999999904,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.0686116839166084,
+        "volume": 10483.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.0001981898658916,
+        "volume": 5299.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.45681063122923593,
+        "volume": 2255.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "GME",
+    "entry_time": "10:10:55 ET",
+    "entry_price": 25.48546,
+    "exit_price": 25.45,
+    "pnl": -45.46000000000049,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.677096988663263,
+        "volume": 78317.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 4.239125767188278,
+        "volume": 133269.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.7657683172179042,
+        "volume": 66089.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "PYPL",
+    "entry_time": "09:45:55 ET",
+    "entry_price": 67.90784,
+    "exit_price": 67.84,
+    "pnl": -44.05743999999416,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.926188036256518,
+        "volume": 103177.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.3516370683858718,
+        "volume": 53396.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.8169273390121538,
+        "volume": 32940.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "OXY",
+    "entry_time": "11:02:55 ET",
+    "entry_price": 45.5544,
+    "exit_price": 45.59,
+    "pnl": -38.440800000001936,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.890102989198694,
+        "volume": 23011.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 3.072888471856316,
+        "volume": 25544.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 2.9507872827357593,
+        "volume": 26883.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "SNAP",
+    "entry_time": "13:37:55 ET",
+    "entry_price": 7.387379999999999,
+    "exit_price": 7.36524,
+    "pnl": -25.949999999999463,
+    "reason": "TRAIL_STOP",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.6499811766515706,
+        "volume": 864751.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.6394696771034611,
+        "volume": 227638.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.7345073205437143,
+        "volume": 242096.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "BA",
+    "entry_time": "13:18:55 ET",
+    "entry_price": 215.27451000000002,
+    "exit_price": 215.41,
+    "pnl": -25.897219999995713,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.0001044768322624,
+        "volume": 9572.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 3.2653764312493667,
+        "volume": 16113.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.418766393405167,
+        "volume": 7762.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  },
+  {
+    "symbol": "BB",
+    "entry_time": "10:28:55 ET",
+    "entry_price": 3.9939899999999997,
+    "exit_price": 3.98,
+    "pnl": -23.989999999999725,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.546861360619412,
+        "volume": 73962.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.6637434461187628,
+        "volume": 53405.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.3087575232816547,
+        "volume": 10573.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "SNAP",
+    "entry_time": "13:29:55 ET",
+    "entry_price": 7.377369999999999,
+    "exit_price": 7.35526,
+    "pnl": -23.42499999999891,
+    "reason": "TRAIL_STOP",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.5870397864757755,
+        "volume": 623630.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 3.129904929418485,
+        "volume": 797204.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 2.1929175381398465,
+        "volume": 608481.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "CLOV",
+    "entry_time": "12:43:55 ET",
+    "entry_price": 3.118115,
+    "exit_price": 3.105,
+    "pnl": -23.114999999999988,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.849787631584436,
+        "volume": 129796.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.24525288273708143,
+        "volume": 12737.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.4261614024189008,
+        "volume": 21952.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "C",
+    "entry_time": "10:20:55 ET",
+    "entry_price": 100.1,
+    "exit_price": 100.06,
+    "pnl": -19.199999999996944,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 5.512800745453204,
+        "volume": 82235.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 8.886324434064509,
+        "volume": 145538.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 2.3509483914792817,
+        "volume": 53990.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "LCID",
+    "entry_time": "10:57:55 ET",
+    "entry_price": 19.6196,
+    "exit_price": 19.6108,
+    "pnl": -18.442799999997305,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.116865208564753,
+        "volume": 11053.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.6722703993325228,
+        "volume": 3787.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.7562066530250077,
+        "volume": 4176.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "BB",
+    "entry_time": "09:54:55 ET",
+    "entry_price": 3.9939899999999997,
+    "exit_price": 3.99,
+    "pnl": -13.989999999999494,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.5387154745538463,
+        "volume": 82112.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.5726601639633474,
+        "volume": 13471.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.12627714134217363,
+        "volume": 2834.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "CLOV",
+    "entry_time": "12:32:55 ET",
+    "entry_price": 3.098095,
+    "exit_price": 3.095,
+    "pnl": -13.094999999999626,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 3.781356734780793,
+        "volume": 134957.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 6.38791595270271,
+        "volume": 266363.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 2.893207027619469,
+        "volume": 154557.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "AMC",
+    "entry_time": "11:01:55 ET",
+    "entry_price": 2.87287,
+    "exit_price": 2.87,
+    "pnl": -12.869999999999706,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.2747490326223168,
+        "volume": 16519.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 2.4574455500203736,
+        "volume": 18696.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 4.609384689588644,
+        "volume": 33448.0,
+        "status": "\ud83d\udfe2 STRONG"
+      }
+    ]
+  },
+  {
+    "symbol": "AMC",
+    "entry_time": "10:04:55 ET",
+    "entry_price": 2.8628599999999995,
+    "exit_price": 2.8542799999999997,
+    "pnl": -9.649999999999705,
+    "reason": "TRAIL_STOP",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.8397267734276834,
+        "volume": 79779.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 2.353653692114329,
+        "volume": 72284.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6378016715105232,
+        "volume": 18884.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "LYFT",
+    "entry_time": "11:09:55 ET",
+    "entry_price": 19.429409999999997,
+    "exit_price": 19.43,
+    "pnl": -9.409999999997467,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 4.787603061592077,
+        "volume": 118283.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.7620502490824169,
+        "volume": 22548.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.0339974891669703,
+        "volume": 30639.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "SOFI",
+    "entry_time": "12:31:55 ET",
+    "entry_price": 27.657629999999997,
+    "exit_price": 27.5947,
+    "pnl": -8.525159999997076,
+    "reason": "TRAIL_STOP",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.043006795916763,
+        "volume": 244286.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 0.5559326482777571,
+        "volume": 67775.0,
+        "status": "\ud83d\udd34 WEAK"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 0.6808478962966742,
+        "volume": 81405.0,
+        "status": "\ud83d\udd34 WEAK"
+      }
+    ]
+  },
+  {
+    "symbol": "RIVN",
+    "entry_time": "10:55:55 ET",
+    "entry_price": 13.623609999999998,
+    "exit_price": 13.63,
+    "pnl": -3.6099999999967736,
+    "reason": "7MIN_RULE",
+    "entry_reason": "Unknown",
+    "candles": [
+      {
+        "offset": 0,
+        "volume_ratio": 2.547638918735226,
+        "volume": 127445.0,
+        "status": "\ud83d\udfe2 STRONG"
+      },
+      {
+        "offset": 1,
+        "volume_ratio": 1.852531314245227,
+        "volume": 99617.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      },
+      {
+        "offset": 2,
+        "volume_ratio": 1.9420617051754006,
+        "volume": 110021.0,
+        "status": "\ud83d\udfe1 MODERATE"
+      }
+    ]
+  }
+]

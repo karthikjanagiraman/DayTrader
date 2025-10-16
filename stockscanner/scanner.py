@@ -66,6 +66,228 @@ class PS60Scanner:
         else:
             return core_symbols.get(category, [])
 
+    def _detect_recency_weighted_resistance(self, df_hourly, current_price):
+        """
+        Detect resistance using recency-weighted pattern detection
+        Prioritizes what price is testing NOW (last 1-2 days)
+        """
+        try:
+            # Step 1: Identify TODAY's high and recent pattern
+            df_hourly['date'] = pd.to_datetime(df_hourly['date']).dt.date
+            today = df_hourly['date'].iloc[-1]
+            yesterday = df_hourly['date'].iloc[-2] if len(df_hourly) >= 2 else today
+
+            today_bars = df_hourly[df_hourly['date'] == today]
+            yesterday_bars = df_hourly[df_hourly['date'] == yesterday]
+            recent_bars = pd.concat([yesterday_bars, today_bars])
+
+            # Get TODAY's high (most immediate level)
+            todays_high = today_bars['high'].max() if len(today_bars) > 0 else None
+            if todays_high is None:
+                return {'activated': False}
+
+            # Step 2: Check last 5 days pattern - NEW RANGE or RECOVERY?
+            last_5days = df_hourly.iloc[-20:] if len(df_hourly) >= 20 else df_hourly
+            last_5days_dates = last_5days['date'].unique()
+
+            # Get daily highs for last 5 days
+            daily_highs_5d = []
+            for date in last_5days_dates[-5:]:
+                date_bars = last_5days[last_5days['date'] == date]
+                if len(date_bars) > 0:
+                    daily_highs_5d.append({
+                        'date': date,
+                        'high': date_bars['high'].max(),
+                        'days_ago': len(last_5days_dates) - list(last_5days_dates).index(date) - 1
+                    })
+
+            # Step 3: Determine pattern type and resistance level
+            pattern_type = "CURRENT_TEST"
+            resistance_level = todays_high  # Default: use today's high
+
+            if len(daily_highs_5d) >= 3:
+                # Check if recent 3+ days forming NEW RANGE below old highs
+                recent_3_highs = [h['high'] for h in daily_highs_5d if h['days_ago'] <= 2]
+                old_highs = [h['high'] for h in daily_highs_5d if h['days_ago'] >= 3]
+
+                if len(recent_3_highs) >= 3 and len(old_highs) > 0:
+                    recent_max = max(recent_3_highs)
+                    old_max = max(old_highs)
+
+                    # New range = recent 3+ days stuck below old highs by >2%
+                    if recent_max < old_max * 0.98:
+                        pattern_type = "NEW_RANGE"
+                        resistance_level = recent_max
+                    else:
+                        pattern_type = "RECOVERY"
+                        # Use highest level being tested now
+                        resistance_level = max(todays_high, old_max if old_max < todays_high * 1.05 else todays_high)
+
+            # Step 4: Find all tests of the resistance level (±1% tolerance)
+            zone_tolerance = resistance_level * 0.01
+            tests = []
+
+            for idx, bar in df_hourly.iterrows():
+                if abs(bar['high'] - resistance_level) <= zone_tolerance:
+                    # Determine days ago
+                    if bar['date'] in list(last_5days_dates):
+                        days_ago = len(last_5days_dates) - list(last_5days_dates).index(bar['date']) - 1
+                    else:
+                        days_ago = len(df_hourly) - idx // 4
+
+                    tests.append({
+                        'high': bar['high'],
+                        'close': bar['close'],
+                        'days_ago': days_ago,
+                        'date': bar['date']
+                    })
+
+            # Step 5: Apply recency weighting
+            weighted_tests = []
+            for test in tests:
+                if test['days_ago'] == 0:
+                    weight = 3.0  # TODAY
+                elif test['days_ago'] == 1:
+                    weight = 2.0  # Yesterday
+                elif test['days_ago'] == 2:
+                    weight = 1.5  # 2 days ago
+                elif test['days_ago'] == 3:
+                    weight = 1.0  # 3 days ago
+                else:
+                    weight = 0.5  # 4+ days ago
+
+                weighted_tests.append({'test': test, 'weight': weight})
+
+            total_weight = sum(t['weight'] for t in weighted_tests)
+
+            # Activate if weighted count >= 3.0
+            if total_weight >= 3.0:
+                num_tests = len(tests)
+
+                return {
+                    'activated': True,
+                    'level': resistance_level,
+                    'reason': f'Tested {num_tests}x at ${resistance_level:.2f} ({pattern_type.lower()} pattern)',
+                    'confidence': 'HIGH' if total_weight >= 5.0 else 'MEDIUM',
+                    'touches': num_tests
+                }
+
+            return {'activated': False}
+
+        except Exception as e:
+            return {'activated': False}
+
+    def _detect_recency_weighted_support(self, df_hourly, current_price):
+        """
+        Detect support using recency-weighted pattern detection
+        Prioritizes what price is testing NOW (last 1-2 days)
+        """
+        try:
+            # Step 1: Identify TODAY's low and recent pattern
+            df_hourly['date'] = pd.to_datetime(df_hourly['date']).dt.date
+            today = df_hourly['date'].iloc[-1]
+            yesterday = df_hourly['date'].iloc[-2] if len(df_hourly) >= 2 else today
+
+            today_bars = df_hourly[df_hourly['date'] == today]
+            yesterday_bars = df_hourly[df_hourly['date'] == yesterday]
+            recent_bars = pd.concat([yesterday_bars, today_bars])
+
+            # Get TODAY's low (most immediate level)
+            todays_low = today_bars['low'].min() if len(today_bars) > 0 else None
+            if todays_low is None:
+                return {'activated': False}
+
+            # Step 2: Check last 5 days pattern - NEW RANGE or RECOVERY?
+            last_5days = df_hourly.iloc[-20:] if len(df_hourly) >= 20 else df_hourly
+            last_5days_dates = last_5days['date'].unique()
+
+            # Get daily lows for last 5 days
+            daily_lows_5d = []
+            for date in last_5days_dates[-5:]:
+                date_bars = last_5days[last_5days['date'] == date]
+                if len(date_bars) > 0:
+                    daily_lows_5d.append({
+                        'date': date,
+                        'low': date_bars['low'].min(),
+                        'days_ago': len(last_5days_dates) - list(last_5days_dates).index(date) - 1
+                    })
+
+            # Step 3: Determine pattern type and support level
+            pattern_type = "CURRENT_TEST"
+            support_level = todays_low  # Default: use today's low
+
+            if len(daily_lows_5d) >= 3:
+                # Check if recent 3+ days forming NEW RANGE above old lows
+                recent_3_lows = [h['low'] for h in daily_lows_5d if h['days_ago'] <= 2]
+                old_lows = [h['low'] for h in daily_lows_5d if h['days_ago'] >= 3]
+
+                if len(recent_3_lows) >= 3 and len(old_lows) > 0:
+                    recent_min = min(recent_3_lows)
+                    old_min = min(old_lows)
+
+                    # New range = recent 3+ days held above old lows by >2%
+                    if recent_min > old_min * 1.02:
+                        pattern_type = "NEW_RANGE"
+                        support_level = recent_min
+                    else:
+                        pattern_type = "RECOVERY"
+                        # Use lowest level being tested now
+                        support_level = min(todays_low, old_min if old_min > todays_low * 0.95 else todays_low)
+
+            # Step 4: Find all tests of the support level (±1% tolerance)
+            zone_tolerance = support_level * 0.01
+            tests = []
+
+            for idx, bar in df_hourly.iterrows():
+                if abs(bar['low'] - support_level) <= zone_tolerance:
+                    # Determine days ago
+                    if bar['date'] in list(last_5days_dates):
+                        days_ago = len(last_5days_dates) - list(last_5days_dates).index(bar['date']) - 1
+                    else:
+                        days_ago = len(df_hourly) - idx // 4
+
+                    tests.append({
+                        'low': bar['low'],
+                        'close': bar['close'],
+                        'days_ago': days_ago,
+                        'date': bar['date']
+                    })
+
+            # Step 5: Apply recency weighting
+            weighted_tests = []
+            for test in tests:
+                if test['days_ago'] == 0:
+                    weight = 3.0  # TODAY
+                elif test['days_ago'] == 1:
+                    weight = 2.0  # Yesterday
+                elif test['days_ago'] == 2:
+                    weight = 1.5  # 2 days ago
+                elif test['days_ago'] == 3:
+                    weight = 1.0  # 3 days ago
+                else:
+                    weight = 0.5  # 4+ days ago
+
+                weighted_tests.append({'test': test, 'weight': weight})
+
+            total_weight = sum(t['weight'] for t in weighted_tests)
+
+            # Activate if weighted count >= 3.0
+            if total_weight >= 3.0:
+                num_tests = len(tests)
+
+                return {
+                    'activated': True,
+                    'level': support_level,
+                    'reason': f'Tested {num_tests}x at ${support_level:.2f} ({pattern_type.lower()} pattern)',
+                    'confidence': 'HIGH' if total_weight >= 5.0 else 'MEDIUM',
+                    'touches': num_tests
+                }
+
+            return {'activated': False}
+
+        except Exception as e:
+            return {'activated': False}
+
     def analyze_breakout_levels(self, df, resistance, support, current_price):
         """Analyze why a level is significant and calculate targets"""
         reasons = []
@@ -207,37 +429,71 @@ class PS60Scanner:
             atr = pd.Series(tr_list).iloc[-14:].mean() if len(tr_list) >= 14 else 0
             atr_pct = (atr / current_price) * 100
 
-            # 4. Smart support/resistance calculation
-            # Near-term levels (5-day)
-            resistance_5d_spike = df['high'].iloc[-5:].max()  # Spike high
-            resistance_5d_close = df['close'].iloc[-5:].max()  # Closing high (more reliable)
-            support_5d = df['low'].iloc[-5:].min()
-
-            # Filter outliers using quantiles (10-day)
-            resistance_10d = df['high'].iloc[-10:].quantile(0.9)
-            resistance_10d_close = df['close'].iloc[-10:].quantile(0.95)  # Where price actually closed
-            support_10d = df['low'].iloc[-10:].quantile(0.1)
+            # 4. Smart support/resistance calculation using recency-weighted hourly analysis
 
             # Moving averages
             sma_10 = df['close'].iloc[-10:].mean()
             sma_20 = df['close'].iloc[-20:].mean()
 
-            # Smart resistance selection - prefer consolidation zones over spike highs
-            # If spike high is >1% above closing high, use closing high as true resistance
-            if (resistance_5d_spike - resistance_5d_close) / resistance_5d_close > 0.01:
-                # Spike detected - use closing high or 90th percentile
-                resistance = max(resistance_5d_close, resistance_10d_close)
-            else:
-                # No significant spike - use the actual high
-                resistance = resistance_5d_spike
+            # Try hourly recency-weighted analysis first (5-day lookback)
+            resistance = None
+            support = None
+            resistance_reason = None
+            support_reason = None
 
-            # Smart support selection
-            if current_price > sma_10 and abs(current_price - sma_10) < current_price * 0.1:
-                support = sma_10
-            elif abs(current_price - support_5d) / current_price < 0.1:
-                support = support_5d
-            else:
-                support = support_10d
+            try:
+                # Fetch 5 days of hourly bars for precision analysis
+                hourly_bars = self.ib.reqHistoricalData(
+                    contract,
+                    endDateTime=end_datetime,
+                    durationStr='5 D',
+                    barSizeSetting='1 hour',
+                    whatToShow='TRADES',
+                    useRTH=True,  # Regular trading hours only
+                    formatDate=1
+                )
+
+                if hourly_bars and len(hourly_bars) >= 5:
+                    df_hourly = util.df(hourly_bars)
+
+                    # RECENCY-WEIGHTED RESISTANCE DETECTION
+                    resistance_result = self._detect_recency_weighted_resistance(df_hourly, current_price)
+                    if resistance_result['activated']:
+                        resistance = resistance_result['level']
+                        resistance_reason = resistance_result['reason']
+
+                    # RECENCY-WEIGHTED SUPPORT DETECTION
+                    support_result = self._detect_recency_weighted_support(df_hourly, current_price)
+                    if support_result['activated']:
+                        support = support_result['level']
+                        support_reason = support_result['reason']
+
+            except Exception as e:
+                print(f"Hourly analysis failed for {symbol}: {e}")
+
+            # Fallback to daily-based calculation if hourly failed
+            if resistance is None:
+                resistance_5d_spike = df['high'].iloc[-5:].max()
+                resistance_5d_close = df['close'].iloc[-5:].max()
+                resistance_10d_close = df['close'].iloc[-10:].quantile(0.95)
+
+                if (resistance_5d_spike - resistance_5d_close) / resistance_5d_close > 0.01:
+                    resistance = max(resistance_5d_close, resistance_10d_close)
+                else:
+                    resistance = resistance_5d_spike
+                resistance_reason = "Daily calculation (hourly unavailable)"
+
+            if support is None:
+                support_5d = df['low'].iloc[-5:].min()
+                support_10d = df['low'].iloc[-10:].quantile(0.1)
+
+                if current_price > sma_10 and abs(current_price - sma_10) < current_price * 0.1:
+                    support = sma_10
+                elif abs(current_price - support_5d) / current_price < 0.1:
+                    support = support_5d
+                else:
+                    support = support_10d
+                support_reason = "Daily calculation (hourly unavailable)"
 
             # Get detailed breakout analysis
             analysis = self.analyze_breakout_levels(df, resistance, support, current_price)

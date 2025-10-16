@@ -1,0 +1,247 @@
+Failed to initialize SMA calculator: IBKR connection must be connected before creating SMACalculator
+INFO - Logging initialized: /Users/karthik/projects/DayTrader/trader/backtest/logs/backtest_20250915_170314.log
+INFO - ================================================================================
+INFO - PS60 BACKTEST - 2025-09-15 00:00:00
+INFO - ================================================================================
+INFO - Scanner file: /Users/karthik/projects/DayTrader/stockscanner/output/scanner_results_20250915.json
+INFO - TSLA: Fetched 4680 5-second bars
+
+================================================================================
+PS60 BACKTEST - 2025-09-15 00:00:00
+================================================================================
+Scanner file: /Users/karthik/projects/DayTrader/stockscanner/output/scanner_results_20250915.json
+Loaded 57 scanner results
+✓ Connected to IBKR (Client ID: 3000)
+⚠️  Using LEGACY scoring filtering
+
+================================================================================
+MARKET TREND: NEUTRAL
+WATCHLIST: 52 tradeable setups (using strategy filters)
+================================================================================
+
+📊 Pre-fetching hourly bars for momentum indicators...
+  ✓ TSLA: 50 hourly bars cached
+  ✓ LYFT: 50 hourly bars cached
+  ✓ JD: 50 hourly bars cached
+  ✓ MU: 50 hourly bars cached
+  ✓ ARM: 50 hourly bars cached
+  ✓ BIDU: 50 hourly bars cached
+  ✓ HOOD: 50 hourly bars cached
+  ✓ LCID: 50 hourly bars cached
+  ✓ RIVN: 50 hourly bars cached
+  ✓ CLOV: 50 hourly bars cached
+  ✓ NIO: 50 hourly bars cached
+  ✓ COIN: 50 hourly bars cached
+  ✓ BA: 50 hourly bars cached
+  ✓ INTC: 50 hourly bars cached
+  ✓ XPEV: 50 hourly bars cached
+  ✓ AMD: 50 hourly bars cached
+  ✓ RBLX: 50 hourly bars cached
+  ✓ LRCX: 50 hourly bars cached
+  ✓ UBER: 50 hourly bars cached
+  ✓ ROKU: 50 hourly bars cached
+  ✓ NVDA: 50 hourly bars cached
+  ✓ SOFI: 50 hourly bars cached
+  ✓ AVGO: 50 hourly bars cached
+  ✓ GS: 50 hourly bars cached
+  ✓ BB: 50 hourly bars cached
+  ✓ AAPL: 50 hourly bars cached
+  ✓ SNAP: 50 hourly bars cached
+  ✓ GOOGL: 50 hourly bars cached
+  ✓ XOM: 50 hourly bars cached
+  ✓ AMC: 50 hourly bars cached
+  ✓ LI: 50 hourly bars cached
+  ✓ BBBY: 50 hourly bars cached
+  ✓ DIS: 50 hourly bars cached
+  ✓ F: 50 hourly bars cached
+  ✓ PYPL: 50 hourly bars cached
+  ✓ AMAT: 50 hourly bars cached
+  ✓ AMZN: 50 hourly bars cached
+  ✓ GM: 50 hourly bars cached
+  ✓ NFLX: 50 hourly bars cached
+  ✓ PINS: 50 hourly bars cached
+  ✓ GME: 50 hourly bars cached
+  ✓ C: 50 hourly bars cached
+  ✓ QCOM: 50 hourly bars cached
+  ✓ CVX: 50 hourly bars cached
+  ✓ WFC: 50 hourly bars cached
+  ✓ JPM: 50 hourly bars cached
+  ✓ MS: 50 hourly bars cached
+  ✓ OXY: 50 hourly bars cached
+  ✓ BAC: 50 hourly bars cached
+  ✓ BABA: 50 hourly bars cached
+  ✓ META: 50 hourly bars cached
+  ✓ MSFT: 50 hourly bars cached
+✓ Cached hourly bars for 52/52 stocks
+
+  ✓ Loading from cache: TSLA_20250915_5sec.json
+  ✓ Loading from cache: LYFT_20250915_5sec.json
+  ✓ Loading from cache: JD_20250915_5sec.json
+  ✓ Loading from cache: MU_20250915_5sec.json
+  ✓ Loading from cache: ARM_20250915_5sec.json
+  ✓ Loading from cache: BIDU_20250915_5sec.json
+  ✓ Loading from cache: HOOD_20250915_5sec.json
+  ✓ Loading from cache: LCID_20250915_5sec.json
+  ✓ Loading from cache: RIVN_20250915_5sec.json
+  ✓ Loading from cache: CLOV_20250915_5sec.json
+  ✓ Loading from cache: NIO_20250915_5sec.json
+  ✓ Loading from cache: COIN_20250915_5sec.json
+  ✓ Loading from cache: BA_20250915_5sec.json
+  ✓ Loading from cache: INTC_20250915_5sec.json
+  ✓ Loading from cache: XPEV_20250915_5sec.json
+  ✓ Loading from cache: AMD_20250915_5sec.json
+  ✓ Loading from cache: RBLX_20250915_5sec.json
+  ✓ Loading from cache: LRCX_20250915_5sec.json
+  ✓ Loading from cache: UBER_20250915_5sec.json
+  ✓ Loading from cache: ROKU_20250915_5sec.json
+  ✓ Loading from cache: NVDA_20250915_5sec.json
+  ✓ Loading from cache: SOFI_20250915_5sec.json
+  ✓ Loading from cache: AVGO_20250915_5sec.json
+  ✓ Loading from cache: GS_20250915_5sec.json
+  ✓ Loading from cache: BB_20250915_5sec.json
+  ✓ Loading from cache: AAPL_20250915_5sec.json
+  ✓ Loading from cache: SNAP_20250915_5sec.json
+  ✓ Loading from cache: GOOGL_20250915_5sec.json
+  ✓ Loading from cache: XOM_20250915_5sec.json
+  ✓ Loading from cache: AMC_20250915_5sec.json
+  ✓ Loading from cache: LI_20250915_5sec.json
+  ✓ Loading from cache: BBBY_20250915_5sec.json
+  ✓ Loading from cache: DIS_20250915_5sec.json
+  ✓ Loading from cache: F_20250915_5sec.json
+  ✓ Loading from cache: PYPL_20250915_5sec.json
+  ✓ Loading from cache: AMAT_20250915_5sec.json
+  ✓ Loading from cache: AMZN_20250915_5sec.json
+  ✓ Loading from cache: GM_20250915_5sec.json
+  ✓ Loading from cache: NFLX_20250915_5sec.json
+  ✓ Loading from cache: PINS_20250915_5sec.json
+  ✓ Loading from cache: GME_20250915_5sec.json
+  ✓ Loading from cache: C_20250915_5sec.json
+  ✓ Loading from cache: QCOM_20250915_5sec.json
+  ✓ Loading from cache: CVX_20250915_5sec.json
+  ✓ Loading from cache: WFC_20250915_5sec.json
+  ✓ Loading from cache: JPM_20250915_5sec.json
+  ✓ Loading from cache: MS_20250915_5sec.json
+  ✓ Loading from cache: OXY_20250915_5sec.json
+  ✓ Loading from cache: BAC_20250915_5sec.json
+  ✓ Loading from cache: BABA_20250915_5sec.json
+  ✓ Loading from cache: META_20250915_5sec.json
+  ✓ Loading from cache: MSFT_20250915_5sec.json
+
+[TSLA] Testing setup...
+  Resistance: $396.69 | Support: $389.43
+  Score: 110 | R/R: 1.37:1
+  ✓ Fetched 4680 5-second bars
+  📊 Overnight gap: +6.99% → Now 6.26% from pivot
+[DELAYED MOMENTUM] TSLA Bar 203 (candle #16) - 0.51x vol (need 2.0x), 0.06% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 215 (candle #17) - 0.71x vol (need 2.0x), 0.47% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 227 (candle #18) - 0.78x vol (need 2.0x), 0.06% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 239 (candle #19) - 0.44x vol (need 2.0x), 0.19% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 251 (candle #20) - 0.60x vol (need 2.0x), 0.11% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 263 (candle #21) - 0.83x vol (need 2.0x), 0.45% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 275 (candle #22) - 0.85x vol (need 2.0x), 0.12% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 287 (candle #23) - 0.76x vol (need 2.0x), 0.11% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 299 (candle #24) - 0.51x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 311 (candle #25) - 0.75x vol (need 2.0x), 0.15% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 323 (candle #26) - 0.45x vol (need 2.0x), 0.05% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 335 (candle #27) - 0.53x vol (need 2.0x), 0.16% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 347 (candle #28) - 0.47x vol (need 2.0x), 0.03% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 359 (candle #29) - 0.61x vol (need 2.0x), 0.20% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 371 (candle #30) - 0.84x vol (need 2.0x), 0.30% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 383 (candle #31) - 0.68x vol (need 2.0x), 0.24% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 395 (candle #32) - 0.60x vol (need 2.0x), 0.43% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 407 (candle #33) - 0.64x vol (need 2.0x), 0.05% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 419 (candle #34) - 0.49x vol (need 2.0x), 0.04% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 431 (candle #35) - 0.46x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 443 (candle #36) - 0.60x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 455 (candle #37) - 1.44x vol (need 2.0x), 0.63% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 467 (candle #38) - 1.68x vol (need 2.0x), 0.08% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 479 (candle #39) - 1.10x vol (need 2.0x), 0.02% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 491 (candle #40) - 0.85x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 503 (candle #41) - 0.67x vol (need 2.0x), 0.02% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 515 (candle #42) - 0.82x vol (need 2.0x), 0.15% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 527 (candle #43) - 0.99x vol (need 2.0x), 0.35% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 539 (candle #44) - 0.89x vol (need 2.0x), 0.19% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 551 (candle #45) - 0.81x vol (need 2.0x), 0.12% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 563 (candle #46) - 0.95x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 575 (candle #47) - 0.80x vol (need 2.0x), 0.08% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 587 (candle #48) - 0.89x vol (need 2.0x), 0.25% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 599 (candle #49) - 1.42x vol (need 2.0x), 0.22% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 611 (candle #50) - 1.04x vol (need 2.0x), 0.23% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 623 (candle #51) - 1.00x vol (need 2.0x), 0.24% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 635 (candle #52) - 1.19x vol (need 2.0x), 0.14% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 647 (candle #53) - 0.86x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 659 (candle #54) - 1.19x vol (need 2.0x), 0.23% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 671 (candle #55) - 0.92x vol (need 2.0x), 0.27% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 683 (candle #56) - 1.03x vol (need 2.0x), 0.21% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 695 (candle #57) - 0.81x vol (need 2.0x), 0.20% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 707 (candle #58) - 1.59x vol (need 2.0x), 0.10% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 719 (candle #59) - 1.10x vol (need 2.0x), 0.16% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 731 (candle #60) - 1.60x vol (need 2.0x), 0.12% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 743 (candle #61) - 0.68x vol (need 2.0x), 0.01% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 755 (candle #62) - 0.66x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 767 (candle #63) - 0.59x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 779 (candle #64) - 0.77x vol (need 2.0x), 0.25% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 803 (candle #66) - 0.50x vol (need 2.0x), 0.10% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 815 (candle #67) - 0.57x vol (need 2.0x), 0.04% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 827 (candle #68) - 0.40x vol (need 2.0x), 0.06% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 839 (candle #69) - 0.66x vol (need 2.0x), 0.25% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 851 (candle #70) - 0.87x vol (need 2.0x), 0.02% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 863 (candle #71) - 0.48x vol (need 2.0x), 0.18% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 875 (candle #72) - 0.54x vol (need 2.0x), 0.01% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 887 (candle #73) - 0.52x vol (need 2.0x), 0.04% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 899 (candle #74) - 1.19x vol (need 2.0x), 0.24% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 911 (candle #75) - 0.69x vol (need 2.0x), 0.05% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 923 (candle #76) - 0.64x vol (need 2.0x), 0.03% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 935 (candle #77) - 0.46x vol (need 2.0x), 0.01% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 947 (candle #78) - 0.57x vol (need 2.0x), 0.08% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 959 (candle #79) - 0.60x vol (need 2.0x), 0.00% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 971 (candle #80) - 1.10x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 983 (candle #81) - 0.91x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 995 (candle #82) - 1.08x vol (need 2.0x), 0.06% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1007 (candle #83) - 1.60x vol (need 2.0x), 0.15% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1019 (candle #84) - 1.25x vol (need 2.0x), 0.05% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1031 (candle #85) - 1.59x vol (need 2.0x), 0.10% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1043 (candle #86) - 1.33x vol (need 2.0x), 0.00% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1055 (candle #87) - 0.97x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1067 (candle #88) - 0.96x vol (need 2.0x), 0.00% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1079 (candle #89) - 1.42x vol (need 2.0x), 0.18% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1091 (candle #90) - 0.95x vol (need 2.0x), 0.03% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1103 (candle #91) - 1.40x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1115 (candle #92) - 1.19x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1127 (candle #93) - 0.87x vol (need 2.0x), 0.03% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1139 (candle #94) - 0.86x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1151 (candle #95) - 1.64x vol (need 2.0x), 0.46% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1163 (candle #96) - 1.27x vol (need 2.0x), 0.02% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1175 (candle #97) - 0.92x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1187 (candle #98) - 0.73x vol (need 2.0x), 0.08% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1199 (candle #99) - 0.52x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1211 (candle #100) - 0.88x vol (need 2.0x), 0.01% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1223 (candle #101) - 0.92x vol (need 2.0x), 0.11% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1235 (candle #102) - 0.69x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1247 (candle #103) - 0.74x vol (need 2.0x), 0.10% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1259 (candle #104) - 0.78x vol (need 2.0x), 0.07% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1271 (candle #105) - 0.74x vol (need 2.0x), 0.01% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1283 (candle #106) - 0.63x vol (need 2.0x), 0.09% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1295 (candle #107) - 0.84x vol (need 2.0x), 0.11% candle (need 0.0%)
+[DELAYED MOMENTUM] TSLA Bar 1307 (candle #108) - 2.24x vol (need 2.0x), 0.39% candle (need 0.0%)
+[MOMENTUM FOUND!] TSLA Bar 1307 - Checking filters...
+
+✓ Disconnected from IBKR
+Traceback (most recent call last):
+  File "/Users/karthik/projects/DayTrader/trader/backtest/backtester.py", line 1026, in <module>
+    main()
+  File "/Users/karthik/projects/DayTrader/trader/backtest/backtester.py", line 1022, in main
+    backtester.run()
+  File "/Users/karthik/projects/DayTrader/trader/backtest/backtester.py", line 239, in run
+    self.backtest_day()
+  File "/Users/karthik/projects/DayTrader/trader/backtest/backtester.py", line 320, in backtest_day
+    self.backtest_stock(stock)
+  File "/Users/karthik/projects/DayTrader/trader/backtest/backtester.py", line 466, in backtest_stock
+    confirmed, confirm_reason, entry_state = self.strategy.check_hybrid_entry(
+  File "/Users/karthik/projects/DayTrader/trader/strategy/ps60_strategy.py", line 1007, in check_hybrid_entry
+    return check_entry_state_machine(
+  File "/Users/karthik/projects/DayTrader/trader/strategy/ps60_entry_state_machine.py", line 197, in check_entry_state_machine
+    insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+  File "/Users/karthik/projects/DayTrader/trader/strategy/ps60_strategy.py", line 1476, in _check_room_to_run
+    self.logger.debug(f"  [Room-to-Run] {side}: entry=${current_price:.2f}, target=${target_price:.2f}, room={room_pct:.2f}%, threshold={self.min_room_to_target_pct:.1f}%")
+AttributeError: 'PS60Strategy' object has no attribute 'logger'
