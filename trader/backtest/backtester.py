@@ -59,10 +59,10 @@ class PS60Backtester:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
 
-        # Initialize strategy and position manager
-        # Note: IB connection will be established later in run() method
-        # Strategy will use it for momentum indicators when available
-        self.strategy = PS60Strategy(self.config, ib_connection=self.ib)
+        # Initialize strategy WITHOUT IB connection (will be set after connect())
+        # CRITICAL FIX (Oct 15, 2025): Don't pass IB connection until after connect()
+        # SMACalculator requires connected IB instance, which isn't ready during __init__
+        self.strategy = PS60Strategy(self.config, ib_connection=None)
         self.pm = PositionManager()
 
         # Track trades for backtest results
@@ -89,6 +89,10 @@ class PS60Backtester:
 
         # Setup logging
         self._setup_logging()
+
+        # CRITICAL FIX (Oct 14, 2025): Pass logger to strategy for filter visibility
+        # Enables room-to-run and directional volume filter logging in backtest context
+        self.strategy.logger = self.logger
 
         # Load scanner results
         print(f"\n{'='*80}")
@@ -183,6 +187,41 @@ class PS60Backtester:
         try:
             self.ib.connect('127.0.0.1', 7497, clientId=3000)
             print(f"✓ Connected to IBKR (Client ID: 3000)")
+
+            # CRITICAL FIX (Oct 15, 2025): Set IB connection on strategy AFTER connecting
+            # This allows SMACalculator to initialize properly with connected instance
+            self.strategy.ib = self.ib
+
+            # Re-initialize SMA calculator now that IB is connected
+            if self.strategy.use_sma_target_partials and self.strategy.sma_enabled:
+                try:
+                    from strategy.sma_calculator import SMACalculator
+                    self.strategy.sma_calculator = SMACalculator(
+                        self.ib,
+                        cache_duration_sec=self.strategy.sma_cache_duration
+                    )
+                    print(f"✓ SMA calculator initialized (timeframe: {self.strategy.sma_timeframe}, periods: {self.strategy.sma_periods})")
+                except Exception as e:
+                    print(f"⚠️  Failed to initialize SMA calculator: {e}")
+                    self.strategy.sma_calculator = None
+
+            # Re-initialize Stochastic calculator now that IB is connected (Oct 15, 2025)
+            if self.strategy.stochastic_enabled:
+                try:
+                    from strategy.stochastic_calculator import StochasticCalculator
+                    self.strategy.stochastic_calculator = StochasticCalculator(
+                        self.ib,
+                        k_period=self.strategy.stochastic_k_period,
+                        k_smooth=self.strategy.stochastic_k_smooth,
+                        d_smooth=self.strategy.stochastic_d_smooth,
+                        cache_duration_sec=self.strategy.stochastic_cache_duration
+                    )
+                    print(f"✓ Stochastic calculator initialized ({self.strategy.stochastic_k_period}, {self.strategy.stochastic_k_smooth}, {self.strategy.stochastic_d_smooth})")
+                    print(f"  LONG: K={self.strategy.stochastic_long_min_k}-{self.strategy.stochastic_long_max_k}, SHORT: K={self.strategy.stochastic_short_min_k}-{self.strategy.stochastic_short_max_k}")
+                except Exception as e:
+                    print(f"⚠️  Failed to initialize stochastic calculator: {e}")
+                    self.strategy.stochastic_calculator = None
+
             return True
         except Exception as e:
             print(f"✗ Connection failed: {e}")

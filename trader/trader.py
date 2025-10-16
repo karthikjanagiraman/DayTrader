@@ -484,6 +484,9 @@ class PS60Trader:
             # Filter using strategy module
             self.watchlist = self.strategy.filter_scanner_results(all_results)
 
+            # Store scanner file path for validation (FIX: Oct 14, 2025)
+            self.scanner_results_file = str(scanner_path)
+
             self.logger.info(f"✓ Loaded {len(self.watchlist)} setups from {scanner_file}")
             self.logger.info(f"  Filtered from {len(all_results)} total results")
 
@@ -537,6 +540,9 @@ class PS60Trader:
 
             # Apply tier-based filtering
             self.watchlist = self.strategy.filter_enhanced_scanner_results(all_results)
+
+            # Store scanner file path for validation (FIX: Oct 14, 2025)
+            self.scanner_results_file = str(csv_path)
 
             self.logger.info(f"✓ Filtered to {len(self.watchlist)} setups after tier filtering")
 
@@ -1206,6 +1212,99 @@ class PS60Trader:
                                 f"Remaining: {int(position['remaining']*100)}% | "
                                 f"P&L: ${unrealized_pnl:+.2f}")
 
+            # ========================================================================
+            # DYNAMIC RESISTANCE EXITS (Oct 15, 2025)
+            # ========================================================================
+            # Purpose: Take partials when price approaches technical resistance levels
+            #          instead of waiting for arbitrary 1% or 2% profit targets
+            #
+            # Why: Stocks often stall/reverse at technical levels (SMAs, BB, LR)
+            #      Taking partials BEFORE resistance locks profits
+            #      Much smarter than fixed percentage targets
+            #
+            # How: Check hourly SMAs, Bollinger Bands, Linear Regression channels
+            #      If resistance within 0.5% detected → take 25% partial
+            #      Then activate trailing stop on remainder to capture further move
+            #
+            # Example: SOFI Oct 15, 2025
+            #   - Entry: $28.55, Exit: $28.58 (15-min rule) = $10.50 profit ❌
+            #   - WITH this feature:
+            #     - Price $28.83, SMA50 @ $28.85 (0.07% away) = RESISTANCE!
+            #     - Take 25% partial @ $28.83 = +$98 locked
+            #     - Trail remainder @ 0.5% → capture move to $28.77 = +$231
+            #     - Total: $329 profit (31x improvement!) ✅
+            # ========================================================================
+
+            config = self.config.get('trading', {}).get('exits', {}).get('dynamic_resistance_exits', {})
+            if config.get('enabled', False):
+                # Guard #1: Only check if position still has >25% remaining
+                # Rationale: Don't check on final runner (let trailing stop handle it)
+                if position.get('remaining', 1.0) > 0.25:
+                    # Guard #2: Only check if we have minimum profit (default 0.5%)
+                    # Rationale: Avoid checking on tiny moves that won't reach resistance
+                    min_gain = config.get('min_gain_before_check', 0.005)  # 0.5%
+                    if gain_pct / 100.0 >= min_gain:
+                        self.logger.debug(f"  {symbol}: Checking overhead resistance (gain {gain_pct:.2f}%, remaining {position.get('remaining', 1.0)*100:.0f}%)...")
+
+                        # Check for nearby resistance (SMAs, BB, LR on hourly bars)
+                        has_resistance, resistance_level = self.strategy.check_overhead_resistance(
+                            symbol, current_price
+                        )
+
+                        if has_resistance:
+                            # Resistance detected! Extract details
+                            level_price = resistance_level['price']
+                            level_type = resistance_level['type']
+                            distance_pct = resistance_level['distance_pct'] * 100
+
+                            # Log detailed resistance detection
+                            self.logger.info(f"\n🎯 RESISTANCE DETECTED: {symbol}")
+                            self.logger.info(f"   Entry: ${position['entry_price']:.2f}")
+                            self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%)")
+                            self.logger.info(f"   {level_type}: ${level_price:.2f} (only {distance_pct:.2f}% away!)")
+                            self.logger.info(f"   Remaining: {int(position.get('remaining', 1.0)*100)}%")
+
+                            # ACTION 1: Take partial at resistance (default 25%)
+                            partial_size = config.get('partial_size', 0.25)
+                            self.logger.info(f"   💰 Taking {int(partial_size*100)}% partial to lock profits")
+                            self.take_partial(position, current_price, partial_size, f'RESISTANCE_{level_type}')
+
+                            # ACTION 2: Activate trailing stop on remainder if not already active
+                            # Rationale: Let remainder capture additional move, but protect with trail
+                            if not position.get('trailing_stop_active'):
+                                trail_distance = config.get('trailing_distance_pct', 0.005)  # 0.5%
+
+                                # Calculate new stop based on side
+                                if position['side'] == 'LONG':
+                                    new_stop = current_price * (1 - trail_distance)
+                                else:  # SHORT
+                                    new_stop = current_price * (1 + trail_distance)
+
+                                # Update position tracking
+                                position['stop'] = new_stop
+                                position['trailing_stop_active'] = True
+                                position['trailing_high'] = current_price  # Track high water mark
+
+                                self.logger.info(f"   🔔 Trailing stop activated @ ${new_stop:.2f} ({trail_distance*100:.1f}% trail)")
+
+                                # ACTION 3: Update stop order in IBKR with new quantity
+                                # Important: After taking partial, remaining shares changed
+                                try:
+                                    # Cancel old stop order (has wrong quantity)
+                                    if 'stop_order' in position and position['stop_order']:
+                                        old_order = position['stop_order']
+                                        self.ib.cancelOrder(old_order.order)
+                                        self.ib.sleep(0.5)  # Wait for cancellation
+
+                                    # Place new stop order with updated quantity and trail stop price
+                                    self.place_stop_order(position)
+                                    self.logger.info(f"   ✓ Updated stop order in IBKR (new qty: {int(position['shares'] * position['remaining'])} shares)")
+                                except Exception as e:
+                                    self.logger.error(f"   ✗ CRITICAL: Failed to update stop order: {e}")
+                                    self.logger.error(f"      Position may be unprotected - MANUAL CHECK REQUIRED")
+                            else:
+                                self.logger.debug(f"  {symbol}: Trailing stop already active, skipping activation")
+
             # Check 15-minute rule (PS60 methodology - exit stuck positions)
             self.logger.debug(f"  {symbol}: Checking 15-minute rule (time in trade: {int(time_in_trade)}m)...")
             should_exit, reason = self.strategy.check_fifteen_minute_rule(
@@ -1367,6 +1466,18 @@ class PS60Trader:
         if shares == 0:
             del self.positions[symbol]
             return None
+
+        # CRITICAL FIX (Oct 14, 2025): Cancel stop-loss order BEFORE closing position
+        # Prevents orphaned stops from triggering after position is closed
+        if 'stop_order' in position and position['stop_order']:
+            try:
+                stop_order = position['stop_order']
+                self.ib.cancelOrder(stop_order.order)
+                self.ib.sleep(0.5)  # Wait for cancellation
+                self.logger.info(f"  ✓ Cancelled stop order for {symbol} (Order ID: {stop_order.order.orderId})")
+            except Exception as e:
+                self.logger.error(f"  ✗ CRITICAL: Failed to cancel stop order for {symbol}: {e}")
+                self.logger.error(f"    Stop may still be active - MANUAL CHECK REQUIRED")
 
         if position['side'] == 'LONG':
             action = 'SELL'
@@ -1541,6 +1652,40 @@ class PS60Trader:
         if not self.connect():
             return
 
+        # CRITICAL FIX (Oct 15, 2025): Set IB connection on strategy AFTER connecting
+        # This allows SMACalculator and StochasticCalculator to initialize properly
+        self.strategy.ib = self.ib
+
+        # Re-initialize SMA calculator now that IB is connected
+        if self.strategy.use_sma_target_partials and self.strategy.sma_enabled:
+            try:
+                from strategy.sma_calculator import SMACalculator
+                self.strategy.sma_calculator = SMACalculator(
+                    self.ib,
+                    cache_duration_sec=self.strategy.sma_cache_duration
+                )
+                self.logger.info(f"✓ SMA calculator initialized (timeframe: {self.strategy.sma_timeframe}, periods: {self.strategy.sma_periods})")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Failed to initialize SMA calculator: {e}")
+                self.strategy.sma_calculator = None
+
+        # Re-initialize Stochastic calculator now that IB is connected (Oct 15, 2025)
+        if self.strategy.stochastic_enabled:
+            try:
+                from strategy.stochastic_calculator import StochasticCalculator
+                self.strategy.stochastic_calculator = StochasticCalculator(
+                    self.ib,
+                    k_period=self.strategy.stochastic_k_period,
+                    k_smooth=self.strategy.stochastic_k_smooth,
+                    d_smooth=self.strategy.stochastic_d_smooth,
+                    cache_duration_sec=self.strategy.stochastic_cache_duration
+                )
+                self.logger.info(f"✓ Stochastic calculator initialized ({self.strategy.stochastic_k_period}, {self.strategy.stochastic_k_smooth}, {self.strategy.stochastic_d_smooth})")
+                self.logger.info(f"  LONG: K={self.strategy.stochastic_long_min_k}-{self.strategy.stochastic_long_max_k}, SHORT: K={self.strategy.stochastic_short_min_k}-{self.strategy.stochastic_short_max_k}")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Failed to initialize stochastic calculator: {e}")
+                self.strategy.stochastic_calculator = None
+
         # CRITICAL: Clean up any existing positions/orders before starting (Oct 13, 2025)
         self.cleanup_session()
 
@@ -1605,6 +1750,10 @@ class PS60Trader:
         self.logger.info(f"  ✓ Choppy Market Filter: {self.strategy.enable_choppy_filter}")
         self.logger.info(f"  ✓ Room-to-Run Filter: {self.strategy.enable_room_to_run_filter}")
         self.logger.info(f"  ✓ Sustained Break Logic: {self.strategy.sustained_break_enabled}")
+        self.logger.info(f"  ✓ Stochastic Filter: {self.strategy.stochastic_enabled}")
+        if self.strategy.stochastic_enabled:
+            self.logger.info(f"    - LONG: K={self.strategy.stochastic_long_min_k}-{self.strategy.stochastic_long_max_k}")
+            self.logger.info(f"    - SHORT: K={self.strategy.stochastic_short_min_k}-{self.strategy.stochastic_short_max_k}")
         self.logger.info(f"  ✓ 8-Minute Rule: Active")
         self.logger.info(f"  ✓ Max Attempts: {self.strategy.max_attempts_per_pivot}")
         self.logger.info(f"  ✓ Entry Window: {self.strategy.min_entry_time} - {self.strategy.max_entry_time}")

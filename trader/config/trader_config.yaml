@@ -10,8 +10,8 @@ trading:
   position_sizing:
     min_shares: 10
     max_shares: 1000          # Hard cap on share count
-    max_position_value: 20000 # Adaptive sizing: $20k max per position (20% of account)
-    max_position_pct: 200.0   # Legacy check - replaced by max_position_value
+    max_position_value: 10000 # Adaptive sizing: $10k max per position (20% of account)
+    max_position_pct: 100.0   # Legacy check - replaced by max_position_value
 
   entry:
     use_market_orders: true
@@ -44,9 +44,9 @@ trading:
     # SMA Configuration (Priority 1 - real market structure)
     sma:
       enabled: true
-      periods: [5, 10, 20]            # SMA5, SMA10, SMA20
+      periods: [5, 10, 20, 50, 100]   # SMA5, SMA10, SMA20, SMA50, SMA100
       timeframe: '1 hour'             # '1 hour' (recommended) or '1 day'
-      cache_duration_sec: 300         # Cache SMAs for 5 minutes
+      cache_duration_sec: 3600         # Cache SMAs for 1 hour  
 
     # Scanner Targets (Priority 2 - fill gaps between SMAs)
     scanner_targets:
@@ -72,6 +72,33 @@ trading:
     percentage: 0.01          # Trail by 1% (wider than initial 0.5% test)
     atr_multiplier: 2.0       # Trail by 2x ATR (for atr type)
     min_profit_to_activate: 0.02  # Activate after 2% profit (let position breathe)
+
+  # ===== DYNAMIC RESISTANCE EXITS (Oct 15, 2025) =====
+  # NEW: Take partials when approaching technical resistance levels
+  # Uses hourly SMAs, Bollinger Bands, and Linear Regression channels
+  # Smarter than fixed 1% trailing - respects actual market structure
+  # Example: SOFI $28.55 entry → detect SMA50 @ $28.85 → take 25% partial, trail remainder
+  dynamic_resistance_exits:
+    enabled: true                     # Enable dynamic resistance detection
+    resistance_distance_pct: 0.005    # 0.5% = "near" resistance threshold
+    min_gain_before_check: 0.005      # Only check after 0.5% profit minimum
+    partial_size: 0.25                # Take 25% partial at resistance
+    trailing_distance_pct: 0.005      # 0.5% trail distance after partial
+
+    # Which technical levels to check
+    check_smas: true                  # Check hourly SMAs (5, 10, 20, 50, 100)
+    check_bollinger_bands: true       # Check Bollinger Bands upper band
+    check_linear_regression: true     # Check Linear Regression upper channel
+
+    # Bollinger Bands settings (hourly timeframe)
+    bb_period: 20                     # 20-period SMA on hourly bars
+    bb_std_dev: 2                     # 2 standard deviations
+
+    # Linear Regression settings (hourly timeframe)
+    lr_period: 30                     # 30-period lookback on hourly bars
+
+    # SMA periods to check (hourly timeframe)
+    sma_periods: [5, 10, 20, 50, 100]  # All hourly SMAs
 
   risk:
     breakeven_after_partial: true   # Move stop to breakeven after taking partial
@@ -125,10 +152,13 @@ trading:
     macd_timeframe: '1 hour'                # 1 hour bars (same as RSI)
 
     # PULLBACK/RETEST thresholds (patient entry for weak initial breaks)
+    # FIXES (Oct 15, 2025): Strengthened to prevent weak retests of stale breakouts
     require_pullback_retest: true           # Enable pullback logic for weak breaks
     pullback_distance_pct: 0.003            # Must pullback within 0.3% of pivot
     max_pullback_bars: 24                   # Max 2 minutes (24 × 5-sec bars) to retest
-    pullback_volume_threshold: 1.2          # Require 1.2x volume on retest
+    pullback_volume_threshold: 2.0          # ✅ RAISED from 1.2 to 2.0 - require strong confirmation on retest
+    pullback_candle_min_pct: 0.005          # ✅ NEW: Require 0.5% minimum candle size (0.0% candles blocked)
+    max_retest_time_minutes: 30             # ✅ NEW: Only allow retests within 30 min of initial break (prevent stale entries)
 
     # SUSTAINED BREAK logic (Oct 5, 2025) - Alternative for slow grind breakouts
     # Catches PLTR-type setups: weak candle but sustained hold with volume
@@ -244,6 +274,16 @@ filters:
                                # Entry $183, Target $184.14 = 0.6% → BLOCK
                                # Entry $100, Target $103 = 3.0% → ALLOW
 
+  # ENTRY POSITION FILTER (Oct 15, 2025) ⭐ NEW
+  # ----------------------------------------------------------------------------
+  # Purpose: Prevent entering too far above resistance (chasing stale retests)
+  # When: Checked for ALL entry types during pullback/retest confirmation
+  # How: Blocks if entry_price > pivot_price * (1 + max_entry_above_resistance)
+  # Impact: Prevents chasing stocks that already moved away from breakout
+  # Example: GM resistance $57.45, entry $57.79 (+0.59%) → BLOCKED if max=0.003
+  max_entry_above_resistance: 0.003  # ✅ NEW: Don't enter >0.3% above pivot for LONGS
+  max_entry_below_support: 0.003     # ✅ NEW: Don't enter >0.3% below pivot for SHORTS
+
   # SYMBOL FILTERS (Blacklist/Whitelist)
   # ----------------------------------------------------------------------------
   # Purpose: Avoid specific symbols or categories with poor characteristics
@@ -255,6 +295,30 @@ filters:
     - "QQQ"
     - "DIA"
     - "IWM"
+
+# STOCHASTIC OSCILLATOR FILTER (Oct 15, 2025) ⭐ NEW
+# ----------------------------------------------------------------------------
+# Purpose: Confirm momentum and avoid overbought/oversold entries
+# Uses: Hourly bars with 21-period lookback (Stochastic 21, 1, 3)
+# LONG entries: %K must be between 60-80 (momentum zone, not overbought)
+# SHORT entries: %K must be between 20-50 (momentum zone, not oversold)
+# Applied to: ALL entry paths (momentum, pullback, sustained)
+# Documentation: See explained/STOCHASTIC_21_1_3_EXPLAINED.md
+stochastic:
+  enabled: true                     # Enable stochastic confirmation filter
+  k_period: 21                      # Lookback period (21 hourly bars = ~2.5 days)
+  k_smooth: 1                       # %K smoothing (1 = no smoothing, raw stochastic)
+  d_smooth: 3                       # %D smoothing (3-period SMA of %K)
+
+  # Entry requirements by direction
+  long_min_k: 60                    # LONG: %K must be ≥60 (has momentum)
+  long_max_k: 80                    # LONG: %K must be ≤80 (not overbought)
+
+  short_min_k: 20                   # SHORT: %K must be ≥20 (not oversold)
+  short_max_k: 50                   # SHORT: %K must be ≤50 (has downward momentum)
+
+  cache_duration_sec: 3600          # Cache stochastic values for 1 hour
+  allow_entry_if_unavailable: true  # If stochastic can't be calculated, allow entry anyway
 
 ibkr:
   host: "127.0.0.1"

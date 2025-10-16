@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from .breakout_state_tracker import BreakoutStateTracker, BreakoutState
 from .ps60_entry_state_machine import check_entry_state_machine
 from .sma_calculator import SMACalculator, calculate_sma_from_bars
+from .stochastic_calculator import StochasticCalculator
 
 # Setup module logger
 logger = logging.getLogger(__name__)
@@ -100,6 +101,38 @@ class PS60Strategy:
                 logger.warning(f"Failed to initialize SMA calculator: {e}")
                 self.sma_calculator = None
 
+        # Stochastic Oscillator Filter (Oct 15, 2025)
+        # Used to confirm momentum and avoid overbought/oversold entries
+        stochastic_config = config.get('stochastic', {})
+        self.stochastic_enabled = stochastic_config.get('enabled', False)
+        self.stochastic_k_period = stochastic_config.get('k_period', 21)
+        self.stochastic_k_smooth = stochastic_config.get('k_smooth', 1)
+        self.stochastic_d_smooth = stochastic_config.get('d_smooth', 3)
+        self.stochastic_long_min_k = stochastic_config.get('long_min_k', 60)
+        self.stochastic_long_max_k = stochastic_config.get('long_max_k', 80)
+        self.stochastic_short_min_k = stochastic_config.get('short_min_k', 20)
+        self.stochastic_short_max_k = stochastic_config.get('short_max_k', 50)
+        self.stochastic_cache_duration = stochastic_config.get('cache_duration_sec', 3600)
+        self.stochastic_allow_if_unavailable = stochastic_config.get('allow_entry_if_unavailable', True)
+
+        # Initialize stochastic calculator if enabled and IB connection available
+        self.stochastic_calculator = None
+        if self.stochastic_enabled and ib_connection:
+            try:
+                self.stochastic_calculator = StochasticCalculator(
+                    ib_connection,
+                    k_period=self.stochastic_k_period,
+                    k_smooth=self.stochastic_k_smooth,
+                    d_smooth=self.stochastic_d_smooth,
+                    cache_duration_sec=self.stochastic_cache_duration
+                )
+                logger.info(f"Stochastic calculator initialized ({self.stochastic_k_period}, {self.stochastic_k_smooth}, {self.stochastic_d_smooth})")
+                logger.info(f"  LONG entries: %K between {self.stochastic_long_min_k}-{self.stochastic_long_max_k}")
+                logger.info(f"  SHORT entries: %K between {self.stochastic_short_min_k}-{self.stochastic_short_max_k}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize stochastic calculator: {e}")
+                self.stochastic_calculator = None
+
         # Risk management
         self.breakeven_after_partial = self.trading_config['risk']['breakeven_after_partial']
         self.stop_at_pivot = self.trading_config['risk'].get('stop_at_pivot', False)
@@ -140,6 +173,11 @@ class PS60Strategy:
         self.enable_room_to_run_filter = self.filters.get('enable_room_to_run_filter', True)
         self.min_room_to_target_pct = self.filters.get('min_room_to_target_pct', 1.5)
 
+        # Entry position filter (Oct 15, 2025)
+        # Prevent entering too far above resistance / below support (chasing stale retests)
+        self.max_entry_above_resistance = self.filters.get('max_entry_above_resistance', 0.003)  # 0.3%
+        self.max_entry_below_support = self.filters.get('max_entry_below_support', 0.003)  # 0.3%
+
         # Confirmation logic (per requirements spec)
         confirmation_config = self.trading_config.get('confirmation', {})
         self.confirmation_enabled = confirmation_config.get('enabled', True)
@@ -172,10 +210,13 @@ class PS60Strategy:
         self.macd_timeframe = confirmation_config.get('macd_timeframe', '1 hour')
 
         # Pullback/retest thresholds (patient entry)
+        # FIXES (Oct 15, 2025): Strengthened to prevent weak retests of stale breakouts
         self.require_pullback_retest = confirmation_config.get('require_pullback_retest', True)
         self.pullback_distance_pct = confirmation_config.get('pullback_distance_pct', 0.003)
         self.max_pullback_bars = confirmation_config.get('max_pullback_bars', 24)
-        self.pullback_volume_threshold = confirmation_config.get('pullback_volume_threshold', 1.2)
+        self.pullback_volume_threshold = confirmation_config.get('pullback_volume_threshold', 2.0)  # Raised from 1.2
+        self.pullback_candle_min_pct = confirmation_config.get('pullback_candle_min_pct', 0.005)  # NEW: 0.5% min candle
+        self.max_retest_time_minutes = confirmation_config.get('max_retest_time_minutes', 30)  # NEW: 30 min staleness check
 
         # Sustained break logic (Oct 5, 2025) - Alternative to momentum candle
         # Catches "slow grind" breakouts that hold above resistance with volume
@@ -1139,28 +1180,35 @@ class PS60Strategy:
                 if not momentum_confirmed:
                     return False, f"Momentum filter: {momentum_reason}", {'phase': 'momentum_filter'}
 
-            if side == 'LONG':
-                if current_price > pivot_price:
-                    return True, f"MOMENTUM_BREAKOUT ({volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", {
-                        'phase': 'momentum_entry',
-                        'breakout_bar': breakout_bar,
-                        'candle_start': candle_start,
-                        'candle_end': candle_end,
-                        'volume_ratio': volume_ratio,
-                        'candle_size_pct': candle_size_pct,
-                        'entry_bar': current_idx
-                    }
-            else:  # SHORT
-                if current_price < pivot_price:
-                    return True, f"MOMENTUM_BREAKOUT ({volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", {
-                        'phase': 'momentum_entry',
-                        'breakout_bar': breakout_bar,
-                        'candle_start': candle_start,
-                        'candle_end': candle_end,
-                        'volume_ratio': volume_ratio,
-                        'candle_size_pct': candle_size_pct,
-                        'entry_bar': current_idx
-                    }
+            # CRITICAL FIX (Oct 14, 2025): Check room-to-run filter for MOMENTUM_BREAKOUT path
+            # This was missing and allowed C SHORT (0.30% room) to enter
+            blocked, room_reason = self._check_room_to_run(current_price, target_price, side)
+            if blocked:
+                if hasattr(self, 'logger'):
+                    self.logger.info(f"[MOMENTUM_BREAKOUT] BLOCKED by room-to-run: {room_reason}")
+                return False, room_reason, {'phase': 'room_to_run_filter'}
+
+            # NEW (Oct 14, 2025): Directional Volume Filter
+            # Check if volume spike confirms movement in the intended trade direction
+            # Prevents entering on pullbacks/bounces with volume in opposite direction
+            wrong_direction, direction_reason = self._check_directional_volume(bars, current_idx, side)
+            if wrong_direction:
+                if hasattr(self, 'logger'):
+                    self.logger.info(f"[MOMENTUM_BREAKOUT] BLOCKED by directional volume: {direction_reason}")
+                return False, direction_reason, {'phase': 'directional_volume_filter'}
+
+            # All filters passed - MOMENTUM_BREAKOUT confirmed!
+            if hasattr(self, 'logger'):
+                self.logger.info(f"[MOMENTUM_BREAKOUT] Entry confirmed at ${current_price:.2f} (target=${target_price:.2f})")
+            return True, f"MOMENTUM_BREAKOUT ({volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", {
+                'phase': 'momentum_entry',
+                'breakout_bar': breakout_bar,
+                'candle_start': candle_start,
+                'candle_end': candle_end,
+                'volume_ratio': volume_ratio,
+                'candle_size_pct': candle_size_pct,
+                'entry_bar': current_idx
+            }
 
         # STEP 4: Weak breakout - try pullback/retest logic OR sustained break
         if self.require_pullback_retest:
@@ -1182,9 +1230,21 @@ class PS60Strategy:
                     current_price, target_price, side
                 )
                 if insufficient_room:
+                    if hasattr(self, 'logger'):
+                        self.logger.info(f"[PULLBACK/RETEST] BLOCKED by room-to-run: {room_reason}")
                     return False, room_reason, {'phase': 'room_to_run_filter'}
 
-                # Enhance reason to show it's part of hybrid strategy
+                # NEW (Oct 14, 2025): Directional Volume Filter
+                # Apply to PULLBACK/RETEST path for consistency
+                wrong_direction, direction_reason = self._check_directional_volume(bars, current_idx, side)
+                if wrong_direction:
+                    if hasattr(self, 'logger'):
+                        self.logger.info(f"[PULLBACK/RETEST] BLOCKED by directional volume: {direction_reason}")
+                    return False, direction_reason, {'phase': 'directional_volume_filter'}
+
+                # All filters passed - PULLBACK/RETEST confirmed!
+                if hasattr(self, 'logger'):
+                    self.logger.info(f"[PULLBACK/RETEST] Entry confirmed at ${current_price:.2f} (target=${target_price:.2f})")
                 return True, f"PULLBACK/RETEST (weak initial: {volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", pullback_state
             else:
                 # Pullback not confirmed yet - check sustained break as alternative
@@ -1208,10 +1268,21 @@ class PS60Strategy:
                         current_price, target_price, side
                     )
                     if insufficient_room:
-                        print(f"🔍 DEBUG: Blocked by room-to-run filter")
+                        if hasattr(self, 'logger'):
+                            self.logger.info(f"[SUSTAINED_BREAK] BLOCKED by room-to-run: {room_reason}")
                         return False, room_reason, {'phase': 'room_to_run_filter'}
 
-                    print(f"🔍 DEBUG: Returning TRUE for sustained break (passed room-to-run filter)")
+                    # NEW (Oct 14, 2025): Directional Volume Filter
+                    # Apply to SUSTAINED_BREAK path for consistency
+                    wrong_direction, direction_reason = self._check_directional_volume(bars, current_idx, side)
+                    if wrong_direction:
+                        if hasattr(self, 'logger'):
+                            self.logger.info(f"[SUSTAINED_BREAK] BLOCKED by directional volume: {direction_reason}")
+                        return False, direction_reason, {'phase': 'directional_volume_filter'}
+
+                    if hasattr(self, 'logger'):
+                        self.logger.info(f"[SUSTAINED_BREAK] Entry confirmed at ${current_price:.2f} (target=${target_price:.2f})")
+                    # All filters passed - SUSTAINED_BREAK confirmed!
                     return True, sustained_reason, sustained_state
                 else:
                     # Still waiting for pullback or sustained break
@@ -1360,6 +1431,61 @@ class PS60Strategy:
 
         return False, None
 
+    def _check_directional_volume(self, bars, current_idx, side='LONG'):
+        """
+        Directional Volume Filter (Oct 14, 2025)
+
+        Check if volume spike confirms movement in the intended trade direction.
+        Prevents entering on pullbacks/bounces with volume in opposite direction.
+
+        The Problem (GS Trade Example):
+        - GS dropped from $758 to $742, then BOUNCED UP to $744
+        - High volume (2.0x) on the UPWARD bounce
+        - System entered SHORT into this upward bounce with volume
+        - This is a "dead cat bounce" entry - worst possible timing
+
+        The Fix:
+        - For SHORT: Require RED candle (close < open) = selling pressure
+        - For LONG: Require GREEN candle (close > open) = buying pressure
+
+        Args:
+            bars: List of price bars
+            current_idx: Current bar index
+            side: 'LONG' or 'SHORT'
+
+        Returns:
+            tuple: (blocked, reason)
+                - blocked: True if volume confirms wrong direction
+                - reason: Explanation string
+
+        Example:
+            SHORT entry with GREEN candle → BLOCKED (volume confirms buying)
+            SHORT entry with RED candle → ALLOWED (volume confirms selling)
+        """
+        # Calculate 1-minute candle direction (12 five-second bars = 1 minute)
+        bars_per_candle = 12
+        candle_start = (current_idx // bars_per_candle) * bars_per_candle
+        candle_end = min(candle_start + bars_per_candle - 1, len(bars) - 1)
+
+        candle_open = bars[candle_start].open
+        candle_close = bars[candle_end].close
+        candle_direction = candle_close - candle_open
+
+        if side == 'LONG':
+            # For LONG: Volume should confirm UPWARD movement (green candle)
+            if candle_direction < 0:
+                # Red candle with high volume = selling pressure, not buying
+                return True, "Volume confirms DOWNWARD move (red candle), not LONG entry"
+        else:  # SHORT
+            # For SHORT: Volume should confirm DOWNWARD movement (red candle)
+            if candle_direction > 0:
+                # Green candle with high volume = buying pressure, not selling
+                # This is what happened with GS - volume spike on UPWARD bounce
+                return True, "Volume confirms UPWARD move (green candle), not SHORT entry"
+
+        # Volume confirms intended direction
+        return False, None
+
     def _check_room_to_run(self, current_price, target_price, side='LONG'):
         """
         Room-to-run filter (Oct 5, 2025)
@@ -1387,10 +1513,17 @@ class PS60Strategy:
             Entry $183.03, Target $184.14 = 0.61% room → BLOCK
             Entry $100, Target $103 = 3.0% room → ALLOW
         """
+        # CRITICAL DEBUG (Oct 14, 2025): Log all filter checks
+        # Helps diagnose why WFC LONG (0.68% room) wasn't blocked
+
         if not self.enable_room_to_run_filter:
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"  [Room-to-Run] DISABLED - skipping check")
             return False, None
 
         if target_price is None:
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"  [Room-to-Run] No target_price provided - skipping check")
             return False, None  # Can't check without target
 
         if side == 'LONG':
@@ -1398,8 +1531,80 @@ class PS60Strategy:
         else:  # SHORT
             room_pct = ((current_price - target_price) / current_price) * 100
 
+        if hasattr(self, 'logger'):
+            self.logger.debug(f"  [Room-to-Run] {side}: entry=${current_price:.2f}, target=${target_price:.2f}, room={room_pct:.2f}%, threshold={self.min_room_to_target_pct:.1f}%")
+
         if room_pct < self.min_room_to_target_pct:
+            if hasattr(self, 'logger'):
+                self.logger.info(f"  [Room-to-Run] BLOCKED: {room_pct:.2f}% < {self.min_room_to_target_pct:.1f}% minimum")
             return True, f"Insufficient room to target: {room_pct:.2f}% < {self.min_room_to_target_pct:.1f}% minimum"
+
+        if hasattr(self, 'logger'):
+            self.logger.debug(f"  [Room-to-Run] PASSED: {room_pct:.2f}% >= {self.min_room_to_target_pct:.1f}% minimum")
+        return False, None
+
+    def _check_stochastic_filter(self, symbol, side='LONG'):
+        """
+        Stochastic Oscillator Filter (Oct 15, 2025)
+
+        Confirms momentum and avoids overbought/oversold entries using hourly stochastic.
+
+        User Requirements:
+        - LONG entries: %K must be between 60-80 (momentum zone, not overbought)
+        - SHORT entries: %K must be between 20-50 (momentum zone, not oversold)
+
+        Applied to ALL entry paths (momentum, pullback, sustained).
+
+        Args:
+            symbol: Stock symbol
+            side: 'LONG' or 'SHORT'
+
+        Returns:
+            tuple: (fails_filter, reason)
+                - fails_filter: True if stochastic blocks entry
+                - reason: Explanation string
+        """
+        if not self.stochastic_enabled:
+            return False, None
+
+        if not self.stochastic_calculator:
+            # Stochastic calculator not initialized
+            if self.stochastic_allow_if_unavailable:
+                return False, None  # Allow entry if unavailable
+            else:
+                return True, "Stochastic calculator not available"
+
+        # Get stochastic values
+        stoch = self.stochastic_calculator.get_stochastic(symbol)
+
+        if stoch is None:
+            # Failed to calculate stochastic
+            if self.stochastic_allow_if_unavailable:
+                return False, None  # Allow entry if unavailable
+            else:
+                return True, f"Failed to calculate stochastic for {symbol}"
+
+        k = stoch['%K']
+        d = stoch['%D']
+
+        # Check requirements based on direction
+        if side == 'LONG':
+            # LONG requirement: %K between 60-80
+            if k < self.stochastic_long_min_k:
+                return True, f"Stochastic too low for LONG (K={k:.1f}, need {self.stochastic_long_min_k}-{self.stochastic_long_max_k})"
+            elif k > self.stochastic_long_max_k:
+                return True, f"Stochastic overbought for LONG (K={k:.1f}, need {self.stochastic_long_min_k}-{self.stochastic_long_max_k})"
+            else:
+                return False, f"Stochastic confirmed (K={k:.1f}, D={d:.1f})"
+
+        elif side == 'SHORT':
+            # SHORT requirement: %K between 20-50
+            if k < self.stochastic_short_min_k:
+                return True, f"Stochastic oversold for SHORT (K={k:.1f}, need {self.stochastic_short_min_k}-{self.stochastic_short_max_k})"
+            elif k > self.stochastic_short_max_k:
+                return True, f"Stochastic too high for SHORT (K={k:.1f}, need {self.stochastic_short_min_k}-{self.stochastic_short_max_k})"
+            else:
+                return False, f"Stochastic confirmed (K={k:.1f}, D={d:.1f})"
 
         return False, None
 
@@ -2880,3 +3085,291 @@ class PS60Strategy:
             return True, "Rejection confirmed: Price below resistance"
 
         return False, "No clear rejection pattern"
+
+    # ========================================================================
+    # DYNAMIC RESISTANCE EXITS (October 15, 2025)
+    # ========================================================================
+    #
+    # Purpose: Detect technical resistance levels and take partials when approaching them
+    #
+    # Why: Stocks often stall at technical levels (SMAs, Bollinger Bands, Linear Regression)
+    #      Taking partials near resistance locks profits before potential reversal
+    #      Much smarter than arbitrary 1% trailing stop - respects market structure
+    #
+    # Example: SOFI trade (Oct 15, 2025)
+    #   - Entry: $28.55, Exit: $28.58 (15-min rule) = $10.50 profit
+    #   - WITH dynamic resistance:
+    #     - Price $28.83 approaching SMA50 @ $28.85 (0.07% away)
+    #     - Take 25% partial @ $28.83 (+$98)
+    #     - Activate 0.5% trailing stop on remainder
+    #     - Trail captures move to $28.77 (+$231)
+    #     - Total: $329 vs $10.50 (31x improvement!)
+    #
+    # How it works:
+    #   1. Check overhead resistance every tick (SMAs, BB, LR on hourly bars)
+    #   2. If resistance within 0.5% detected → take 25% partial
+    #   3. Activate trailing stop on remainder (0.5% distance)
+    #   4. Let trail capture remaining move or stop out
+    #
+    # ========================================================================
+
+    def _calculate_bollinger_bands(self, bars, period=20, std_dev=2):
+        """
+        Calculate Bollinger Bands from hourly bars
+
+        Bollinger Bands = SMA ± (N × Standard Deviation)
+        Shows volatility-based support/resistance levels
+        Price tends to bounce off or consolidate at bands
+
+        Args:
+            bars: List of hourly Bar objects
+            period: Number of periods for SMA (default 20)
+            std_dev: Number of standard deviations (default 2)
+
+        Returns:
+            tuple: (upper_band, middle_band, lower_band) or (None, None, None) if insufficient data
+
+        Example:
+            Entry: $28.55
+            BB Upper: $29.20 (+2.3% from entry)
+            → If price reaches $29.15, take partial (within 0.5% of BB)
+        """
+        if not bars or len(bars) < period:
+            self.logger.debug(f"BB calculation: Insufficient bars ({len(bars) if bars else 0}/{period})")
+            return None, None, None
+
+        try:
+            # Get closing prices for the period
+            closes = [b.close for b in bars[-period:]]
+
+            # Calculate middle band (20-period SMA on hourly bars)
+            middle_band = sum(closes) / len(closes)
+
+            # Calculate standard deviation (volatility measure)
+            variance = sum((x - middle_band) ** 2 for x in closes) / len(closes)
+            std = variance ** 0.5
+
+            # Calculate upper and lower bands (2 std dev from middle)
+            upper_band = middle_band + (std_dev * std)
+            lower_band = middle_band - (std_dev * std)
+
+            self.logger.debug(f"BB calculation: Upper=${upper_band:.2f}, Middle=${middle_band:.2f}, Lower=${lower_band:.2f}")
+
+            return upper_band, middle_band, lower_band
+
+        except Exception as e:
+            self.logger.warning(f"Bollinger Bands calculation failed: {e}")
+            return None, None, None
+
+    def _calculate_linear_regression(self, bars, period=30):
+        """
+        Calculate 30-period linear regression trend channel
+
+        Linear Regression = Best-fit line through price data
+        Shows trend direction and strength
+        Upper/lower channels show expected deviation range
+        Price tends to revert toward regression line
+
+        Args:
+            bars: List of hourly Bar objects
+            period: Number of periods for regression (default 30)
+
+        Returns:
+            tuple: (upper_channel, middle_line, lower_channel) or (None, None, None) if insufficient data
+
+        Example:
+            Entry: $28.55
+            LR Upper: $28.95 (+1.4% from entry)
+            → If price reaches $28.92, take partial (within 0.5% of LR)
+        """
+        if not bars or len(bars) < period:
+            self.logger.debug(f"LR calculation: Insufficient bars ({len(bars) if bars else 0}/{period})")
+            return None, None, None
+
+        try:
+            # Get closing prices for the period (last 30 hourly bars)
+            closes = [b.close for b in bars[-period:]]
+            x = list(range(len(closes)))
+
+            # Simple linear regression: y = mx + b
+            # Where m = slope (trend direction), b = intercept
+            n = len(x)
+            sum_x = sum(x)
+            sum_y = sum(closes)
+            sum_xy = sum(xi * yi for xi, yi in zip(x, closes))
+            sum_x2 = sum(xi ** 2 for xi in x)
+
+            # Calculate slope (m) and intercept (b) using least squares method
+            slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x ** 2)
+            intercept = (sum_y - slope * sum_x) / n
+
+            # Project to current bar (end of period)
+            current_x = len(closes) - 1
+            lr_value = slope * current_x + intercept
+
+            # Calculate channel width using standard error (measure of scatter)
+            residuals = [closes[i] - (slope * x[i] + intercept) for i in range(n)]
+            std_error = (sum(r ** 2 for r in residuals) / n) ** 0.5
+
+            # Upper and lower channel boundaries (2 standard errors from regression line)
+            upper_channel = lr_value + (2 * std_error)
+            lower_channel = lr_value - (2 * std_error)
+
+            self.logger.debug(f"LR calculation: Upper=${upper_channel:.2f}, Middle=${lr_value:.2f}, Lower=${lower_channel:.2f}, Slope={slope:.4f}")
+
+            return upper_channel, lr_value, lower_channel
+
+        except Exception as e:
+            self.logger.warning(f"Linear Regression calculation failed: {e}")
+            return None, None, None
+
+    def check_overhead_resistance(self, symbol, current_price, hourly_bars=None):
+        """
+        Check if price is approaching ANY technical resistance level
+
+        Purpose: Detect when price is near resistance so we can take partials
+        Strategy: Check multiple technical levels in priority order
+        Result: Take profits before potential reversal at resistance
+
+        Checks (in priority order):
+        1. Hourly SMAs (5, 10, 20, 50, 100) - Priority 1 (most respected)
+        2. Bollinger Upper Band - Priority 2 (volatility-based)
+        3. Linear Regression Upper - Priority 3 (trend-based)
+
+        Args:
+            symbol: Stock symbol
+            current_price: Current market price
+            hourly_bars: Cached hourly bars (optional, will fetch if not provided)
+
+        Returns:
+            tuple: (has_resistance, level_info) where level_info is dict with:
+                {
+                    'price': resistance price,
+                    'type': 'SMA5' | 'SMA10' | 'SMA20' | 'SMA50' | 'SMA100' | 'BB_UPPER' | 'LR_UPPER',
+                    'distance_pct': percentage away (e.g., 0.0007 for 0.07%),
+                    'priority': 1-3 (1=highest priority)
+                }
+
+        Example:
+            Price: $28.83
+            SMA50: $28.85 (0.07% away)
+            → (True, {'price': 28.85, 'type': 'SMA50', 'distance_pct': 0.0007, 'priority': 1})
+        """
+        # Get configuration settings
+        config = self.config.get('exits', {}).get('dynamic_resistance_exits', {})
+        if not config.get('enabled', True):
+            self.logger.debug(f"{symbol}: Dynamic resistance exits disabled in config")
+            return False, None
+
+        resistance_distance_pct = config.get('resistance_distance_pct', 0.005)  # 0.5% default
+        min_gain_before_check = config.get('min_gain_before_check', 0.005)  # 0.5% default
+
+        # Get hourly bars if not provided (uses existing cache)
+        if hourly_bars is None:
+            hourly_bars = self._get_cached_hourly_bars(symbol)
+
+        if not hourly_bars or len(hourly_bars) < 20:
+            self.logger.debug(f"{symbol}: Insufficient hourly bars for resistance check ({len(hourly_bars) if hourly_bars else 0}/20)")
+            return False, None
+
+        # Log that we're checking resistance
+        self.logger.debug(f"{symbol}: Checking overhead resistance at ${current_price:.2f} (threshold: {resistance_distance_pct*100:.1f}%)")
+
+        resistance_levels = []
+
+        # ====================================================================
+        # Priority 1: Check hourly SMAs (most respected by traders)
+        # ====================================================================
+        if config.get('check_smas', True):
+            sma_periods = config.get('sma_periods', [5, 10, 20, 50, 100])
+            self.logger.debug(f"{symbol}: Checking SMAs {sma_periods}...")
+
+            for period in sma_periods:
+                if len(hourly_bars) >= period:
+                    # Calculate SMA from last N hourly bars
+                    sma = sum(b.close for b in hourly_bars[-period:]) / period
+
+                    # Only check levels ABOVE current price (overhead resistance)
+                    if sma > current_price:
+                        distance_pct = (sma - current_price) / current_price
+
+                        # If within resistance threshold (default 0.5%)
+                        if distance_pct <= resistance_distance_pct:
+                            self.logger.debug(f"{symbol}: SMA{period} @ ${sma:.2f} ({distance_pct*100:.2f}% away) - NEAR!")
+                            resistance_levels.append({
+                                'price': sma,
+                                'type': f'SMA{period}',
+                                'distance_pct': distance_pct,
+                                'priority': 1
+                            })
+                        else:
+                            self.logger.debug(f"{symbol}: SMA{period} @ ${sma:.2f} ({distance_pct*100:.2f}% away) - too far")
+
+        # ====================================================================
+        # Priority 2: Check Bollinger Bands upper (volatility-based resistance)
+        # ====================================================================
+        if config.get('check_bollinger_bands', True):
+            bb_period = config.get('bb_period', 20)
+            bb_std_dev = config.get('bb_std_dev', 2)
+
+            self.logger.debug(f"{symbol}: Checking Bollinger Bands ({bb_period} period, {bb_std_dev} std dev)...")
+            bb_upper, bb_middle, bb_lower = self._calculate_bollinger_bands(
+                hourly_bars, period=bb_period, std_dev=bb_std_dev
+            )
+
+            if bb_upper and bb_upper > current_price:
+                distance_pct = (bb_upper - current_price) / current_price
+
+                if distance_pct <= resistance_distance_pct:
+                    self.logger.debug(f"{symbol}: BB_UPPER @ ${bb_upper:.2f} ({distance_pct*100:.2f}% away) - NEAR!")
+                    resistance_levels.append({
+                        'price': bb_upper,
+                        'type': 'BB_UPPER',
+                        'distance_pct': distance_pct,
+                        'priority': 2
+                    })
+                else:
+                    self.logger.debug(f"{symbol}: BB_UPPER @ ${bb_upper:.2f} ({distance_pct*100:.2f}% away) - too far")
+
+        # ====================================================================
+        # Priority 3: Check Linear Regression upper (trend-based resistance)
+        # ====================================================================
+        if config.get('check_linear_regression', True):
+            lr_period = config.get('lr_period', 30)
+
+            self.logger.debug(f"{symbol}: Checking Linear Regression ({lr_period} period)...")
+            lr_upper, lr_middle, lr_lower = self._calculate_linear_regression(
+                hourly_bars, period=lr_period
+            )
+
+            if lr_upper and lr_upper > current_price:
+                distance_pct = (lr_upper - current_price) / current_price
+
+                if distance_pct <= resistance_distance_pct:
+                    self.logger.debug(f"{symbol}: LR_UPPER @ ${lr_upper:.2f} ({distance_pct*100:.2f}% away) - NEAR!")
+                    resistance_levels.append({
+                        'price': lr_upper,
+                        'type': 'LR_UPPER',
+                        'distance_pct': distance_pct,
+                        'priority': 3
+                    })
+                else:
+                    self.logger.debug(f"{symbol}: LR_UPPER @ ${lr_upper:.2f} ({distance_pct*100:.2f}% away) - too far")
+
+        # No resistance found within threshold
+        if not resistance_levels:
+            self.logger.debug(f"{symbol}: No resistance detected within {resistance_distance_pct*100:.1f}%")
+            return False, None
+
+        # Return highest priority resistance with closest distance
+        # Sort by: priority first (1=SMAs, 2=BB, 3=LR), then by distance (closest)
+        resistance_levels.sort(key=lambda x: (x['priority'], x['distance_pct']))
+        best_level = resistance_levels[0]
+
+        self.logger.info(f"{symbol}: 🎯 RESISTANCE FOUND: {best_level['type']} @ ${best_level['price']:.2f} ({best_level['distance_pct']*100:.2f}% away)")
+
+        return True, best_level
+
+    # ========================================================================
+    # END: DYNAMIC RESISTANCE EXITS
+    # ========================================================================

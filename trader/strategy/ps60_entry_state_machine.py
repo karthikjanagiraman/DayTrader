@@ -128,6 +128,12 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                     tracker.reset_state(symbol)
                     return False, room_reason, {'phase': 'room_to_run_filter'}
 
+            # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+            fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+            if fails_stochastic:
+                tracker.reset_state(symbol)
+                return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
             return True, f"MOMENTUM_BREAKOUT ({volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", state.to_dict()
 
         # Weak breakout - continue to tracking state
@@ -200,6 +206,13 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                         tracker.reset_state(symbol)
                         return False, room_reason, {'phase': 'room_to_run_filter'}
 
+                # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+                fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                if fails_stochastic:
+                    print(f"[BLOCKED] {symbol} Bar {current_idx} - {stochastic_reason}")
+                    tracker.reset_state(symbol)
+                    return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
                 # MOMENTUM CONFIRMED on subsequent candle - ENTER!
                 print(f"[ENTERING!] {symbol} Bar {current_idx} - MOMENTUM_BREAKOUT (delayed)")
                 return True, f"MOMENTUM_BREAKOUT (delayed, {volume_ratio:.1f}x vol on candle {current_idx // bars_per_candle})", state.to_dict()
@@ -226,7 +239,8 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             # Calculate current candle size (for momentum candle check)
             current_candle_size_pct = abs(current_bar.close - current_bar.open) / current_bar.open
 
-            # Check bounce with Phase 4 MOMENTUM-LEVEL filters
+            # Check bounce with PULLBACK-SPECIFIC filters (Oct 15, 2025)
+            # FIX: Use pullback thresholds, NOT momentum thresholds
             # PHASE 5: Now returns adjusted entry pivot and stop
             bounce_confirmed, adjusted_entry, adjusted_stop = tracker.check_pullback_bounce(
                     symbol,
@@ -235,17 +249,43 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                     previous_price=previous_price,
                     current_volume=current_volume,
                     avg_volume=avg_volume,
-                    candle_size_pct=current_candle_size_pct,  # NEW: Match MOMENTUM
-                    momentum_volume_threshold=strategy.momentum_volume_threshold,  # NEW: Use same threshold (2.0x)
-                    momentum_candle_threshold=strategy.momentum_candle_min_pct)  # NEW: Use same threshold (0.3%)
+                    candle_size_pct=current_candle_size_pct,
+                    momentum_volume_threshold=strategy.pullback_volume_threshold,  # FIX: Use pullback threshold (2.0x)
+                    momentum_candle_threshold=strategy.pullback_candle_min_pct)  # FIX: Use pullback threshold (0.5%)
 
             if bounce_confirmed:
                 # Pullback bounce confirmed with MOMENTUM-LEVEL filters - check remaining filters
+
+                # FIX #1 (Oct 15, 2025): Check time since initial break (staleness check)
+                if hasattr(strategy, 'max_retest_time_minutes'):
+                    time_since_breakout = (timestamp - state.breakout_detected_at).total_seconds() / 60
+                    if time_since_breakout > strategy.max_retest_time_minutes:
+                        tracker.reset_state(symbol)
+                        return False, f"Stale retest: {time_since_breakout:.1f} min since initial break (max {strategy.max_retest_time_minutes} min)", {'phase': 'staleness_filter'}
+
+                # FIX #2 (Oct 15, 2025): Check entry position relative to pivot
+                if side == 'LONG':
+                    pct_above_pivot = (current_price - pivot_price) / pivot_price
+                    if pct_above_pivot > strategy.max_entry_above_resistance:
+                        tracker.reset_state(symbol)
+                        return False, f"Entry too far above resistance: {pct_above_pivot*100:.2f}% (max {strategy.max_entry_above_resistance*100:.1f}%)", {'phase': 'entry_position_filter'}
+                elif side == 'SHORT':
+                    pct_below_pivot = (pivot_price - current_price) / pivot_price
+                    if pct_below_pivot > strategy.max_entry_below_support:
+                        tracker.reset_state(symbol)
+                        return False, f"Entry too far below support: {pct_below_pivot*100:.2f}% (max {strategy.max_entry_below_support*100:.1f}%)", {'phase': 'entry_position_filter'}
+
                 if target_price:
                     insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
                     if insufficient_room:
                         tracker.reset_state(symbol)
                         return False, room_reason, {'phase': 'room_to_run_filter'}
+
+                # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+                fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                if fails_stochastic:
+                    tracker.reset_state(symbol)
+                    return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
                 # PHASE 5: Include adjusted pivot and stop in return
                 entry_state = state.to_dict()
@@ -298,6 +338,13 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             momentum_candle_threshold=strategy.momentum_candle_min_pct
         ):
             # Sustained break confirmed WITH momentum - check filters (room already checked in method)
+
+            # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+            fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+            if fails_stochastic:
+                tracker.reset_state(symbol)
+                return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
             return True, f"SUSTAINED_BREAK ({state.bars_held_above_pivot} bars)", state.to_dict()
 
         # Still tracking
