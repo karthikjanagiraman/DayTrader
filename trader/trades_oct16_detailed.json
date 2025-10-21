@@ -1,0 +1,44 @@
+[
+  {
+    "symbol": "META",
+    "side": "LONG",
+    "entry_price": 724.5,
+    "entry_time": "09:49:58 AM ET",
+    "exit_price": 723.93,
+    "exit_time": "2025-10-16 06:57:01",
+    "exit_reason": "15MIN_RULE",
+    "pnl": -0.57000000000005,
+    "shares": 0,
+    "partials": [],
+    "entry_path": "Unknown",
+    "filters_passed": []
+  },
+  {
+    "symbol": "AMAT",
+    "side": "LONG",
+    "entry_price": 229.24,
+    "entry_time": "09:51:00 AM ET",
+    "exit_price": 227.73,
+    "exit_time": "2025-10-16 06:56:59",
+    "exit_reason": "STOP_HIT",
+    "pnl": -1.5100000000000193,
+    "shares": 0,
+    "partials": [],
+    "entry_path": "Unknown",
+    "filters_passed": []
+  },
+  {
+    "symbol": "BB",
+    "side": "LONG",
+    "entry_price": 4.61,
+    "entry_time": "09:51:06 AM ET",
+    "exit_price": 4.59,
+    "exit_time": "2025-10-16 06:54:06",
+    "exit_reason": "STOP_HIT",
+    "pnl": -0.020000000000000462,
+    "shares": 0,
+    "partials": [],
+    "entry_path": "Unknown",
+    "filters_passed": []
+  }
+]
