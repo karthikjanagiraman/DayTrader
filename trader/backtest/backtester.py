@@ -68,6 +68,15 @@ class PS60Backtester:
         # Track trades for backtest results
         self.trades = []
 
+        # CVD Filter Analytics (Oct 19, 2025)
+        self.cvd_analytics = {
+            'total_blocks': 0,
+            'long_blocks': 0,
+            'short_blocks': 0,
+            'blocks_by_reason': {},  # {'BULLISH trend blocking SHORT': count}
+            'symbols_blocked': set()  # Track which symbols were blocked
+        }
+
         # In-memory cache for bars (avoids re-reading from disk)
         self.bars_cache = {}
 
@@ -185,8 +194,11 @@ class PS60Backtester:
     def connect(self):
         """Connect to IBKR"""
         try:
-            self.ib.connect('127.0.0.1', 7497, clientId=3000)
-            print(f"✓ Connected to IBKR (Client ID: 3000)")
+            # PERFORMANCE FIX (Oct 19, 2025): Use timestamp-based client ID to avoid conflicts
+            import time
+            client_id = 3000 + int(time.time() % 1000)  # 3000-3999 range
+            self.ib.connect('127.0.0.1', 7497, clientId=client_id)
+            print(f"✓ Connected to IBKR (Client ID: {client_id})")
 
             # CRITICAL FIX (Oct 15, 2025): Set IB connection on strategy AFTER connecting
             # This allows SMACalculator to initialize properly with connected instance
@@ -269,22 +281,81 @@ class PS60Backtester:
 
         print(f"✓ Cached hourly bars for {len(self.hourly_bars_cache)}/{len(watchlist)} stocks\n")
 
+    def _check_all_data_cached(self):
+        """
+        Check if all required data is available in cache (Oct 19, 2025)
+        Returns True if we can run backtest without connecting to IBKR
+        """
+        cache_dir = Path(__file__).parent / 'data'
+        if not cache_dir.exists():
+            return False
+
+        date_str = self.test_date.strftime('%Y%m%d')
+
+        # Get watchlist first (need to know which symbols to check)
+        # Filter using strategy module
+        if self.using_enhanced_scoring:
+            watchlist = self.strategy.filter_enhanced_scanner_results(self.scanner_results)
+        else:
+            watchlist = self.strategy.filter_scanner_results(self.scanner_results)
+
+        if not watchlist:
+            return True  # No stocks to trade, can run without IBKR
+
+        # Check if all symbols have cached 5-sec bars
+        missing_symbols = []
+        for stock in watchlist:
+            symbol = stock['symbol']
+            cache_file = cache_dir / f'{symbol}_{date_str}_5sec.json'
+            if not cache_file.exists():
+                missing_symbols.append(symbol)
+
+        if missing_symbols:
+            print(f"⚠️  Missing cache for {len(missing_symbols)} symbols: {', '.join(missing_symbols[:5])}")
+            return False
+
+        print(f"✓ Found cache for all {len(watchlist)} symbols")
+        return True
+
     def run(self):
         """Run backtest"""
-        if not self.connect():
-            return
+        # PERFORMANCE OPTIMIZATION (Oct 19, 2025): Lazy connection
+        # Don't connect to IBKR until we actually need to fetch data
+        # This allows running purely from cache without slow IBKR connection
 
-        try:
-            self.backtest_day()
-            self.save_trades_to_json()  # Save trades to JSON file
-            self.print_results()
-        finally:
-            self.disconnect()
+        # Check if we have all data cached
+        all_cached = self._check_all_data_cached()
+
+        if all_cached:
+            print("✓ All data available in cache - running without IBKR connection")
+            try:
+                self.backtest_day()
+                self.save_trades_to_json()
+                self.print_results()
+            except Exception as e:
+                print(f"✗ Error during cached backtest: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            # Need to fetch data - connect to IBKR
+            if not self.connect():
+                return
+
+            try:
+                self.backtest_day()
+                self.save_trades_to_json()  # Save trades to JSON file
+                self.print_results()
+            finally:
+                self.disconnect()
 
     def backtest_day(self):
         """Backtest single trading day"""
-        # Detect market trend first
-        self.market_trend = self.detect_market_trend()
+        # Detect market trend first (skip if no IBKR connection)
+        if self.ib and self.ib.isConnected():
+            self.market_trend = self.detect_market_trend()
+        else:
+            self.market_trend = 'NEUTRAL'  # Assume neutral when running from cache
+            print("⚠️  Skipping market trend detection (no IBKR connection)")
 
         # Filter scanner using strategy module (score, R/R, distance)
         # Use enhanced filtering if enhanced scoring CSV was loaded
@@ -301,8 +372,11 @@ class PS60Backtester:
         print(f"{'='*80}")
 
         # Pre-fetch hourly bars for all stocks ONCE (performance optimization)
-        if watchlist:
+        # Skip if no IBKR connection (stochastic/SMA will be unavailable)
+        if watchlist and self.ib and self.ib.isConnected():
             self.prefetch_hourly_bars(watchlist)
+        elif watchlist:
+            print("⚠️  Skipping hourly bar prefetch (no IBKR connection) - Stochastic/SMA disabled")
 
         # Print tier breakdown if using enhanced scoring
         if self.using_enhanced_scoring and watchlist:
@@ -511,6 +585,17 @@ class PS60Backtester:
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - LONG confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
 
+                        # CVD Analytics (Oct 19, 2025): Track CVD filter blocks
+                        if not confirmed and entry_state.get('phase') == 'cvd_filter':
+                            self.cvd_analytics['total_blocks'] += 1
+                            self.cvd_analytics['long_blocks'] += 1
+                            self.cvd_analytics['symbols_blocked'].add(symbol)
+                            # Track reason
+                            reason_key = confirm_reason.split('(')[0].strip() if '(' in confirm_reason else confirm_reason
+                            self.cvd_analytics['blocks_by_reason'][reason_key] = \
+                                self.cvd_analytics['blocks_by_reason'].get(reason_key, 0) + 1
+                            self.logger.info(f"[CVD ANALYTICS] {symbol} LONG blocked: {confirm_reason}")
+
                         if confirmed:
                             # PHASE 5 (Oct 12, 2025): Use adjusted stop if available (PULLBACK_RETEST entries)
                             # Otherwise use scanner resistance (MOMENTUM/SUSTAINED_BREAK entries)
@@ -560,6 +645,17 @@ class PS60Backtester:
                         )
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - SHORT confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
+
+                        # CVD Analytics (Oct 19, 2025): Track CVD filter blocks
+                        if not confirmed and entry_state.get('phase') == 'cvd_filter':
+                            self.cvd_analytics['total_blocks'] += 1
+                            self.cvd_analytics['short_blocks'] += 1
+                            self.cvd_analytics['symbols_blocked'].add(symbol)
+                            # Track reason
+                            reason_key = confirm_reason.split('(')[0].strip() if '(' in confirm_reason else confirm_reason
+                            self.cvd_analytics['blocks_by_reason'][reason_key] = \
+                                self.cvd_analytics['blocks_by_reason'].get(reason_key, 0) + 1
+                            self.logger.info(f"[CVD ANALYTICS] {symbol} SHORT blocked: {confirm_reason}")
 
                         if confirmed:
                             # PHASE 5 (Oct 12, 2025): Use adjusted stop if available (PULLBACK_RETEST entries)
@@ -1028,6 +1124,24 @@ class PS60Backtester:
         for reason in df['reason'].unique():
             count = len(df[df['reason'] == reason])
             print(f"  {reason}: {count} trades")
+
+        # CVD FILTER ANALYTICS (Oct 19, 2025)
+        if self.cvd_analytics['total_blocks'] > 0:
+            print(f"\n🔬 CVD FILTER ANALYTICS:")
+            print(f"  Total blocks: {self.cvd_analytics['total_blocks']}")
+            print(f"  LONG blocks: {self.cvd_analytics['long_blocks']}")
+            print(f"  SHORT blocks: {self.cvd_analytics['short_blocks']}")
+            print(f"  Symbols blocked: {len(self.cvd_analytics['symbols_blocked'])}")
+            if self.cvd_analytics['blocks_by_reason']:
+                print(f"\n  Block reasons:")
+                for reason, count in sorted(self.cvd_analytics['blocks_by_reason'].items(),
+                                           key=lambda x: x[1], reverse=True):
+                    print(f"    • {reason}: {count}")
+        elif self.config.get('confirmation', {}).get('cvd', {}).get('enabled', False):
+            print(f"\n🔬 CVD FILTER ANALYTICS:")
+            print(f"  CVD enabled but no entries were blocked")
+        else:
+            print(f"\n🔬 CVD FILTER: DISABLED")
 
         print(f"\n{'='*80}")
         print(f"DETAILED TRADE LOG:")
