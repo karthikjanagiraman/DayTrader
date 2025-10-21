@@ -1078,7 +1078,7 @@ class PS60Strategy:
             print(f"⚠️  Error checking momentum for {symbol}: {e}")
             return True, f"Momentum check error: {e}", {}
 
-    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None, absolute_idx=None):
+    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None):
         """
         HYBRID Entry Strategy (Oct 4, 2025) - STATE MACHINE VERSION (Oct 9, 2025)
 
@@ -1105,6 +1105,7 @@ class PS60Strategy:
             symbol: Stock symbol (REQUIRED for state tracking)
             cached_hourly_bars: Hourly bars for RSI/MACD (optional)
             absolute_idx: Absolute bar count (for state machine tracking)
+            bar_buffer: BarBuffer instance (for candle mapping, PART 3 fix)
 
         Returns:
             tuple: (should_enter, reason, entry_state)
@@ -1114,6 +1115,7 @@ class PS60Strategy:
             # CRITICAL FIX PART 2 (Oct 20, 2025): Pass absolute_idx to state machine
             # State machine uses absolute_idx for tracking bar numbers over time
             # current_idx is used for bars[] access
+            # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
             return check_entry_state_machine(
                 strategy=self,
                 symbol=symbol,
@@ -1123,7 +1125,8 @@ class PS60Strategy:
                 side=side,
                 target_price=target_price,
                 cached_hourly_bars=cached_hourly_bars,
-                absolute_idx=absolute_idx
+                absolute_idx=absolute_idx,
+                bar_buffer=bar_buffer
             )
 
         # FALLBACK: Old logic if symbol not provided (shouldn't happen)
@@ -1730,7 +1733,7 @@ class PS60Strategy:
 
         return False, None
 
-    def should_enter_long(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None):
+    def should_enter_long(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None, bar_buffer=None):
         """
         Check if should enter long position
 
@@ -1741,6 +1744,7 @@ class PS60Strategy:
             bars: Optional - List of bars for hybrid entry confirmation (live trader)
             current_idx: Optional - Current bar ARRAY index (for accessing bars[])
             absolute_idx: Optional - Absolute bar count (for state machine tracking)
+            bar_buffer: Optional - BarBuffer instance (for candle mapping, live trader PART 3)
 
         Returns:
             (bool, reason) - Should enter, and reason why/why not
@@ -1790,9 +1794,10 @@ class PS60Strategy:
             # CRITICAL FIX PART 2 (Oct 20, 2025): Pass both indices
             # current_idx = array index (for bars[] access)
             # absolute_idx = absolute bar count (for state machine)
+            # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
             confirmed, path, reason = self.check_hybrid_entry(
                 bars, current_idx, resistance, side='LONG', target_price=highest_target,
-                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx
+                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx, bar_buffer=bar_buffer
             )
 
             if not confirmed:
@@ -1803,7 +1808,7 @@ class PS60Strategy:
         # Backtest path: Pivot broken (hybrid entry checked in backtester loop)
         return True, "Resistance broken"
 
-    def should_enter_short(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None):
+    def should_enter_short(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None, bar_buffer=None):
         """
         Check if should enter short position
 
@@ -1814,6 +1819,7 @@ class PS60Strategy:
             bars: Optional - List of bars for hybrid entry confirmation (live trader)
             current_idx: Optional - Current bar ARRAY index (for accessing bars[])
             absolute_idx: Optional - Absolute bar count (for state machine tracking)
+            bar_buffer: Optional - BarBuffer instance (for candle mapping, live trader PART 3)
 
         Returns:
             (bool, reason) - Should enter, and reason why/why not
@@ -1869,9 +1875,10 @@ class PS60Strategy:
             # CRITICAL FIX PART 2 (Oct 20, 2025): Pass both indices
             # current_idx = array index (for bars[] access)
             # absolute_idx = absolute bar count (for state machine)
+            # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
             confirmed, path, reason = self.check_hybrid_entry(
                 bars, current_idx, support, side='SHORT', target_price=lowest_downside,
-                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx
+                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx, bar_buffer=bar_buffer
             )
 
             if not confirmed:

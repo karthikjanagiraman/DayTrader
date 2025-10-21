@@ -129,8 +129,47 @@ def _check_cvd_filter(strategy, symbol, bars, current_idx, side):
         return False, None
 
 
+def _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer=None, current_idx=None):
+    """
+    Helper function to get candle bars using correct indexing
+
+    CRITICAL FIX PART 3 (Oct 20, 2025): Calculate candle boundaries using absolute indices,
+    then map to array indices for data access.
+
+    Args:
+        bars: Array of bars
+        tracking_idx: Absolute bar index
+        bars_per_candle: Number of bars per candle (12 for 1-min candle)
+        bar_buffer: BarBuffer instance (for live trading with buffer)
+        current_idx: Current array index (fallback for backtester)
+
+    Returns:
+        list: Candle bars, or empty list if unavailable
+    """
+    # Calculate candle boundaries using ABSOLUTE indices
+    candle_start_abs = (tracking_idx // bars_per_candle) * bars_per_candle
+    candle_end_abs = candle_start_abs + bars_per_candle
+
+    # If bar_buffer available (live trading), map absolute to array indices
+    if bar_buffer is not None:
+        candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+        candle_end_array = bar_buffer.map_absolute_to_array_index(candle_end_abs - 1)
+
+        if candle_start_array is None or candle_end_array is None:
+            # Candle bars dropped from buffer (shouldn't happen with 20-min buffer)
+            return []
+
+        # Get candle bars (end_array + 1 for inclusive slicing)
+        return bars[candle_start_array:candle_end_array + 1]
+    else:
+        # Fallback for backtester (no buffer, indices align)
+        candle_start_array = (current_idx // bars_per_candle) * bars_per_candle
+        candle_end_array = candle_start_array + bars_per_candle
+        return bars[candle_start_array:candle_end_array]
+
+
 def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, side='LONG',
-                               target_price=None, cached_hourly_bars=None, absolute_idx=None):
+                               target_price=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None):
     """
     State machine-based entry confirmation
 
@@ -138,12 +177,17 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
     - current_idx = ARRAY index (for bars[] access)
     - absolute_idx = ABSOLUTE bar count (for state tracking)
 
+    CRITICAL FIX PART 3 (Oct 20, 2025):
+    - bar_buffer = BarBuffer instance for mapping absolute indices to array indices
+    - Required for correct candle boundary calculations after buffer fills
+
     Instead of searching backwards through bars, we maintain state for each symbol
     and track progression through the decision tree.
 
     Args:
         current_idx: Array index for accessing bars[]
         absolute_idx: Absolute bar count for state tracking
+        bar_buffer: BarBuffer instance (for candle mapping)
 
     Returns:
         tuple: (should_enter, reason, entry_state)
@@ -196,9 +240,13 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             }
 
         # We're at candle close - analyze it
-        candle_start = (current_idx // bars_per_candle) * bars_per_candle
-        candle_end = candle_start + bars_per_candle
-        candle_bars = bars[candle_start:candle_end]
+        # CRITICAL FIX PART 3 (Oct 20, 2025): Use helper to get candle bars with correct indexing
+        candle_bars = _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer, current_idx)
+
+        if not candle_bars or len(candle_bars) < bars_per_candle:
+            # Candle bars unavailable (dropped from buffer or incomplete)
+            tracker.reset_state(symbol)
+            return False, "Candle bars unavailable", state.to_dict()
 
         # Calculate candle characteristics
         candle_close = candle_bars[-1].close
@@ -206,15 +254,29 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
         candle_size_pct = abs(candle_close - candle_open) / candle_open
         candle_volume = sum(b.volume for b in candle_bars)
 
-        # Calculate volume ratio
-        avg_volume_lookback = max(0, candle_start - (20 * bars_per_candle))
-        if avg_volume_lookback < candle_start:
-            past_bars = bars[avg_volume_lookback:candle_start]
-            if past_bars:
-                avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
-                avg_candle_volume = avg_volume_per_bar * bars_per_candle
+        # Calculate volume ratio using ABSOLUTE indices for lookback
+        # CRITICAL FIX PART 3 (Oct 20, 2025): Calculate lookback using absolute indices
+        candle_start_abs = (tracking_idx // bars_per_candle) * bars_per_candle
+        avg_volume_lookback_abs = max(0, candle_start_abs - (20 * bars_per_candle))
+
+        # Map lookback absolute indices to array indices
+        if bar_buffer is not None:
+            lookback_start_array = bar_buffer.map_absolute_to_array_index(avg_volume_lookback_abs)
+            candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+
+            if lookback_start_array is not None and candle_start_array is not None:
+                past_bars = bars[lookback_start_array:candle_start_array]
             else:
-                avg_candle_volume = candle_volume
+                past_bars = []
+        else:
+            # Fallback for backtester
+            candle_start_array = (current_idx // bars_per_candle) * bars_per_candle
+            avg_volume_lookback_array = max(0, candle_start_array - (20 * bars_per_candle))
+            past_bars = bars[avg_volume_lookback_array:candle_start_array]
+
+        if past_bars:
+            avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
+            avg_candle_volume = avg_volume_per_bar * bars_per_candle
         else:
             avg_candle_volume = candle_volume
 
@@ -300,76 +362,93 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
         # Check if we're at a new 1-minute candle close (and not the original breakout candle)
         if bars_into_candle == (bars_per_candle - 1) and tracking_idx > state.candle_close_bar:  # Compare absolute indices
             # We're at a new 1-minute candle close - re-check for momentum
-            candle_start = (current_idx // bars_per_candle) * bars_per_candle
-            candle_end = candle_start + bars_per_candle
-            candle_bars = bars[candle_start:candle_end]
+            # CRITICAL FIX PART 3 (Oct 20, 2025): Use helper to get candle bars with correct indexing
+            candle_bars = _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer, current_idx)
 
-            # Calculate this candle's volume
-            candle_volume = sum(b.volume for b in candle_bars)
+            if not candle_bars or len(candle_bars) < bars_per_candle:
+                # Skip this candle if bars unavailable
+                pass
+            else:
+                # Calculate this candle's volume
+                candle_volume = sum(b.volume for b in candle_bars)
 
-            # Calculate average candle volume
-            avg_volume_lookback = max(0, candle_start - (20 * bars_per_candle))
-            if avg_volume_lookback < candle_start:
-                past_bars = bars[avg_volume_lookback:candle_start]
+                # Calculate average candle volume using ABSOLUTE indices
+                # CRITICAL FIX PART 3 (Oct 20, 2025): Calculate lookback using absolute indices
+                candle_start_abs = (tracking_idx // bars_per_candle) * bars_per_candle
+                avg_volume_lookback_abs = max(0, candle_start_abs - (20 * bars_per_candle))
+
+                # Map lookback absolute indices to array indices
+                if bar_buffer is not None:
+                    lookback_start_array = bar_buffer.map_absolute_to_array_index(avg_volume_lookback_abs)
+                    candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+
+                    if lookback_start_array is not None and candle_start_array is not None:
+                        past_bars = bars[lookback_start_array:candle_start_array]
+                    else:
+                        past_bars = []
+                else:
+                    # Fallback for backtester
+                    candle_start_array = (current_idx // bars_per_candle) * bars_per_candle
+                    avg_volume_lookback_array = max(0, candle_start_array - (20 * bars_per_candle))
+                    past_bars = bars[avg_volume_lookback_array:candle_start_array]
+
                 if past_bars:
                     avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
                     avg_candle_volume = avg_volume_per_bar * bars_per_candle
                 else:
                     avg_candle_volume = candle_volume
-            else:
-                avg_candle_volume = candle_volume
 
-            volume_ratio = candle_volume / avg_candle_volume if avg_candle_volume > 0 else 1.0
+                volume_ratio = candle_volume / avg_candle_volume if avg_candle_volume > 0 else 1.0
 
-            # Calculate candle size
-            candle_close = candle_bars[-1].close
-            candle_open = candle_bars[0].open
-            candle_size_pct = abs(candle_close - candle_open) / candle_open
+                # Calculate candle size
+                candle_close = candle_bars[-1].close
+                candle_open = candle_bars[0].open
+                candle_size_pct = abs(candle_close - candle_open) / candle_open
 
-            # Check if this candle meets MOMENTUM criteria
-            is_strong_volume = volume_ratio >= strategy.momentum_volume_threshold
-            is_large_candle = candle_size_pct >= strategy.momentum_candle_min_pct
+                # Check if this candle meets MOMENTUM criteria
+                is_strong_volume = volume_ratio >= strategy.momentum_volume_threshold
+                is_large_candle = candle_size_pct >= strategy.momentum_candle_min_pct
 
-            # DEBUG: Always print to see if this code runs
-            print(f"[DELAYED MOMENTUM] {symbol} Bar {current_idx} (candle #{current_idx // bars_per_candle}) - "
-                  f"{volume_ratio:.2f}x vol (need {strategy.momentum_volume_threshold:.1f}x), "
-                  f"{candle_size_pct*100:.2f}% candle (need {strategy.momentum_candle_min_pct*100:.1f}%)")
+                # DEBUG: Always print to see if this code runs
+                print(f"[DELAYED MOMENTUM] {symbol} Bar {current_idx} (candle #{current_idx // bars_per_candle}) - "
+                      f"{volume_ratio:.2f}x vol (need {strategy.momentum_volume_threshold:.1f}x), "
+                      f"{candle_size_pct*100:.2f}% candle (need {strategy.momentum_candle_min_pct*100:.1f}%)")
 
-            if is_strong_volume and is_large_candle:
-                # Momentum detected on subsequent candle - upgrade to MOMENTUM entry!
-                print(f"[MOMENTUM FOUND!] {symbol} Bar {current_idx} - Checking filters...")
+                if is_strong_volume and is_large_candle:
+                    # Momentum detected on subsequent candle - upgrade to MOMENTUM entry!
+                    print(f"[MOMENTUM FOUND!] {symbol} Bar {current_idx} - Checking filters...")
 
-                # Check remaining filters
-                is_choppy, choppy_reason = strategy._check_choppy_market(bars, current_idx)
-                if is_choppy:
-                    print(f"[BLOCKED] {symbol} Bar {current_idx} - {choppy_reason}")
-                    tracker.reset_state(symbol)
-                    return False, choppy_reason, {'phase': 'choppy_filter'}
-
-                if target_price:
-                    insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
-                    if insufficient_room:
-                        print(f"[BLOCKED] {symbol} Bar {current_idx} - {room_reason}")
+                    # Check remaining filters
+                    is_choppy, choppy_reason = strategy._check_choppy_market(bars, current_idx)
+                    if is_choppy:
+                        print(f"[BLOCKED] {symbol} Bar {current_idx} - {choppy_reason}")
                         tracker.reset_state(symbol)
-                        return False, room_reason, {'phase': 'room_to_run_filter'}
+                        return False, choppy_reason, {'phase': 'choppy_filter'}
 
-                # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
-                fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
-                if fails_stochastic:
-                    print(f"[BLOCKED] {symbol} Bar {current_idx} - {stochastic_reason}")
-                    tracker.reset_state(symbol)
-                    return False, stochastic_reason, {'phase': 'stochastic_filter'}
+                    if target_price:
+                        insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                        if insufficient_room:
+                            print(f"[BLOCKED] {symbol} Bar {current_idx} - {room_reason}")
+                            tracker.reset_state(symbol)
+                            return False, room_reason, {'phase': 'room_to_run_filter'}
 
-                # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-                fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
-                if fails_cvd:
-                    print(f"[BLOCKED] {symbol} Bar {current_idx} - {cvd_reason}")
-                    tracker.reset_state(symbol)
-                    return False, cvd_reason, {'phase': 'cvd_filter'}
+                    # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+                    fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                    if fails_stochastic:
+                        print(f"[BLOCKED] {symbol} Bar {current_idx} - {stochastic_reason}")
+                        tracker.reset_state(symbol)
+                        return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
-                # MOMENTUM CONFIRMED on subsequent candle - ENTER!
-                print(f"[ENTERING!] {symbol} Bar {current_idx} - MOMENTUM_BREAKOUT (delayed)")
-                return True, f"MOMENTUM_BREAKOUT (delayed, {volume_ratio:.1f}x vol on candle {current_idx // bars_per_candle})", state.to_dict()
+                    # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
+                    fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+                    if fails_cvd:
+                        print(f"[BLOCKED] {symbol} Bar {current_idx} - {cvd_reason}")
+                        tracker.reset_state(symbol)
+                        return False, cvd_reason, {'phase': 'cvd_filter'}
+
+                    # MOMENTUM CONFIRMED on subsequent candle - ENTER!
+                    print(f"[ENTERING!] {symbol} Bar {current_idx} - MOMENTUM_BREAKOUT (delayed)")
+                    return True, f"MOMENTUM_BREAKOUT (delayed, {volume_ratio:.1f}x vol on candle {current_idx // bars_per_candle})", state.to_dict()
 
         # Check for pullback (only in WEAK_BREAKOUT_TRACKING state)
         if state.state.value == 'WEAK_BREAKOUT_TRACKING':

@@ -892,8 +892,10 @@ class PS60Trader:
 
         # Check long pivot break using strategy module WITH ALL FILTERS
         # Pass array_idx for bar access, absolute_idx for state machine
+        # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
         should_long, reason = self.strategy.should_enter_long(
-            stock_data, current_price, long_attempts, bars=bars, current_idx=array_idx, absolute_idx=absolute_idx
+            stock_data, current_price, long_attempts, bars=bars, current_idx=array_idx,
+            absolute_idx=absolute_idx, bar_buffer=self.bar_buffers[symbol]
         )
         if should_long:
             self.logger.info(f"\n🎯 {symbol}: LONG SIGNAL @ ${current_price:.2f}")
@@ -925,8 +927,10 @@ class PS60Trader:
 
         # Check short pivot break using strategy module WITH ALL FILTERS
         # Pass array_idx for bar access, absolute_idx for state machine
+        # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
         should_short, reason = self.strategy.should_enter_short(
-            stock_data, current_price, short_attempts, bars=bars, current_idx=array_idx, absolute_idx=absolute_idx
+            stock_data, current_price, short_attempts, bars=bars, current_idx=array_idx,
+            absolute_idx=absolute_idx, bar_buffer=self.bar_buffers[symbol]
         )
         if should_short:
             self.logger.info(f"\n🎯 {symbol}: SHORT SIGNAL @ ${current_price:.2f}")
