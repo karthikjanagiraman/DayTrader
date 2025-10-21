@@ -21,6 +21,7 @@ class PS60Scanner:
         self.ib = None
         self.results = []
         self.failed = []
+        self.scan_date = None  # Track the date being scanned
 
     def connect(self, client_id=1001):
         """Connect to IBKR TWS"""
@@ -56,7 +57,7 @@ class PS60Scanner:
 
         if category == 'quick':
             # Top movers for quick scan
-            return ['SPY', 'QQQ', 'TSLA', 'NVDA', 'AMD', 'GME', 'COIN', 'PLTR']
+            return ['QQQ', 'TSLA', 'NVDA', 'AMD', 'PLTR', 'SOFI', 'HOOD', 'SMCI', 'PATH']
         elif category == 'all':
             # All symbols
             all_symbols = []
@@ -372,8 +373,9 @@ class PS60Scanner:
 
         Args:
             symbol: Stock symbol to scan
-            historical_date: Optional date (datetime.date) to scan as of that date
-                           Uses data UP TO this date (no look-ahead bias)
+            historical_date: Optional date (datetime.date) to scan FOR that trading day
+                           Uses data UP TO (but not including) this date (no look-ahead bias)
+                           Example: --date 2025-10-10 uses data through Oct 9 close
         """
         try:
             # Create and qualify contract
@@ -383,8 +385,10 @@ class PS60Scanner:
 
             # Set end date for historical data
             if historical_date:
-                # Use end of day for the historical date
-                end_datetime = historical_date.strftime('%Y%m%d 23:59:59')
+                # CRITICAL: To scan FOR a trading day, use data from PREVIOUS day
+                # Scanner runs pre-market, so can't see same-day data yet
+                previous_day = historical_date - timedelta(days=1)
+                end_datetime = previous_day.strftime('%Y%m%d 23:59:59')
             else:
                 # Current/live data
                 end_datetime = ''
@@ -602,6 +606,9 @@ class PS60Scanner:
             category: Category to scan if symbols not provided
             historical_date: Optional date (datetime.date) to scan as of that date
         """
+        # Store the scan date for later use in save_results()
+        self.scan_date = historical_date
+
         print("\n" + "="*80)
         if historical_date:
             print(f"PS60 BREAKOUT SCANNER - HISTORICAL ({historical_date.strftime('%Y-%m-%d')})")
@@ -784,7 +791,12 @@ class PS60Scanner:
         df = pd.DataFrame(self.results)
 
         # Get the trading date this scan is for
-        trading_date = self.get_next_trading_date()
+        # If historical scan, use the historical date; otherwise use next trading date
+        if self.scan_date:
+            trading_date = self.scan_date.strftime('%Y%m%d')
+        else:
+            trading_date = self.get_next_trading_date()
+
         csv_filename = f'output/scanner_results_{trading_date}.csv'
         json_filename = f'output/scanner_results_{trading_date}.json'
 
@@ -814,11 +826,21 @@ def main():
                                'high_vol', 'meme', 'finance', 'energy', 'china'],
                        help='Category of symbols to scan')
     parser.add_argument('--client-id', type=int, default=1001, help='TWS client ID')
+    parser.add_argument('--date', type=str, help='Historical date to scan (format: YYYY-MM-DD)')
 
     args = parser.parse_args()
 
+    # Parse historical date if provided
+    historical_date = None
+    if args.date:
+        try:
+            historical_date = datetime.strptime(args.date, '%Y-%m-%d').date()
+        except ValueError:
+            print(f"Error: Invalid date format '{args.date}'. Use YYYY-MM-DD format.")
+            return 1
+
     scanner = PS60Scanner()
-    success = scanner.run_scan(symbols=args.symbols, category=args.category)
+    success = scanner.run_scan(symbols=args.symbols, category=args.category, historical_date=historical_date)
 
     return 0 if success else 1
 
