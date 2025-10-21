@@ -1,0 +1,4 @@
+symbol,side,entry_price,entry_time,exit_price,exit_time,exit_reason,pnl,partials_count,entry_path,result
+META,LONG,724.5,09:49:58 AM ET,723.93,2025-10-16 06:57:01,15MIN_RULE,-0.57,0,Unknown,LOSS
+AMAT,LONG,229.24,09:51:00 AM ET,227.73,2025-10-16 06:56:59,STOP_HIT,-1.51,0,Unknown,LOSS
+BB,LONG,4.61,09:51:06 AM ET,4.59,2025-10-16 06:54:06,STOP_HIT,-0.02,0,Unknown,LOSS
