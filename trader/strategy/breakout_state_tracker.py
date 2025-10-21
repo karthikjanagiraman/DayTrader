@@ -19,6 +19,7 @@ class BreakoutState(Enum):
     MONITORING = "MONITORING"                    # Watching for initial breakout
     BREAKOUT_DETECTED = "BREAKOUT_DETECTED"      # Breakout occurred, waiting for candle close
     CANDLE_CLOSED = "CANDLE_CLOSED"              # Candle closed, analyzing strength
+    MOMENTUM_CONFIRMATION_WAIT = "MOMENTUM_CONFIRMATION_WAIT"  # Strong volume detected, waiting for sustained volume (Oct 20, 2025)
     WEAK_BREAKOUT_TRACKING = "WEAK_BREAKOUT_TRACKING"  # Weak breakout, monitoring for pullback/sustained
     PULLBACK_RETEST = "PULLBACK_RETEST"          # Pullback detected, waiting for bounce
     SUSTAINED_BREAK = "SUSTAINED_BREAK"          # Holding above/below pivot, accumulating bars
@@ -177,7 +178,8 @@ class BreakoutStateTracker:
             state.last_update = timestamp
 
     def classify_breakout(self, symbol: str, is_strong_volume: bool,
-                         is_large_candle: bool, bars=None, current_idx=None) -> str:
+                         is_large_candle: bool, bars=None, current_idx=None,
+                         volume_ratio: float = None, min_volume_threshold: float = 1.0) -> str:
         """
         Classify breakout as MOMENTUM or WEAK
 
@@ -189,10 +191,32 @@ class BreakoutStateTracker:
         REMOVED (Oct 13, 2025):
         - Volume sustainability check (was rejecting valid high-volume breakouts)
 
+        CRITICAL FIX (Oct 20, 2025): Minimum Volume Threshold for ALL Paths
+        - Reject breakouts with sub-average volume (< min_volume_threshold)
+        - Applies to MOMENTUM, PULLBACK, and SUSTAINED_BREAK paths
+        - Prevents pathetic entries like Oct 15's 0.44x-0.79x volume trades
+
+        Args:
+            symbol: Stock symbol
+            is_strong_volume: Volume >= momentum threshold (3.0x)
+            is_large_candle: Candle >= momentum threshold (0.3%)
+            bars: Optional bars array for time-of-day filter
+            current_idx: Optional current index for time-of-day filter
+            volume_ratio: Actual volume ratio (e.g., 0.44x, 1.5x, 3.0x)
+            min_volume_threshold: Minimum volume ratio (default 1.0x, configurable)
+
         Returns:
-            'MOMENTUM' or 'WEAK'
+            'MOMENTUM', 'WEAK', or 'FAILED'
         """
         state = self.get_state(symbol)
+
+        # CRITICAL FIX (Oct 20, 2025): Minimum Volume Threshold
+        # Block ALL breakouts with sub-average volume
+        # This prevents weak entries in ALL paths (MOMENTUM, PULLBACK, SUSTAINED_BREAK)
+        if volume_ratio is not None and volume_ratio < min_volume_threshold:
+            state.state = BreakoutState.FAILED
+            state.entry_reason = f"Sub-average volume ({volume_ratio:.2f}x < {min_volume_threshold:.1f}x)"
+            return 'FAILED'
 
         if is_strong_volume and is_large_candle:
             breakout_type = 'MOMENTUM'

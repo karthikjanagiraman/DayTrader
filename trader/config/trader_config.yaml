@@ -69,9 +69,9 @@ trading:
   trailing_stop:
     enabled: true             # Per requirements - let winners run with protection
     type: "percentage"        # "percentage" or "atr"
-    percentage: 0.01          # Trail by 1% (wider than initial 0.5% test)
+    percentage: 0.01          # Trail by 1% (changed from 0.01 - Oct 20, 2025)
     atr_multiplier: 2.0       # Trail by 2x ATR (for atr type)
-    min_profit_to_activate: 0.02  # Activate after 2% profit (let position breathe)
+    min_profit_to_activate: 0.0  # Activate immediately after partials taken (changed from 0.02 - Oct 20, 2025)
 
   # ===== DYNAMIC RESISTANCE EXITS (Oct 15, 2025) =====
   # NEW: Take partials when approaching technical resistance levels
@@ -124,20 +124,31 @@ trading:
     momentum_candle_size: 1.5       # Candle must be 1.5x average range
     sustained_break_minutes: 2      # Must hold above pivot for N minutes (configurable)
 
-    # HYBRID STRATEGY: Momentum Breakout + Pullback/Retest (Oct 4, 2025)
-    # Two entry types based on breakout strength:
-    # 1. MOMENTUM: Strong volume + large candle = immediate entry (no pullback needed)
-    # 2. PULLBACK: Weak initial break = wait for pullback/retest
+    # STRICT PULLBACK/RETEST STRATEGY (Oct 19, 2025) ⭐ NEW
+    # ALL breakouts require pullback/retest confirmation
+    # NO immediate momentum entries - always wait for pullback
+    # CVD + volume filters must pass during retest
 
     # Always require 1-min candle close (filters most whipsaws)
     require_candle_close: true      # Wait for 1-min candle to close above resistance
     candle_timeframe_seconds: 60    # 60 seconds = 1-minute candles
 
-    # MOMENTUM BREAKOUT thresholds (immediate entry, no pullback)
-    # Updated Oct 7, 2025: Volume-only filter (RSI/MACD removed - too slow for intraday)
-    momentum_volume_threshold: 2.0          # Volume ≥2.0x average = strong momentum
-    momentum_candle_min_pct: 0.000          # DISABLED - no candle size requirement
-    momentum_candle_min_atr: 0.0            # DISABLED - no ATR requirement
+    # MINIMUM VOLUME THRESHOLD (Oct 20, 2025 - CRITICAL FIX)
+    # Applies to ALL entry paths (MOMENTUM, PULLBACK, SUSTAINED_BREAK)
+    # Rejects breakouts with sub-average volume at initial breakout detection
+    # IMPACT: Would have prevented 6/10 Oct 15 trades (0.44x-0.79x volume)
+    min_initial_volume_threshold: 1.0       # Minimum 1.0x average volume required (blocks <1.0x breakouts)
+
+    # MOMENTUM BREAKOUT thresholds (Oct 20, 2025 - Increased to 3.0x)
+    # Requires strong initial volume AND sustained volume on next candle
+    momentum_volume_threshold: 3.0          # Volume must be 3.0x average for MOMENTUM entry
+    momentum_candle_min_pct: 0.003          # Candle must be 0.3% for MOMENTUM entry
+    momentum_candle_min_atr: 2.0            # Candle must be 2.0x ATR for MOMENTUM entry
+
+    # Sustained volume requirement (Oct 20, 2025 - NEW)
+    # After initial momentum candle (3.0x), subsequent candles must also have elevated volume
+    sustained_volume_threshold: 1.5         # Subsequent candles must have 1.5x volume to confirm momentum
+    sustained_volume_candles: 2             # Number of subsequent candles to check (1 = check next candle only, 2 = check next 2 candles)
 
     # RSI/MACD Momentum Filters (Oct 7, 2025) - DISABLED (ineffective for intraday)
     enable_rsi_filter: false                # ❌ DISABLED - 1-hour too slow for intraday breakouts
@@ -151,20 +162,21 @@ trading:
     macd_signal: 9                          # MACD signal EMA (hourly standard)
     macd_timeframe: '1 hour'                # 1 hour bars (same as RSI)
 
-    # PULLBACK/RETEST thresholds (patient entry for weak initial breaks)
-    # FIXES (Oct 15, 2025): Strengthened to prevent weak retests of stale breakouts
-    require_pullback_retest: true           # Enable pullback logic for weak breaks
-    pullback_distance_pct: 0.003            # Must pullback within 0.3% of pivot
+    # PULLBACK/RETEST thresholds (MANDATORY for ALL entries - Oct 19, 2025)
+    # ALL breakouts must pullback and retest with strong confirmation
+    # CVD + volume filters checked during retest (not initial break)
+    require_pullback_retest: true           # ✅ MANDATORY - all entries require pullback
+    pullback_distance_pct: 0.005            # Must pullback within 0.5% of pivot (changed from 0.3% - Oct 20, 2025)
     max_pullback_bars: 24                   # Max 2 minutes (24 × 5-sec bars) to retest
-    pullback_volume_threshold: 2.0          # ✅ RAISED from 1.2 to 2.0 - require strong confirmation on retest
-    pullback_candle_min_pct: 0.005          # ✅ NEW: Require 0.5% minimum candle size (0.0% candles blocked)
-    max_retest_time_minutes: 30             # ✅ NEW: Only allow retests within 30 min of initial break (prevent stale entries)
+    pullback_volume_threshold: 2.0          # ✅ Strong volume required on retest (2.0x)
+    pullback_candle_min_pct: 0.005          # ✅ Minimum 0.5% candle size on retest
+    max_retest_time_minutes: 30             # ✅ Only allow retests within 30 min of initial break
 
-    # SUSTAINED BREAK logic (Oct 5, 2025) - Alternative for slow grind breakouts
-    # Catches PLTR-type setups: weak candle but sustained hold with volume
-    sustained_break_enabled: true           # Enable sustained break detection
-    sustained_break_minutes: 1              # Must hold above/below pivot for 1 minute (reduced from 2 - Oct 9 state machine fix)
-    sustained_break_max_pullback_pct: 0.003 # Allow 0.3% pullback (was 0.1%, too strict for 5-sec bars)
+    # SUSTAINED BREAK logic (DISABLED - Oct 19, 2025)
+    # Too aggressive without pullback confirmation
+    sustained_break_enabled: false          # ❌ DISABLED - only use pullback/retest strategy
+    sustained_break_minutes: 1              # Not used when disabled
+    sustained_break_max_pullback_pct: 0.003 # Not used when disabled
 
     # ENTRY QUALITY FILTERS (Applied during entry decision)
     # --------------------------------------------------------------------------
@@ -320,10 +332,60 @@ stochastic:
   cache_duration_sec: 3600          # Cache stochastic values for 1 hour
   allow_entry_if_unavailable: true  # If stochastic can't be calculated, allow entry anyway
 
+# CVD (CUMULATIVE VOLUME DELTA) FILTER (Oct 19, 2025) ⭐ NEW
+# ----------------------------------------------------------------------------
+# Purpose: Validate breakout quality by measuring buying vs selling pressure
+# Uses: Bar approximation (backtesting) or tick data (live trading)
+# LONG entries: CVD trend must be BULLISH (positive slope = net buying)
+# SHORT entries: CVD trend must be BEARISH (negative slope = net selling)
+# Applied to: ALL entry paths (momentum, pullback, sustained)
+# Impact: Oct 16 test showed 71.4% block rate on weak entries
+#
+# How CVD works:
+# - Measures cumulative difference between buying volume and selling volume
+# - Bar approximation: Close in upper half of range = buying, lower half = selling
+# - Tick data (live): Upticks = buying, downticks = selling
+# - Slope calculation: Linear regression over last N bars
+# - Trend classification: Slope > +1000 = BULLISH, < -1000 = BEARISH
+#
+# Why it's effective:
+# - Detects when breakouts lack real buying/selling pressure
+# - Oct 16 example: META SHORT had BULLISH CVD (buyers absorbing sellers) → BLOCKED
+# - Prevents counter-trend entries (e.g., shorting into buying pressure)
+#
+# Configuration:
+confirmation:
+  cvd:
+    enabled: true                    # ✅ ENABLED for Oct 16 backtest validation
+
+    # Calculation settings
+    slope_lookback: 5                # Number of bars for slope calculation
+                                     # 5 bars = ~5 minutes of data for trend detection
+
+    # Trend thresholds
+    bullish_slope_threshold: 1000    # Minimum slope for BULLISH trend
+                                     # If slope > +1000 → net buying pressure
+    bearish_slope_threshold: -1000   # Maximum slope for BEARISH trend
+                                     # If slope < -1000 → net selling pressure
+                                     # Between thresholds → NEUTRAL (allowed)
+
+    # Divergence settings (warning only, doesn't block)
+    detect_divergence: true          # Warn on price/CVD divergence
+    block_on_divergence: false       # Don't block entries on divergence (just warn)
+                                     # Bullish div: Price down, CVD up (reversal signal)
+                                     # Bearish div: Price up, CVD down (reversal signal)
+
+    # Data source priorities
+    prefer_tick_data: true           # Use tick data when available (live trading)
+    bar_approximation_enabled: true  # Fall back to bar approximation (backtesting)
+
+    # Caching (for live trading performance)
+    cache_duration_sec: 60           # Cache CVD calculations for 1 minute
+
 ibkr:
   host: "127.0.0.1"
   port: 7497                   # Paper trading port (7496 for live)
-  client_id: 2003              # Changed from 2002 (Oct 13, 2025)
+  client_id: 2010              # Changed from 2003 (Oct 16, 2025) - Fix applied
 
 scanner:
   output_dir: "../stockscanner/output/"

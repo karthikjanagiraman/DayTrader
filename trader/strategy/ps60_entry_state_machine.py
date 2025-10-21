@@ -11,6 +11,9 @@ Updated: October 19, 2025 - Added CVD filter integration
 from datetime import datetime
 import logging
 
+# Import BreakoutState enum for state machine transitions (Oct 20, 2025)
+from .breakout_state_tracker import BreakoutState
+
 # Import CVD calculator for volume delta confirmation
 CVD_AVAILABLE = False
 CVDCalculator = None
@@ -163,9 +166,85 @@ def _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer=None, curre
         return bars[candle_start_array:candle_end_array + 1]
     else:
         # Fallback for backtester (no buffer, indices align)
-        candle_start_array = (current_idx // bars_per_candle) * bars_per_candle
+        # CRITICAL: Use tracking_idx, not current_idx! (Oct 20, 2025 sustained volume fix)
+        candle_start_array = (tracking_idx // bars_per_candle) * bars_per_candle
         candle_end_array = candle_start_array + bars_per_candle
         return bars[candle_start_array:candle_end_array]
+
+
+def _check_sustained_volume(bars, tracking_idx, bars_per_candle, bar_buffer, current_idx, strategy, num_candles=1):
+    """
+    Helper function to check if volume is sustained over N subsequent candles.
+
+    Oct 20, 2025: Configurable sustained volume requirement for all entry paths.
+
+    Args:
+        bars: Array of bars
+        tracking_idx: Absolute bar index
+        bars_per_candle: Number of bars per candle (12 for 1-min)
+        bar_buffer: BarBuffer instance (for live trading)
+        current_idx: Current array index (for backtester)
+        strategy: Strategy instance (for accessing config)
+        num_candles: Number of subsequent candles to check (default 1)
+
+    Returns:
+        tuple: (all_sustained: bool, volume_ratios: list)
+            all_sustained: True if ALL checked candles meet threshold
+            volume_ratios: List of volume ratios for each checked candle
+    """
+    sustained_threshold = getattr(strategy, 'sustained_volume_threshold', 1.5)
+    volume_ratios = []
+
+    for candle_offset in range(1, num_candles + 1):
+        # Calculate tracking index for this subsequent candle
+        subsequent_tracking_idx = tracking_idx + (candle_offset * bars_per_candle)
+
+        # Get candle bars
+        candle_bars = _get_candle_bars(bars, subsequent_tracking_idx, bars_per_candle, bar_buffer, current_idx)
+
+        if not candle_bars or len(candle_bars) < bars_per_candle:
+            # Can't check this candle yet (not enough data)
+            return False, volume_ratios
+
+        # Calculate this candle's volume
+        candle_volume = sum(b.volume for b in candle_bars)
+
+        # Calculate average volume using ABSOLUTE indices
+        candle_start_abs = (subsequent_tracking_idx // bars_per_candle) * bars_per_candle
+        avg_volume_lookback_abs = max(0, candle_start_abs - (20 * bars_per_candle))
+
+        # Map to array indices
+        if bar_buffer is not None:
+            lookback_start_array = bar_buffer.map_absolute_to_array_index(avg_volume_lookback_abs)
+            candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+            if lookback_start_array is not None and candle_start_array is not None:
+                past_bars = bars[lookback_start_array:candle_start_array]
+            else:
+                past_bars = []
+        else:
+            # Fallback for backtester (indices align, use absolute indices directly)
+            # CRITICAL: Use subsequent_tracking_idx, not current_idx! (Oct 20, 2025 sustained volume fix)
+            candle_start_array = (subsequent_tracking_idx // bars_per_candle) * bars_per_candle
+            avg_volume_lookback_array = max(0, candle_start_array - (20 * bars_per_candle))
+            past_bars = bars[avg_volume_lookback_array:candle_start_array]
+
+        if past_bars:
+            avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
+            avg_candle_volume = avg_volume_per_bar * bars_per_candle
+        else:
+            avg_candle_volume = candle_volume
+
+        # Calculate volume ratio
+        volume_ratio = candle_volume / avg_candle_volume if avg_candle_volume > 0 else 1.0
+        volume_ratios.append(volume_ratio)
+
+        # Check if this candle meets threshold
+        if volume_ratio < sustained_threshold:
+            # This candle failed - return False immediately
+            return False, volume_ratios
+
+    # All candles met threshold
+    return True, volume_ratios
 
 
 def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, side='LONG',
@@ -311,42 +390,107 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                    f"Candle={candle_size_pct*100:.2f}% (need {strategy.momentum_candle_min_pct*100:.1f}%), "
                    f"Strong={is_strong_volume}, Large={is_large_candle}")
 
-        # Pass bars and current_idx for Phase 2 filters
+        # Pass bars, current_idx, volume_ratio, and min threshold for all filters
+        # CRITICAL FIX (Oct 20, 2025): Pass volume_ratio and min_threshold to enable minimum volume filter
+        min_vol_threshold = getattr(strategy, 'min_initial_volume_threshold', 1.0)
         breakout_type = tracker.classify_breakout(symbol, is_strong_volume, is_large_candle,
-                                                  bars=bars, current_idx=current_idx)
+                                                  bars=bars, current_idx=current_idx,
+                                                  volume_ratio=volume_ratio,
+                                                  min_volume_threshold=min_vol_threshold)
 
         logger.info(f"[BREAKOUT TYPE] {symbol} Bar {current_idx}: Classified as {breakout_type}")
 
+        # CRITICAL FIX (Oct 20, 2025): Handle FAILED breakouts (sub-average volume)
+        if breakout_type == 'FAILED':
+            # Sub-average volume - reject this breakout entirely
+            # This prevents Oct 15-style disasters (0.44x-0.79x volume entries)
+            tracker.reset_state(symbol)
+            logger.info(f"[BREAKOUT FAILED] {symbol} Bar {current_idx}: "
+                       f"Sub-average volume ({volume_ratio:.2f}x < {min_vol_threshold:.1f}x) - REJECTED")
+            return False, f"Breakout rejected: Sub-average volume ({volume_ratio:.2f}x)", {'phase': 'volume_filter'}
+
         if breakout_type == 'MOMENTUM':
-            # Strong breakout - ready to enter immediately
-            # But first check filters
-            is_choppy, choppy_reason = strategy._check_choppy_market(bars, current_idx)
-            if is_choppy:
-                tracker.reset_state(symbol)
-                return False, choppy_reason, {'phase': 'choppy_filter'}
-
-            if target_price:
-                insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
-                if insufficient_room:
-                    tracker.reset_state(symbol)
-                    return False, room_reason, {'phase': 'room_to_run_filter'}
-
-            # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
-            fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
-            if fails_stochastic:
-                tracker.reset_state(symbol)
-                return False, stochastic_reason, {'phase': 'stochastic_filter'}
-
-            # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-            fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
-            if fails_cvd:
-                tracker.reset_state(symbol)
-                return False, cvd_reason, {'phase': 'cvd_filter'}
-
-            return True, f"MOMENTUM_BREAKOUT ({volume_ratio:.1f}x vol, {candle_size_pct*100:.1f}% candle)", state.to_dict()
+            # Strong initial volume detected (3.0x+) - Oct 20, 2025 Enhancement
+            # Now we wait for NEXT candle to confirm sustained volume (1.5x+)
+            # Transition to MOMENTUM_CONFIRMATION_WAIT state
+            state.state = BreakoutState.MOMENTUM_CONFIRMATION_WAIT
+            logger.info(f"[MOMENTUM INITIAL] {symbol} Bar {current_idx}: "
+                       f"{volume_ratio:.1f}x vol detected, waiting for sustained volume confirmation")
+            return False, f"Strong volume detected ({volume_ratio:.1f}x), waiting for confirmation", state.to_dict()
 
         # Weak breakout - continue to tracking state
         return False, f"Weak breakout, tracking for pullback/sustained ({volume_ratio:.1f}x vol)", state.to_dict()
+
+    # STATE 2.5: MOMENTUM_CONFIRMATION_WAIT - Check sustained volume (Oct 20, 2025)
+    elif state.state.value == 'MOMENTUM_CONFIRMATION_WAIT':
+        # Check sustained volume using helper function
+        bars_per_candle = strategy.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
+        num_candles_to_check = getattr(strategy, 'sustained_volume_candles', 1)
+
+        # Check if enough time has passed to check sustained volume
+        candles_since_detection = (tracking_idx - state.candle_close_bar) // bars_per_candle
+
+        if candles_since_detection < num_candles_to_check:
+            # Not enough candles yet
+            bars_remaining = (num_candles_to_check * bars_per_candle) - (tracking_idx - state.candle_close_bar)
+            return False, f"Waiting for {num_candles_to_check} confirmation candle(s)", {
+                'phase': 'momentum_confirmation_wait',
+                'bars_remaining': bars_remaining
+            }
+
+        # Check if we're at a candle boundary
+        bars_into_candle = tracking_idx % bars_per_candle
+        if bars_into_candle < (bars_per_candle - 1):
+            # Not at candle close yet, keep waiting
+            return False, "Waiting for confirmation candle close", {
+                'phase': 'momentum_confirmation_wait',
+                'bars_remaining': (bars_per_candle - 1) - bars_into_candle
+            }
+
+        # We're at candle close - check sustained volume using helper
+        all_sustained, volume_ratios = _check_sustained_volume(
+            bars, state.candle_close_bar, bars_per_candle,
+            bar_buffer, current_idx, strategy, num_candles_to_check
+        )
+
+        if not all_sustained:
+            # Sustained volume failed - downgrade to WEAK
+            state.state = BreakoutState.WEAK_BREAKOUT_TRACKING
+            ratios_str = ", ".join([f"{r:.1f}x" for r in volume_ratios])
+            logger.info(f"[MOMENTUM DOWNGRADED] {symbol} Bar {current_idx}: "
+                       f"Sustained volume failed ({ratios_str}), downgrading to WEAK_BREAKOUT_TRACKING")
+            return False, f"Momentum not sustained ({ratios_str}), tracking", state.to_dict()
+
+        # All sustained volume checks passed!
+        ratios_str = ", ".join([f"{r:.1f}x" for r in volume_ratios])
+        logger.info(f"[SUSTAINED VOLUME CONFIRMED] {symbol} Bar {current_idx}: {ratios_str}")
+
+        # Sustained volume confirmed - check remaining filters before entry
+        is_choppy, choppy_reason = strategy._check_choppy_market(bars, current_idx)
+        if is_choppy:
+            tracker.reset_state(symbol)
+            return False, choppy_reason, {'phase': 'choppy_filter'}
+
+        if target_price:
+            insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+            if insufficient_room:
+                tracker.reset_state(symbol)
+                return False, room_reason, {'phase': 'room_to_run_filter'}
+
+        # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+        fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+        if fails_stochastic:
+            tracker.reset_state(symbol)
+            return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
+        # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
+        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+        if fails_cvd:
+            tracker.reset_state(symbol)
+            return False, cvd_reason, {'phase': 'cvd_filter'}
+
+        # ALL FILTERS PASSED - MOMENTUM ENTRY CONFIRMED!
+        return True, f"MOMENTUM_BREAKOUT (sustained {ratios_str})", state.to_dict()
 
     # STATE 3/4: WEAK_BREAKOUT_TRACKING or PULLBACK_RETEST
     elif state.state.value in ['WEAK_BREAKOUT_TRACKING', 'PULLBACK_RETEST']:
@@ -415,8 +559,31 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                       f"{candle_size_pct*100:.2f}% candle (need {strategy.momentum_candle_min_pct*100:.1f}%)")
 
                 if is_strong_volume and is_large_candle:
-                    # Momentum detected on subsequent candle - upgrade to MOMENTUM entry!
-                    print(f"[MOMENTUM FOUND!] {symbol} Bar {current_idx} - Checking filters...")
+                    # Strong volume detected on subsequent candle - NOW check SUSTAINED volume (Oct 20, 2025)
+                    print(f"[MOMENTUM FOUND!] {symbol} Bar {current_idx} - Checking sustained volume on NEXT candle...")
+
+                    # Store this candle's detection, wait for NEXT candle to confirm sustained volume
+                    state.delayed_momentum_detected_bar = tracking_idx
+                    state.delayed_momentum_volume_ratio = volume_ratio
+                    return False, f"Delayed momentum detected ({volume_ratio:.1f}x), waiting for sustained volume", state.to_dict()
+
+        # Check if we previously detected delayed momentum and need to check sustained volume
+        if hasattr(state, 'delayed_momentum_detected_bar') and state.delayed_momentum_detected_bar is not None:
+            num_candles_to_check = getattr(strategy, 'sustained_volume_candles', 1)
+            candles_since_detection = (tracking_idx - state.delayed_momentum_detected_bar) // bars_per_candle
+
+            if candles_since_detection >= num_candles_to_check and bars_into_candle == (bars_per_candle - 1):
+                # We're at candle close - check sustained volume using helper
+                all_sustained, volume_ratios = _check_sustained_volume(
+                    bars, state.delayed_momentum_detected_bar, bars_per_candle,
+                    bar_buffer, current_idx, strategy, num_candles_to_check
+                )
+
+                ratios_str = ", ".join([f"{r:.1f}x" for r in volume_ratios])
+
+                if all_sustained:
+                    # Sustained volume confirmed - proceed with entry checks!
+                    print(f"[DELAYED SUSTAINED CONFIRMED!] {symbol} Bar {current_idx}: {ratios_str}")
 
                     # Check remaining filters
                     is_choppy, choppy_reason = strategy._check_choppy_market(bars, current_idx)
@@ -446,9 +613,14 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                         tracker.reset_state(symbol)
                         return False, cvd_reason, {'phase': 'cvd_filter'}
 
-                    # MOMENTUM CONFIRMED on subsequent candle - ENTER!
-                    print(f"[ENTERING!] {symbol} Bar {current_idx} - MOMENTUM_BREAKOUT (delayed)")
-                    return True, f"MOMENTUM_BREAKOUT (delayed, {volume_ratio:.1f}x vol on candle {current_idx // bars_per_candle})", state.to_dict()
+                    # DELAYED MOMENTUM CONFIRMED with SUSTAINED VOLUME - ENTER!
+                    print(f"[ENTERING!] {symbol} Bar {current_idx} - MOMENTUM_BREAKOUT (delayed, sustained)")
+                    return True, f"MOMENTUM_BREAKOUT (delayed {state.delayed_momentum_volume_ratio:.1f}x, sustained {ratios_str})", state.to_dict()
+                else:
+                    # Sustained volume NOT confirmed - reset delayed momentum detection
+                    print(f"[DELAYED SUSTAINED FAILED] {symbol} Bar {current_idx}: {ratios_str}")
+                    state.delayed_momentum_detected_bar = None
+                    state.delayed_momentum_volume_ratio = None
 
         # Check for pullback (only in WEAK_BREAKOUT_TRACKING state)
         if state.state.value == 'WEAK_BREAKOUT_TRACKING':
@@ -515,7 +687,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                 adjusted_stop = None
 
             if bounce_confirmed:
-                # Pullback bounce confirmed with MOMENTUM-LEVEL filters - check remaining filters
+                # Pullback bounce confirmed with strong volume - NOW check SUSTAINED volume (Oct 20, 2025)
 
                 # ENHANCED LOGGING (Oct 19, 2025): Log pullback bounce metrics
                 logger.info(f"[PULLBACK BOUNCE] {symbol} Bar {current_idx}: "
@@ -523,48 +695,82 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                            f"Ratio={candle_volume/avg_candle_volume:.2f}x (need {strategy.pullback_volume_threshold:.1f}x), "
                            f"Candle={current_candle_size_pct*100:.2f}% (need {strategy.pullback_candle_min_pct*100:.1f}%)")
 
-                # FIX #1 (Oct 15, 2025): Check time since initial break (staleness check)
-                if hasattr(strategy, 'max_retest_time_minutes'):
-                    time_since_breakout = (timestamp - state.breakout_detected_at).total_seconds() / 60
-                    if time_since_breakout > strategy.max_retest_time_minutes:
-                        tracker.reset_state(symbol)
-                        return False, f"Stale retest: {time_since_breakout:.1f} min since initial break (max {strategy.max_retest_time_minutes} min)", {'phase': 'staleness_filter'}
+                # Store bounce detection, wait for NEXT candle to confirm sustained volume
+                state.pullback_bounce_detected_bar = tracking_idx
+                state.pullback_bounce_volume_ratio = candle_volume / avg_candle_volume
+                state.pullback_adjusted_entry = adjusted_entry
+                state.pullback_adjusted_stop = adjusted_stop
+                return False, f"Pullback bounce detected ({state.pullback_bounce_volume_ratio:.1f}x), waiting for sustained volume", state.to_dict()
 
-                # FIX #2 (Oct 15, 2025): Check entry position relative to pivot
-                if side == 'LONG':
-                    pct_above_pivot = (current_price - pivot_price) / pivot_price
-                    if pct_above_pivot > strategy.max_entry_above_resistance:
-                        tracker.reset_state(symbol)
-                        return False, f"Entry too far above resistance: {pct_above_pivot*100:.2f}% (max {strategy.max_entry_above_resistance*100:.1f}%)", {'phase': 'entry_position_filter'}
-                elif side == 'SHORT':
-                    pct_below_pivot = (pivot_price - current_price) / pivot_price
-                    if pct_below_pivot > strategy.max_entry_below_support:
-                        tracker.reset_state(symbol)
-                        return False, f"Entry too far below support: {pct_below_pivot*100:.2f}% (max {strategy.max_entry_below_support*100:.1f}%)", {'phase': 'entry_position_filter'}
+            # Check if we previously detected pullback bounce and need to check sustained volume
+            if hasattr(state, 'pullback_bounce_detected_bar') and state.pullback_bounce_detected_bar is not None:
+                bars_per_candle = 12
+                num_candles_to_check = getattr(strategy, 'sustained_volume_candles', 1)
+                candles_since_detection = (tracking_idx - state.pullback_bounce_detected_bar) // bars_per_candle
+                bars_into_candle = tracking_idx % bars_per_candle
 
-                if target_price:
-                    insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
-                    if insufficient_room:
-                        tracker.reset_state(symbol)
-                        return False, room_reason, {'phase': 'room_to_run_filter'}
+                if candles_since_detection >= num_candles_to_check and bars_into_candle == (bars_per_candle - 1):
+                    # We're at candle close - check sustained volume using helper
+                    all_sustained, volume_ratios = _check_sustained_volume(
+                        bars, state.pullback_bounce_detected_bar, bars_per_candle,
+                        bar_buffer, current_idx, strategy, num_candles_to_check
+                    )
 
-                # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
-                fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
-                if fails_stochastic:
-                    tracker.reset_state(symbol)
-                    return False, stochastic_reason, {'phase': 'stochastic_filter'}
+                    ratios_str = ", ".join([f"{r:.1f}x" for r in volume_ratios])
+                    logger.info(f"[PULLBACK SUSTAINED CHECK] {symbol} Bar {current_idx}: {ratios_str}")
 
-                # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-                fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
-                if fails_cvd:
-                    tracker.reset_state(symbol)
-                    return False, cvd_reason, {'phase': 'cvd_filter'}
+                    if all_sustained:
+                        # Sustained volume confirmed - proceed with entry checks!
 
-                # PHASE 5: Include adjusted pivot and stop in return
-                entry_state = state.to_dict()
-                entry_state['adjusted_entry_pivot'] = adjusted_entry
-                entry_state['adjusted_stop'] = adjusted_stop
-                return True, "PULLBACK_RETEST entry (momentum confirmed)", entry_state
+                        # FIX #1 (Oct 15, 2025): Check time since initial break (staleness check)
+                        if hasattr(strategy, 'max_retest_time_minutes'):
+                            time_since_breakout = (timestamp - state.breakout_detected_at).total_seconds() / 60
+                            if time_since_breakout > strategy.max_retest_time_minutes:
+                                tracker.reset_state(symbol)
+                                return False, f"Stale retest: {time_since_breakout:.1f} min since initial break (max {strategy.max_retest_time_minutes} min)", {'phase': 'staleness_filter'}
+
+                        # FIX #2 (Oct 15, 2025): Check entry position relative to pivot
+                        if side == 'LONG':
+                            pct_above_pivot = (current_price - pivot_price) / pivot_price
+                            if pct_above_pivot > strategy.max_entry_above_resistance:
+                                tracker.reset_state(symbol)
+                                return False, f"Entry too far above resistance: {pct_above_pivot*100:.2f}% (max {strategy.max_entry_above_resistance*100:.1f}%)", {'phase': 'entry_position_filter'}
+                        elif side == 'SHORT':
+                            pct_below_pivot = (pivot_price - current_price) / pivot_price
+                            if pct_below_pivot > strategy.max_entry_below_support:
+                                tracker.reset_state(symbol)
+                                return False, f"Entry too far below support: {pct_below_pivot*100:.2f}% (max {strategy.max_entry_below_support*100:.1f}%)", {'phase': 'entry_position_filter'}
+
+                        if target_price:
+                            insufficient_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                            if insufficient_room:
+                                tracker.reset_state(symbol)
+                                return False, room_reason, {'phase': 'room_to_run_filter'}
+
+                        # STOCHASTIC FILTER (Oct 15, 2025): Check momentum confirmation
+                        fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                        if fails_stochastic:
+                            tracker.reset_state(symbol)
+                            return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
+                        # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
+                        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+                        if fails_cvd:
+                            tracker.reset_state(symbol)
+                            return False, cvd_reason, {'phase': 'cvd_filter'}
+
+                        # PULLBACK BOUNCE CONFIRMED with SUSTAINED VOLUME - ENTER!
+                        entry_state = state.to_dict()
+                        entry_state['adjusted_entry_pivot'] = state.pullback_adjusted_entry
+                        entry_state['adjusted_stop'] = state.pullback_adjusted_stop
+                        return True, f"PULLBACK_RETEST (bounce {state.pullback_bounce_volume_ratio:.1f}x, sustained {ratios_str})", entry_state
+                    else:
+                        # Sustained volume NOT confirmed - reset pullback detection
+                        logger.info(f"[PULLBACK SUSTAINED FAILED] {symbol} Bar {current_idx}: {ratios_str}")
+                        state.pullback_bounce_detected_bar = None
+                        state.pullback_bounce_volume_ratio = None
+                        state.pullback_adjusted_entry = None
+                        state.pullback_adjusted_stop = None
 
             return False, "Waiting for momentum on pullback bounce", state.to_dict()
 
