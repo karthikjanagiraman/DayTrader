@@ -55,14 +55,20 @@ class BarBuffer:
 
     The strategy module expects 5-second bars (like in backtest), but IBKR
     live data comes as ticks. This class aggregates ticks into bars.
+
+    CRITICAL FIX (Oct 20, 2025): Track ABSOLUTE bar count, not array index
+    - State machine uses absolute bar numbers (0, 1, 2, ... 1400, 1401...)
+    - Array only stores last N bars (sliding window)
+    - Must map absolute bar numbers to array indices
     """
 
     def __init__(self, symbol, bar_size_seconds=5):
         self.symbol = symbol
         self.bar_size = bar_size_seconds
         self.current_bar = None
-        self.bars = []  # Keep last 120 bars (10 minutes at 5-second resolution)
-        self.max_bars = 120
+        self.bars = []  # Sliding window of recent bars
+        self.max_bars = 240  # INCREASED: 240 bars = 20 minutes (was 120 = 10 min)
+        self.total_bar_count = 0  # NEW: Absolute bar counter (increments forever)
 
     def round_to_bar(self, timestamp):
         """Round timestamp to nearest bar boundary"""
@@ -93,8 +99,9 @@ class BarBuffer:
             # Complete current bar and add to history
             if self.current_bar is not None:
                 self.bars.append(self.current_bar)
+                self.total_bar_count += 1  # NEW: Increment absolute counter
 
-                # Keep only last max_bars
+                # Keep only last max_bars (sliding window)
                 if len(self.bars) > self.max_bars:
                     self.bars.pop(0)
 
@@ -154,9 +161,134 @@ class BarBuffer:
         return result
 
     def get_current_bar_index(self):
-        """Get index of current bar (last bar in list)"""
+        """
+        Get ABSOLUTE bar index (not array index)
+
+        CRITICAL FIX (Oct 20, 2025):
+        - Returns absolute bar count (0, 1, 2, ... 1400, 1401...)
+        - NOT array index (which caps at max_bars - 1)
+        - State machine uses absolute indices for tracking
+
+        Returns:
+            int: Absolute bar count since session start
+        """
+        return self.total_bar_count
+
+    def get_current_array_index(self):
+        """
+        Get ARRAY index for direct bar data access
+
+        CRITICAL FIX PART 2 (Oct 20, 2025):
+        - Returns array position (0 to max_bars-1)
+        - Use this for accessing bars[] directly
+        - Strategy code uses this, state machine uses get_current_bar_index()
+
+        Returns:
+            int: Array index (0-239), or -1 if no bars
+        """
         bars = self.get_bars_for_strategy()
         return len(bars) - 1 if bars else -1
+
+    def get_oldest_bar_absolute_index(self):
+        """
+        Get absolute index of oldest bar in buffer
+
+        Example:
+        - total_bar_count = 500 (current bar)
+        - len(bars) = 240 (buffer full)
+        - oldest bar = 500 - 240 + 1 = 261
+
+        Returns:
+            int: Absolute index of oldest bar, or 0 if buffer not full
+        """
+        if not self.bars:
+            return 0
+        return max(0, self.total_bar_count - len(self.bars) + 1)
+
+    def map_absolute_to_array_index(self, absolute_idx):
+        """
+        Map absolute bar index to array index
+
+        Args:
+            absolute_idx: Absolute bar number (e.g., 500)
+
+        Returns:
+            int: Array index (0-239), or None if bar not in buffer
+
+        Example:
+        - total_bar_count = 500
+        - bars array size = 240
+        - oldest_bar_absolute = 261
+        - To access absolute bar 400:
+          array_idx = 400 - 261 = 139
+        """
+        oldest_abs = self.get_oldest_bar_absolute_index()
+
+        if absolute_idx < oldest_abs:
+            # Bar has been dropped from buffer
+            return None
+
+        if absolute_idx > self.total_bar_count:
+            # Future bar (doesn't exist yet)
+            return None
+
+        array_idx = absolute_idx - oldest_abs
+
+        # Validate it's within array bounds
+        if array_idx < 0 or array_idx >= len(self.bars):
+            return None
+
+        return array_idx
+
+    def get_bars_by_absolute_range(self, start_abs, end_abs):
+        """
+        Get bars using ABSOLUTE bar indices (not array indices)
+
+        Args:
+            start_abs: Starting absolute bar index (inclusive)
+            end_abs: Ending absolute bar index (exclusive, like Python slicing)
+
+        Returns:
+            list: MockBar objects in range, or empty list if not available
+
+        Example:
+        - Request bars 400-412 (12 bars for 1-minute candle)
+        - Maps to array indices and returns those bars
+        """
+        # Map absolute indices to array indices
+        start_array_idx = self.map_absolute_to_array_index(start_abs)
+        end_array_idx = self.map_absolute_to_array_index(end_abs - 1)  # -1 because end is exclusive
+
+        if start_array_idx is None or end_array_idx is None:
+            # Requested bars not in buffer
+            return []
+
+        # Get all bars in strategy format
+        all_bars = self.get_bars_for_strategy()
+
+        # Return the requested range (end_array_idx + 1 because we want inclusive)
+        return all_bars[start_array_idx:end_array_idx + 1]
+
+    def validate_bars_available(self, start_abs, end_abs):
+        """
+        Check if requested bars are still in buffer
+
+        Args:
+            start_abs: Starting absolute bar index
+            end_abs: Ending absolute bar index (exclusive)
+
+        Returns:
+            tuple: (available, reason)
+        """
+        oldest_abs = self.get_oldest_bar_absolute_index()
+
+        if start_abs < oldest_abs:
+            return False, f"Bar {start_abs} dropped from buffer (oldest={oldest_abs})"
+
+        if end_abs > self.total_bar_count + 1:
+            return False, f"Bar {end_abs} doesn't exist yet (current={self.total_bar_count})"
+
+        return True, None
 
     def has_enough_data(self):
         """Check if we have enough bars for strategy calculations"""
@@ -737,7 +869,11 @@ class PS60Trader:
 
         # Get bars from buffer for strategy module
         bars = self.bar_buffers[symbol].get_bars_for_strategy()
-        current_idx = self.bar_buffers[symbol].get_current_bar_index()
+
+        # CRITICAL FIX PART 2 (Oct 20, 2025):
+        # Get BOTH absolute index (for state machine) and array index (for bar access)
+        absolute_idx = self.bar_buffers[symbol].get_current_bar_index()  # For state tracking
+        array_idx = self.bar_buffers[symbol].get_current_array_index()  # For bars[] access
 
         # Get attempt count from position manager
         long_attempts = self.pm.get_attempt_count(symbol, resistance)
@@ -755,9 +891,9 @@ class PS60Trader:
             self.logger.debug(f"  {symbol}: ${current_price:.2f} is {distance_to_support:+.2f}% from support ${support:.2f} (attempt {short_attempts+1})")
 
         # Check long pivot break using strategy module WITH ALL FILTERS
-        # Pass bars and current_idx for hybrid entry confirmation
+        # Pass array_idx for bar access, absolute_idx for state machine
         should_long, reason = self.strategy.should_enter_long(
-            stock_data, current_price, long_attempts, bars=bars, current_idx=current_idx
+            stock_data, current_price, long_attempts, bars=bars, current_idx=array_idx, absolute_idx=absolute_idx
         )
         if should_long:
             self.logger.info(f"\n🎯 {symbol}: LONG SIGNAL @ ${current_price:.2f}")
@@ -788,9 +924,9 @@ class PS60Trader:
                 self.logger.debug(f"  {symbol}: LONG blocked - {reason_str}")
 
         # Check short pivot break using strategy module WITH ALL FILTERS
-        # Pass bars and current_idx for hybrid entry confirmation
+        # Pass array_idx for bar access, absolute_idx for state machine
         should_short, reason = self.strategy.should_enter_short(
-            stock_data, current_price, short_attempts, bars=bars, current_idx=current_idx
+            stock_data, current_price, short_attempts, bars=bars, current_idx=array_idx, absolute_idx=absolute_idx
         )
         if should_short:
             self.logger.info(f"\n🎯 {symbol}: SHORT SIGNAL @ ${current_price:.2f}")

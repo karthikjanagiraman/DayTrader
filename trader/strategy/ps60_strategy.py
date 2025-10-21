@@ -269,6 +269,71 @@ class PS60Strategy:
         """Parse time string to time object"""
         return datetime.strptime(time_str, '%H:%M').time()
 
+    def get_tick_data(self, symbol):
+        """
+        Fetch recent tick data for CVD calculation (PHASE 5 - Oct 19, 2025)
+
+        This method is used by the CVD filter for live trading to get accurate
+        buy/sell volume data. For backtesting, CVD uses bar approximation instead.
+
+        Args:
+            symbol: Stock ticker symbol
+
+        Returns:
+            List of tick objects with 'price' and 'size' attributes, or None
+        """
+        # Check if IB connection is available
+        if not self.ib or not self.ib.isConnected():
+            return None
+
+        # Check if CVD is enabled
+        cvd_config = self.config.get('confirmation', {}).get('cvd', {})
+        if not cvd_config.get('enabled', False):
+            return None
+
+        try:
+            from ib_insync import Stock
+            from datetime import datetime, timedelta
+
+            # Create contract
+            contract = Stock(symbol, 'SMART', 'USD')
+
+            # Request recent historical ticks (last 10 seconds)
+            # Use TRADES to get actual executed trades
+            end_time = datetime.now()
+            start_time = end_time - timedelta(seconds=10)
+
+            ticks = self.ib.reqHistoricalTicks(
+                contract,
+                startDateTime=start_time,
+                endDateTime=end_time,
+                numberOfTicks=1000,
+                whatToShow='TRADES',
+                useRth=True
+            )
+
+            if not ticks:
+                return None
+
+            # Convert to format CVD calculator expects (objects with .price and .size)
+            from dataclasses import dataclass
+
+            @dataclass
+            class TickData:
+                price: float
+                size: int
+
+            tick_list = [TickData(price=t.price, size=t.size) for t in ticks]
+
+            return tick_list
+
+        except Exception as e:
+            # Log error but don't crash - CVD will fall back to bar approximation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to fetch tick data for {symbol}: {e}")
+            return None
+
     def check_breakout_confirmation(self, bars, breakout_idx, pivot_price, side='LONG'):
         """
         Check if breakout is confirmed per requirements:
@@ -1013,7 +1078,7 @@ class PS60Strategy:
             print(f"⚠️  Error checking momentum for {symbol}: {e}")
             return True, f"Momentum check error: {e}", {}
 
-    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None):
+    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None, absolute_idx=None):
         """
         HYBRID Entry Strategy (Oct 4, 2025) - STATE MACHINE VERSION (Oct 9, 2025)
 
@@ -1033,18 +1098,22 @@ class PS60Strategy:
 
         Args:
             bars: List of 5-second bars
-            current_idx: Current bar index
+            current_idx: Current bar ARRAY index (for bars[] access)
             pivot_price: Resistance (long) or support (short)
             side: 'LONG' or 'SHORT'
             target_price: Target price (optional, for room-to-run filter)
             symbol: Stock symbol (REQUIRED for state tracking)
             cached_hourly_bars: Hourly bars for RSI/MACD (optional)
+            absolute_idx: Absolute bar count (for state machine tracking)
 
         Returns:
             tuple: (should_enter, reason, entry_state)
         """
         # USE STATE MACHINE (Oct 9, 2025)
         if symbol is not None:
+            # CRITICAL FIX PART 2 (Oct 20, 2025): Pass absolute_idx to state machine
+            # State machine uses absolute_idx for tracking bar numbers over time
+            # current_idx is used for bars[] access
             return check_entry_state_machine(
                 strategy=self,
                 symbol=symbol,
@@ -1053,7 +1122,8 @@ class PS60Strategy:
                 pivot_price=pivot_price,
                 side=side,
                 target_price=target_price,
-                cached_hourly_bars=cached_hourly_bars
+                cached_hourly_bars=cached_hourly_bars,
+                absolute_idx=absolute_idx
             )
 
         # FALLBACK: Old logic if symbol not provided (shouldn't happen)
@@ -1660,7 +1730,7 @@ class PS60Strategy:
 
         return False, None
 
-    def should_enter_long(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None):
+    def should_enter_long(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None):
         """
         Check if should enter long position
 
@@ -1669,7 +1739,8 @@ class PS60Strategy:
             current_price: Current price
             attempt_count: Number of previous attempts on this pivot
             bars: Optional - List of bars for hybrid entry confirmation (live trader)
-            current_idx: Optional - Current bar index (live trader)
+            current_idx: Optional - Current bar ARRAY index (for accessing bars[])
+            absolute_idx: Optional - Absolute bar count (for state machine tracking)
 
         Returns:
             (bool, reason) - Should enter, and reason why/why not
@@ -1715,8 +1786,13 @@ class PS60Strategy:
         if bars is not None and current_idx is not None:
             # PHASE 7 (Oct 13, 2025): Dynamic target selection - use highest available target
             highest_target = stock_data.get('target3') or stock_data.get('target2') or stock_data.get('target1')
+
+            # CRITICAL FIX PART 2 (Oct 20, 2025): Pass both indices
+            # current_idx = array index (for bars[] access)
+            # absolute_idx = absolute bar count (for state machine)
             confirmed, path, reason = self.check_hybrid_entry(
-                bars, current_idx, resistance, side='LONG', target_price=highest_target
+                bars, current_idx, resistance, side='LONG', target_price=highest_target,
+                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx
             )
 
             if not confirmed:
@@ -1727,7 +1803,7 @@ class PS60Strategy:
         # Backtest path: Pivot broken (hybrid entry checked in backtester loop)
         return True, "Resistance broken"
 
-    def should_enter_short(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None):
+    def should_enter_short(self, stock_data, current_price, attempt_count=0, bars=None, current_idx=None, absolute_idx=None):
         """
         Check if should enter short position
 
@@ -1736,7 +1812,8 @@ class PS60Strategy:
             current_price: Current price
             attempt_count: Number of previous attempts on this pivot
             bars: Optional - List of bars for hybrid entry confirmation (live trader)
-            current_idx: Optional - Current bar index (live trader)
+            current_idx: Optional - Current bar ARRAY index (for accessing bars[])
+            absolute_idx: Optional - Absolute bar count (for state machine tracking)
 
         Returns:
             (bool, reason) - Should enter, and reason why/why not
@@ -1788,8 +1865,13 @@ class PS60Strategy:
         if bars is not None and current_idx is not None:
             # PHASE 7 (Oct 13, 2025): Dynamic target selection - use lowest available downside target
             lowest_downside = stock_data.get('downside2') or stock_data.get('downside1')
+
+            # CRITICAL FIX PART 2 (Oct 20, 2025): Pass both indices
+            # current_idx = array index (for bars[] access)
+            # absolute_idx = absolute bar count (for state machine)
             confirmed, path, reason = self.check_hybrid_entry(
-                bars, current_idx, support, side='SHORT', target_price=lowest_downside
+                bars, current_idx, support, side='SHORT', target_price=lowest_downside,
+                symbol=stock_data.get('symbol'), absolute_idx=absolute_idx
             )
 
             if not confirmed:
