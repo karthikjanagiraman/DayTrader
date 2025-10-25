@@ -19,6 +19,7 @@ class BreakoutState(Enum):
     MONITORING = "MONITORING"                    # Watching for initial breakout
     BREAKOUT_DETECTED = "BREAKOUT_DETECTED"      # Breakout occurred, waiting for candle close
     CANDLE_CLOSED = "CANDLE_CLOSED"              # Candle closed, analyzing strength
+    CVD_MONITORING = "CVD_MONITORING"            # ⭐ NEW (Oct 21, 2025): Monitoring CVD on every candle for confirmation
     MOMENTUM_CONFIRMATION_WAIT = "MOMENTUM_CONFIRMATION_WAIT"  # Strong volume detected, waiting for sustained volume (Oct 20, 2025)
     WEAK_BREAKOUT_TRACKING = "WEAK_BREAKOUT_TRACKING"  # Weak breakout, monitoring for pullback/sustained
     PULLBACK_RETEST = "PULLBACK_RETEST"          # Pullback detected, waiting for bounce
@@ -74,9 +75,20 @@ class BreakoutMemory:
     last_check_bar: int = 0
     last_update: Optional[datetime] = None
 
+    # CVD Monitoring (Oct 21, 2025) ⭐ NEW
+    cvd_monitoring_active: bool = False
+    cvd_monitoring_start_time: Optional[datetime] = None
+    cvd_consecutive_bullish_count: int = 0  # Counts consecutive CVD bullish candles
+    cvd_consecutive_bearish_count: int = 0  # Counts consecutive CVD bearish candles
+    cvd_last_slope: Optional[float] = None  # Last CVD slope calculated
+    cvd_last_trend: Optional[str] = None    # Last CVD trend ('BULLISH', 'BEARISH', 'NEUTRAL')
+
     # Config stored at breakout time
     pivot_price: Optional[float] = None
     target_price: Optional[float] = None
+
+    # Backtesting context (Oct 21, 2025) - for tick data fetching
+    backtester: Optional[Any] = None  # Backtester instance for historical tick fetching
 
     # Entry readiness
     entry_reason: Optional[str] = None

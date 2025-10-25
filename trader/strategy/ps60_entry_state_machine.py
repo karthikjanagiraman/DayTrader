@@ -34,11 +34,12 @@ except (ImportError, ValueError):
 logger = logging.getLogger(__name__)
 
 
-def _check_cvd_filter(strategy, symbol, bars, current_idx, side):
+def _check_cvd_filter(strategy, symbol, bars, current_idx, side, bar_timestamp=None, backtester=None):
     """
     Check CVD (Cumulative Volume Delta) confirmation filter
 
     PHASE 8 (Oct 19, 2025): CVD integration for breakout validation
+    Updated Oct 21, 2025: Support tick-based CVD for backtesting
 
     Args:
         strategy: Strategy instance (contains config)
@@ -46,6 +47,8 @@ def _check_cvd_filter(strategy, symbol, bars, current_idx, side):
         bars: Historical bars
         current_idx: Current bar index
         side: 'LONG' or 'SHORT'
+        bar_timestamp: (Optional) Timestamp for backtest mode
+        backtester: (Optional) Backtester instance for historical tick fetching
 
     Returns:
         tuple: (fails_filter, reason)
@@ -61,20 +64,34 @@ def _check_cvd_filter(strategy, symbol, bars, current_idx, side):
         return False, None
 
     try:
-        # Initialize CVD calculator
+        # Initialize CVD calculator (Oct 22, 2025 - Phase 1 Fix: Added imbalance_threshold)
         calculator = CVDCalculator(
             slope_lookback=cvd_config.get('slope_lookback', 5),
             bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
-            bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000)
+            bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
+            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
         )
 
-        # Get tick data if available (live trading)
+        # Get tick data if available
+        # Live trading: get_tick_data(symbol) fetches last 10 seconds
+        # Backtest mode: get_tick_data(symbol, bar_timestamp, backtester) fetches historical
         ticks = None
         if hasattr(strategy, 'get_tick_data'):
-            ticks = strategy.get_tick_data(symbol)
+            if bar_timestamp is not None and backtester is not None:
+                # Backtest mode - fetch historical ticks
+                ticks = strategy.get_tick_data(symbol, bar_timestamp=bar_timestamp, backtester=backtester)
+            else:
+                # Live trading mode - fetch recent ticks
+                ticks = strategy.get_tick_data(symbol)
 
-        # Calculate CVD using auto mode (prefers ticks, falls back to bars)
-        cvd_result = calculator.calculate_auto(bars, current_idx, ticks=ticks)
+        # Calculate CVD - MUST have tick data, no fallbacks allowed
+        try:
+            cvd_result = calculator.calculate_auto(bars, current_idx, ticks=ticks)
+        except ValueError as e:
+            # No tick data available - BLOCK ENTRY
+            reason = f"CVD calculation failed: {str(e)}"
+            logger.error(f"[CVD BLOCK] {symbol} Bar {current_idx}: {reason}")
+            return True, reason
 
         # Check CVD trend matches entry direction
         # ENHANCED LOGGING (Oct 19, 2025): Detailed CVD analysis output
@@ -248,7 +265,7 @@ def _check_sustained_volume(bars, tracking_idx, bars_per_candle, bar_buffer, cur
 
 
 def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, side='LONG',
-                               target_price=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None):
+                               target_price=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None, backtester=None):
     """
     State machine-based entry confirmation
 
@@ -260,6 +277,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
     - bar_buffer = BarBuffer instance for mapping absolute indices to array indices
     - Required for correct candle boundary calculations after buffer fills
 
+    Updated Oct 21, 2025:
+    - backtester = Backtester instance for historical tick fetching (CVD improvement)
+
     Instead of searching backwards through bars, we maintain state for each symbol
     and track progression through the decision tree.
 
@@ -267,6 +287,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
         current_idx: Array index for accessing bars[]
         absolute_idx: Absolute bar count for state tracking
         bar_buffer: BarBuffer instance (for candle mapping)
+        backtester: Backtester instance for historical tick fetching (optional, backtest only)
 
     Returns:
         tuple: (should_enter, reason, entry_state)
@@ -308,7 +329,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
     # STATE 2: BREAKOUT_DETECTED - Waiting for candle close
     elif state.state.value == 'BREAKOUT_DETECTED':
         # Check if we're at candle boundary
-        bars_per_candle = strategy.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
+        bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
         bars_into_candle = tracking_idx % bars_per_candle  # Use absolute index
 
         if bars_into_candle < (bars_per_candle - 1):
@@ -392,7 +413,20 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
 
         # Pass bars, current_idx, volume_ratio, and min threshold for all filters
         # CRITICAL FIX (Oct 20, 2025): Pass volume_ratio and min_threshold to enable minimum volume filter
-        min_vol_threshold = getattr(strategy, 'min_initial_volume_threshold', 1.0)
+        # CRITICAL FIX (Oct 24, 2025): Adaptive threshold for insufficient history
+        # Problem: Market open bar (bar 0) has 2x volume spike, inflates early averages
+        # Solution: Use 1.0x threshold (neutral) until we have 20 bars of history
+        bars_of_history = min(current_idx, 20)  # Can't have more than current_idx bars
+
+        if bars_of_history < 20:
+            # Insufficient history - use neutral threshold (1.0x = match average)
+            min_vol_threshold = 1.0
+            logger.debug(f"[ADAPTIVE THRESHOLD] {symbol} Bar {current_idx}: "
+                        f"Only {bars_of_history} bars history, using 1.0x threshold")
+        else:
+            # Full 20-bar history - use normal threshold (1.5x)
+            min_vol_threshold = getattr(strategy, 'min_initial_volume_threshold', 1.0)
+
         breakout_type = tracker.classify_breakout(symbol, is_strong_volume, is_large_candle,
                                                   bars=bars, current_idx=current_idx,
                                                   volume_ratio=volume_ratio,
@@ -406,25 +440,376 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             # This prevents Oct 15-style disasters (0.44x-0.79x volume entries)
             tracker.reset_state(symbol)
             logger.info(f"[BREAKOUT FAILED] {symbol} Bar {current_idx}: "
-                       f"Sub-average volume ({volume_ratio:.2f}x < {min_vol_threshold:.1f}x) - REJECTED")
+                       f"Sub-average volume ({volume_ratio:.2f}x < {min_vol_threshold:.1f}x threshold) - REJECTED "
+                       f"(history: {bars_of_history} bars)")
             return False, f"Breakout rejected: Sub-average volume ({volume_ratio:.2f}x)", {'phase': 'volume_filter'}
 
-        if breakout_type == 'MOMENTUM':
-            # Strong initial volume detected (3.0x+) - Oct 20, 2025 Enhancement
-            # Now we wait for NEXT candle to confirm sustained volume (1.5x+)
-            # Transition to MOMENTUM_CONFIRMATION_WAIT state
-            state.state = BreakoutState.MOMENTUM_CONFIRMATION_WAIT
-            logger.info(f"[MOMENTUM INITIAL] {symbol} Bar {current_idx}: "
-                       f"{volume_ratio:.1f}x vol detected, waiting for sustained volume confirmation")
-            return False, f"Strong volume detected ({volume_ratio:.1f}x), waiting for confirmation", state.to_dict()
+        # PHASE 10 (Oct 21, 2025): CVD Continuous Monitoring - Check config
+        cvd_config = strategy.config.get('confirmation', {}).get('cvd', {})
+        cvd_enabled = cvd_config.get('enabled', False)
+        continuous_monitoring = cvd_config.get('continuous_monitoring', False)
 
-        # Weak breakout - continue to tracking state
-        return False, f"Weak breakout, tracking for pullback/sustained ({volume_ratio:.1f}x vol)", state.to_dict()
+        if breakout_type == 'MOMENTUM':
+            # Strong initial volume detected (1.0x+ with large candle)
+            if cvd_enabled and continuous_monitoring:
+                # With CVD monitoring, transition to CVD_MONITORING even for momentum
+                # Will check for strong CVD spike (≥2000) or sustained CVD
+                state.state = BreakoutState.CVD_MONITORING
+                state.cvd_monitoring_active = True
+                state.cvd_monitoring_start_time = timestamp
+                state.cvd_consecutive_bullish_count = 0
+                state.cvd_consecutive_bearish_count = 0
+                state.backtester = backtester  # Store for tick data fetching (Oct 21, 2025)
+                logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
+                           f"MOMENTUM breakout ({volume_ratio:.1f}x), entering CVD monitoring")
+                return False, f"Momentum detected, entering CVD monitoring", state.to_dict()
+            else:
+                # Legacy behavior: go to momentum confirmation wait
+                state.state = BreakoutState.MOMENTUM_CONFIRMATION_WAIT
+                logger.info(f"[MOMENTUM INITIAL] {symbol} Bar {current_idx}: "
+                           f"{volume_ratio:.1f}x vol detected, waiting for sustained volume confirmation")
+                return False, f"Strong volume detected ({volume_ratio:.1f}x), waiting for confirmation", state.to_dict()
+
+        # Weak breakout
+        if cvd_enabled and continuous_monitoring:
+            # Transition to CVD monitoring for weak breakouts
+            state.state = BreakoutState.CVD_MONITORING
+            state.cvd_monitoring_active = True
+            state.cvd_monitoring_start_time = timestamp
+            state.cvd_consecutive_bullish_count = 0
+            state.cvd_consecutive_bearish_count = 0
+            state.backtester = backtester  # Store for tick data fetching (Oct 21, 2025)
+            logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
+                       f"WEAK breakout ({volume_ratio:.1f}x), entering CVD monitoring")
+            return False, f"Weak breakout, entering CVD monitoring", state.to_dict()
+        else:
+            # Legacy behavior: continue to weak tracking
+            return False, f"Weak breakout, tracking for pullback/sustained ({volume_ratio:.1f}x vol)", state.to_dict()
+
+    # STATE 2.1: CVD_MONITORING - Continuous CVD checks (Oct 21, 2025) ⭐ NEW
+    elif state.state.value == 'CVD_MONITORING':
+        """
+        Continuously monitor CVD on every 1-minute candle close
+
+        TWO ENTRY PATHS:
+        1. AGGRESSIVE: CVD slope ≥ 2000 → enter immediately
+        2. PATIENT: CVD slope ≥ 1000 for 2+ consecutive candles → enter
+
+        TIMEOUT: 10 minutes without confirmation → abandon
+        """
+
+        cvd_config = strategy.config['confirmation']['cvd']
+        bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
+
+        # Check timeout (10 minutes)
+        time_elapsed = (timestamp - state.cvd_monitoring_start_time).total_seconds() / 60
+        max_time = cvd_config.get('max_monitoring_time_minutes', 10)
+
+        if time_elapsed > max_time:
+            logger.info(f"[CVD_MONITORING] {symbol}: TIMEOUT after {time_elapsed:.1f} minutes")
+            tracker.reset_state(symbol)
+            return False, f"CVD monitoring timeout ({time_elapsed:.1f} min)", {}
+
+        # Wait for 1-minute candle close
+        bars_into_candle = tracking_idx % bars_per_candle
+        if bars_into_candle < (bars_per_candle - 1):
+            return False, f"CVD monitoring: waiting for candle close ({bars_into_candle}/{bars_per_candle})", {
+                'phase': 'cvd_monitoring',
+                'time_elapsed_min': time_elapsed,
+                'cvd_consecutive_count': state.cvd_consecutive_bullish_count if side == 'LONG' else state.cvd_consecutive_bearish_count
+            }
+
+        # At candle close - get CVD data
+        try:
+            # Use stored backtester from state OR passed backtester
+            effective_backtester = state.backtester or backtester
+
+            # PHASE 1: Check if we have pre-built CVD-enriched bars (Oct 21, 2025)
+            cvd_value = None
+            cvd_slope = None  # DEPRECATED
+            cvd_trend = None
+            cvd_source = None
+            imbalance_pct = None  # NEW (Oct 22, 2025 - Phase 1 Fix)
+
+            if effective_backtester and hasattr(effective_backtester, 'cvd_enriched_bars'):
+                cvd_data = effective_backtester.cvd_enriched_bars.get(symbol)
+                if cvd_data and 'bars' in cvd_data:
+                    # Look up CVD for this specific bar
+                    # Find the bar matching current_idx
+                    # Note: cvd_data['bars'] is a list indexed from 0, matching current_idx
+                    if current_idx < len(cvd_data['bars']):
+                        bar_cvd = cvd_data['bars'][current_idx].get('cvd')
+                        if bar_cvd:
+                            cvd_value = bar_cvd.get('value', 0.0)
+                            cvd_slope = bar_cvd.get('slope', 0.0)  # DEPRECATED
+                            cvd_trend = bar_cvd.get('trend', 'NEUTRAL')
+                            imbalance_pct = bar_cvd.get('imbalance_pct', 0.0)  # NEW: Percentage imbalance
+                            cvd_source = 'CACHED'
+                            logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
+                                       f"✅ CVD from CACHE: imbalance={imbalance_pct:.1f}%, trend={cvd_trend}")
+
+            # PHASE 2: If no cached data, calculate CVD from ticks (fallback for live trading)
+            if imbalance_pct is None:
+                # Get tick data - REQUIRED, no fallbacks allowed
+                ticks = None
+                if hasattr(strategy, 'get_tick_data'):
+                    if effective_backtester is not None:
+                        # Backtest mode - fetch historical ticks for CURRENT bar
+                        ticks = strategy.get_tick_data(symbol, bar_timestamp=timestamp, backtester=effective_backtester)
+                        if not ticks:
+                            logger.error(f"❌ NO TICK DATA returned for {symbol} at {timestamp}")
+                    else:
+                        # Live trading mode - fetch recent ticks
+                        ticks = strategy.get_tick_data(symbol)
+                        if not ticks:
+                            logger.warning(f"⚠️ No tick data available for {symbol} in live mode")
+
+                # Calculate CVD using auto mode
+                import sys
+                import os
+                # Add parent directory to path if needed
+                parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if parent_dir not in sys.path:
+                    sys.path.insert(0, parent_dir)
+
+                from indicators.cvd_calculator import CVDCalculator
+                calculator = CVDCalculator(
+                    slope_lookback=cvd_config.get('slope_lookback', 5),
+                    bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
+                    bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
+                    imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
+                )
+
+                # CVD calculation WILL FAIL if no tick data - this is intentional
+                try:
+                    cvd_result = calculator.calculate_auto(bars, current_idx, ticks=ticks)
+                    cvd_slope = cvd_result.cvd_slope  # DEPRECATED - kept for logging
+                    cvd_trend = cvd_result.cvd_trend
+                    imbalance_pct = cvd_result.imbalance_pct  # NEW: Use percentage imbalance
+                    cvd_source = 'LIVE'
+                    logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
+                               f"✅ CVD from TICKS: imbalance={imbalance_pct:.1f}%, trend={cvd_trend}, "
+                               f"buy={cvd_result.buy_volume:.0f}, sell={cvd_result.sell_volume:.0f}")
+                except ValueError as e:
+                    # No tick data available - FAIL EXPLICITLY
+                    logger.error(f"[CVD_MONITORING] {symbol} Bar {current_idx}: CVD FAILURE - {str(e)}")
+                    tracker.reset_state(symbol)
+                    return False, f"CVD calculation failed: {str(e)}", {
+                        'phase': 'cvd_failure',
+                        'error': str(e)
+                    }
+
+            # Store CVD state (works for both CACHED and LIVE sources)
+            state.cvd_last_slope = cvd_slope  # DEPRECATED
+            state.cvd_last_trend = cvd_trend
+            state.cvd_last_imbalance_pct = imbalance_pct  # NEW (Oct 22, 2025 - Phase 1 Fix)
+
+            # PATH 1: Strong CVD spike with confirmation (Oct 23, 2025 - Phase 10 tuning)
+            # NEW: Initial candle ≥30% + next candle ≥10% confirmation
+            strong_imbalance = cvd_config.get('strong_imbalance_threshold', 30.0)
+            confirmation_imbalance = cvd_config.get('strong_confirmation_threshold', 10.0)
+
+            # Check if we have a pending strong spike awaiting confirmation
+            if hasattr(state, 'pending_strong_spike') and state.pending_strong_spike:
+                # We're on the confirmation candle
+                logger.info(f"[CVD_MONITORING] {symbol}: Checking STRONG SPIKE CONFIRMATION (initial: {state.pending_strong_imbalance:.1f}%, current: {imbalance_pct:.1f}%)")
+
+                if side == 'LONG':
+                    # Need confirmation candle to also be buying (negative) and ≥10%
+                    if imbalance_pct <= -confirmation_imbalance:
+                        logger.info(f"[CVD_MONITORING] {symbol}: ✅ STRONG SPIKE CONFIRMED! (initial {state.pending_strong_imbalance:.1f}% + confirm {imbalance_pct:.1f}%)")
+
+                        # Validate price still above pivot
+                        pivot = state.pivot_price
+                        if current_price <= pivot:
+                            logger.info(f"[CVD_MONITORING] {symbol}: ❌ BLOCKED - Price ${current_price:.2f} fell below pivot ${pivot:.2f}")
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, f"Price fell below pivot", {'phase': 'cvd_price_reversal'}
+
+                        # Run filters
+                        fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                        if fails_stochastic:
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
+                        fails_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                        if fails_room:
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, room_reason, {'phase': 'room_to_run_filter'}
+
+                        # ENTER!
+                        state.pending_strong_spike = False
+                        tracker.reset_state(symbol)
+                        return True, f"Strong spike confirmed ({state.pending_strong_imbalance:.1f}% + {imbalance_pct:.1f}%)", {
+                            'phase': 'cvd_aggressive_confirmed',
+                            'initial_imbalance': state.pending_strong_imbalance,
+                            'confirm_imbalance': imbalance_pct
+                        }
+                    else:
+                        logger.info(f"[CVD_MONITORING] {symbol}: ❌ Confirmation failed ({imbalance_pct:.1f}% < -{confirmation_imbalance}%), clearing pending spike")
+                        state.pending_strong_spike = False
+
+                elif side == 'SHORT':
+                    # Need confirmation candle to also be selling (positive) and ≥10%
+                    if imbalance_pct >= confirmation_imbalance:
+                        logger.info(f"[CVD_MONITORING] {symbol}: ✅ STRONG SPIKE CONFIRMED! (initial {state.pending_strong_imbalance:.1f}% + confirm {imbalance_pct:.1f}%)")
+
+                        # Validate price still below pivot
+                        pivot = state.pivot_price
+                        if current_price >= pivot:
+                            logger.info(f"[CVD_MONITORING] {symbol}: ❌ BLOCKED - Price ${current_price:.2f} rose above pivot ${pivot:.2f}")
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, f"Price rose above pivot", {'phase': 'cvd_price_reversal'}
+
+                        # Run filters
+                        fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                        if fails_stochastic:
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, stochastic_reason, {'phase': 'stochastic_filter'}
+
+                        fails_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                        if fails_room:
+                            state.pending_strong_spike = False
+                            tracker.reset_state(symbol)
+                            return False, room_reason, {'phase': 'room_to_run_filter'}
+
+                        # ENTER!
+                        state.pending_strong_spike = False
+                        tracker.reset_state(symbol)
+                        return True, f"Strong spike confirmed ({state.pending_strong_imbalance:.1f}% + {imbalance_pct:.1f}%)", {
+                            'phase': 'cvd_aggressive_confirmed',
+                            'initial_imbalance': state.pending_strong_imbalance,
+                            'confirm_imbalance': imbalance_pct
+                        }
+                    else:
+                        logger.info(f"[CVD_MONITORING] {symbol}: ❌ Confirmation failed ({imbalance_pct:.1f}% < {confirmation_imbalance}%), clearing pending spike")
+                        state.pending_strong_spike = False
+
+            # Check for new strong spike (initial candle ≥30%)
+            if side == 'LONG':
+                if imbalance_pct <= -strong_imbalance:
+                    logger.info(f"[CVD_MONITORING] {symbol}: 🔔 STRONG SPIKE detected ({imbalance_pct:.1f}% ≤ -{strong_imbalance}%), awaiting confirmation next candle")
+                    state.pending_strong_spike = True
+                    state.pending_strong_imbalance = imbalance_pct
+            elif side == 'SHORT':
+                if imbalance_pct >= strong_imbalance:
+                    logger.info(f"[CVD_MONITORING] {symbol}: 🔔 STRONG SPIKE detected ({imbalance_pct:.1f}% ≥ {strong_imbalance}%), awaiting confirmation next candle")
+                    state.pending_strong_spike = True
+                    state.pending_strong_imbalance = imbalance_pct
+
+            # PATH 2: Sustained CVD with Sliding Window (Oct 23, 2025 - Phase 10 tuning)
+            # NEW: Continuously search for 3 consecutive candles ≥10% (no reset!)
+            sustained_imbalance = cvd_config.get('imbalance_threshold', 10.0)
+            min_consecutive = cvd_config.get('min_consecutive_bullish', 3) if side == 'LONG' else cvd_config.get('min_consecutive_bearish', 3)
+
+            # Initialize imbalance history if not exists
+            if not hasattr(state, 'cvd_imbalance_history'):
+                state.cvd_imbalance_history = []
+
+            # Add current imbalance to history
+            state.cvd_imbalance_history.append(imbalance_pct)
+
+            # Keep history manageable (last 20 candles is plenty)
+            if len(state.cvd_imbalance_history) > 20:
+                state.cvd_imbalance_history = state.cvd_imbalance_history[-20:]
+
+            logger.debug(f"[CVD_MONITORING] {symbol}: Imbalance history: {[f'{x:.1f}' for x in state.cvd_imbalance_history[-5:]]}")
+
+            # Sliding window: Check if ANY 3 consecutive values meet threshold
+            if len(state.cvd_imbalance_history) >= min_consecutive:
+                for i in range(len(state.cvd_imbalance_history) - min_consecutive + 1):
+                    window = state.cvd_imbalance_history[i:i + min_consecutive]
+
+                    if side == 'LONG':
+                        # LONG: Need 3 consecutive BUYING (negative) candles ≥10%
+                        if all(x <= -sustained_imbalance for x in window):
+                            logger.info(f"[CVD_MONITORING] {symbol}: 🎯 SUSTAINED BUYING found! 3 consecutive candles: {[f'{x:.1f}%' for x in window]}")
+
+                            # Validate price still above pivot
+                            pivot = state.pivot_price
+                            if current_price <= pivot:
+                                logger.info(f"[CVD_MONITORING] {symbol}: ❌ BLOCKED - Price ${current_price:.2f} fell below pivot ${pivot:.2f}")
+                                # Don't reset history - keep searching
+                                continue
+
+                            logger.info(f"[CVD_MONITORING] {symbol}: ✅ Price ${current_price:.2f} > pivot ${pivot:.2f} → Checking filters...")
+
+                            # Run entry filters
+                            fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                            if fails_stochastic:
+                                # Don't reset history - filter may pass later
+                                continue
+
+                            fails_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                            if fails_room:
+                                # Don't reset history - room may improve
+                                continue
+
+                            # ENTER!
+                            tracker.reset_state(symbol)
+                            return True, f"Sustained buying (3 consecutive: {[f'{x:.1f}%' for x in window]})", {
+                                'phase': 'cvd_sustained',
+                                'consecutive_imbalances': window,
+                                'time_to_entry_min': time_elapsed
+                            }
+
+                    elif side == 'SHORT':
+                        # SHORT: Need 3 consecutive SELLING (positive) candles ≥10%
+                        if all(x >= sustained_imbalance for x in window):
+                            logger.info(f"[CVD_MONITORING] {symbol}: 🎯 SUSTAINED SELLING found! 3 consecutive candles: {[f'{x:.1f}%' for x in window]}")
+
+                            # Validate price still below pivot
+                            pivot = state.pivot_price
+                            if current_price >= pivot:
+                                logger.info(f"[CVD_MONITORING] {symbol}: ❌ BLOCKED - Price ${current_price:.2f} rose above pivot ${pivot:.2f}")
+                                # Don't reset history - keep searching
+                                continue
+
+                            logger.info(f"[CVD_MONITORING] {symbol}: ✅ Price ${current_price:.2f} < pivot ${pivot:.2f} → Checking filters...")
+
+                            # Run entry filters
+                            fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
+                            if fails_stochastic:
+                                # Don't reset history - filter may pass later
+                                continue
+
+                            fails_room, room_reason = strategy._check_room_to_run(current_price, target_price, side)
+                            if fails_room:
+                                # Don't reset history - room may improve
+                                continue
+
+                            # ENTER!
+                            tracker.reset_state(symbol)
+                            return True, f"Sustained selling (3 consecutive: {[f'{x:.1f}%' for x in window]})", {
+                                'phase': 'cvd_sustained',
+                                'consecutive_imbalances': window,
+                                'time_to_entry_min': time_elapsed
+                            }
+
+            # Continue monitoring
+            history_len = len(state.cvd_imbalance_history) if hasattr(state, 'cvd_imbalance_history') else 0
+            return False, f"CVD monitoring (imbalance {imbalance_pct:.1f}%, history: {history_len} candles)", {
+                'phase': 'cvd_monitoring',
+                'imbalance_pct': imbalance_pct,
+                'cvd_trend': cvd_trend,
+                'time_elapsed_min': time_elapsed
+            }
+
+        except Exception as e:
+            logger.error(f"[CVD_MONITORING] {symbol}: CVD calculation failed: {e}")
+            # On error, fall back to old behavior (transition to weak tracking)
+            state.state = BreakoutState.WEAK_BREAKOUT_TRACKING
+            return False, f"CVD calculation error, falling back to weak tracking", state.to_dict()
 
     # STATE 2.5: MOMENTUM_CONFIRMATION_WAIT - Check sustained volume (Oct 20, 2025)
     elif state.state.value == 'MOMENTUM_CONFIRMATION_WAIT':
         # Check sustained volume using helper function
-        bars_per_candle = strategy.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
+        bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
         num_candles_to_check = getattr(strategy, 'sustained_volume_candles', 1)
 
         # Check if enough time has passed to check sustained volume
@@ -484,7 +869,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
         # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+        # Updated Oct 21, 2025: Pass timestamp and backtester for tick-based CVD
+        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side,
+                                                    bar_timestamp=timestamp, backtester=backtester)
         if fails_cvd:
             tracker.reset_state(symbol)
             return False, cvd_reason, {'phase': 'cvd_filter'}
@@ -500,7 +887,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
         # PHASE 7 (Oct 13, 2025): Re-check for momentum on subsequent 1-minute candles
         # If a WEAK breakout later shows momentum-level volume, upgrade and enter
         # CRITICAL: Check this in BOTH WEAK_BREAKOUT_TRACKING AND PULLBACK_RETEST states!
-        bars_per_candle = 12  # 12 five-second bars = 1 minute
+        bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
         bars_into_candle = tracking_idx % bars_per_candle  # Use absolute index for candle boundary check
 
         # Check if we're at a new 1-minute candle close (and not the original breakout candle)
@@ -607,7 +994,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                         return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
                     # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-                    fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+                    # Updated Oct 21, 2025: Pass timestamp and backtester for tick-based CVD
+                    fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side,
+                                                                bar_timestamp=timestamp, backtester=backtester)
                     if fails_cvd:
                         print(f"[BLOCKED] {symbol} Bar {current_idx} - {cvd_reason}")
                         tracker.reset_state(symbol)
@@ -633,7 +1022,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             # ROOT CAUSE: Was using 5-second bar data, causing meaningless volume/candle ratios
             # FIX: Use same 1-minute aggregation logic as MOMENTUM path (lines 150-180)
 
-            bars_per_candle = 12  # 12 five-second bars = 1 minute
+            bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
             bars_into_candle = current_idx % bars_per_candle
 
             # Only check at 1-minute candle close (like MOMENTUM path does)
@@ -704,7 +1093,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
 
             # Check if we previously detected pullback bounce and need to check sustained volume
             if hasattr(state, 'pullback_bounce_detected_bar') and state.pullback_bounce_detected_bar is not None:
-                bars_per_candle = 12
+                bars_per_candle = strategy.candle_timeframe_seconds // strategy.bar_size_seconds  # Dynamic based on bar resolution
                 num_candles_to_check = getattr(strategy, 'sustained_volume_candles', 1)
                 candles_since_detection = (tracking_idx - state.pullback_bounce_detected_bar) // bars_per_candle
                 bars_into_candle = tracking_idx % bars_per_candle
@@ -754,7 +1143,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                             return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
                         # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-                        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+                        # Updated Oct 21, 2025: Pass timestamp and backtester for tick-based CVD
+                        fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side,
+                                                                    bar_timestamp=timestamp, backtester=backtester)
                         if fails_cvd:
                             tracker.reset_state(symbol)
                             return False, cvd_reason, {'phase': 'cvd_filter'}
@@ -776,7 +1167,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
 
         # Check for sustained break
         # PHASE 6 (Oct 12, 2025): Pass hourly SMA levels and momentum parameters
-        required_bars = (strategy.sustained_break_minutes * 60) // 5  # e.g., 2 min = 24 bars
+        required_bars = (strategy.sustained_break_minutes * 60) // strategy.bar_size_seconds  # e.g., 2 min = 2 bars @ 1-min or 24 bars @ 5-sec
 
         # Calculate hourly SMA levels for next level detection
         from .sma_calculator import calculate_sma_from_bars
@@ -805,7 +1196,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
         if tracker.check_sustained_hold(
             symbol=symbol,
             current_price=current_price,
-            current_bar=current_idx,
+            current_bar=tracking_idx,  # CRITICAL FIX (Oct 21, 2025): Use absolute index for state tracking
             required_bars=required_bars,
             max_pullback_pct=strategy.sustained_break_max_pullback_pct,
             hourly_sma_levels=hourly_sma_levels,
@@ -825,7 +1216,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                 return False, stochastic_reason, {'phase': 'stochastic_filter'}
 
             # CVD FILTER (Oct 19, 2025): Check volume delta confirmation
-            fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side)
+            # Updated Oct 21, 2025: Pass timestamp and backtester for tick-based CVD
+            fails_cvd, cvd_reason = _check_cvd_filter(strategy, symbol, bars, current_idx, side,
+                                                        bar_timestamp=timestamp, backtester=backtester)
             if fails_cvd:
                 tracker.reset_state(symbol)
                 return False, cvd_reason, {'phase': 'cvd_filter'}

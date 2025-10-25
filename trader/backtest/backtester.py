@@ -18,6 +18,7 @@ import logging
 # Import shared strategy module
 sys.path.append(str(Path(__file__).parent.parent))
 from strategy import PS60Strategy, PositionManager
+from data_processor import DataProcessor
 
 class PS60Backtester:
     """
@@ -62,7 +63,8 @@ class PS60Backtester:
         # Initialize strategy WITHOUT IB connection (will be set after connect())
         # CRITICAL FIX (Oct 15, 2025): Don't pass IB connection until after connect()
         # SMACalculator requires connected IB instance, which isn't ready during __init__
-        self.strategy = PS60Strategy(self.config, ib_connection=None)
+        # For backtesting with 1-minute bars (Oct 22, 2025)
+        self.strategy = PS60Strategy(self.config, ib_connection=None, bar_size_seconds=60)
         self.pm = PositionManager()
 
         # Track trades for backtest results
@@ -83,6 +85,18 @@ class PS60Backtester:
         # Cache for hourly momentum bars (Oct 7, 2025) - Performance optimization
         # Hourly bars don't change during backtest day, so fetch once and reuse
         self.hourly_bars_cache = {}
+
+        # Cache for historical ticks (Oct 21, 2025) - CVD improvement
+        # Stores tick data for CVD calculation: {(symbol, timestamp): [tick_list]}
+        # Used for recent backtests (<60 days) to match live trading CVD accuracy
+        self.tick_cache = {}
+        self.use_tick_based_cvd = self.config.get('backtest', {}).get('use_tick_based_cvd', True)
+        self.tick_cache_enabled = self.config.get('backtest', {}).get('tick_cache_enabled', True)
+
+        # Cache for CVD-enriched bars (Oct 21, 2025) - Pre-built CVD data
+        # Stores complete bar + CVD data: {symbol: cvd_enriched_bars_dict}
+        # Allows backtesting without IBKR after initial build
+        self.cvd_enriched_bars = {}
 
         # Direction filters (for testing scanner quality)
         self.enable_shorts = self.config['trading'].get('enable_shorts', True)
@@ -302,11 +316,11 @@ class PS60Backtester:
         if not watchlist:
             return True  # No stocks to trade, can run without IBKR
 
-        # Check if all symbols have cached 5-sec bars
+        # Check if all symbols have cached CVD-enriched bars
         missing_symbols = []
         for stock in watchlist:
             symbol = stock['symbol']
-            cache_file = cache_dir / f'{symbol}_{date_str}_5sec.json'
+            cache_file = cache_dir / 'cvd_bars' / f'{symbol}_{date_str}_cvd.json'
             if not cache_file.exists():
                 missing_symbols.append(symbol)
 
@@ -318,35 +332,268 @@ class PS60Backtester:
         return True
 
     def run(self):
-        """Run backtest"""
-        # PERFORMANCE OPTIMIZATION (Oct 19, 2025): Lazy connection
-        # Don't connect to IBKR until we actually need to fetch data
-        # This allows running purely from cache without slow IBKR connection
+        """Run backtest with two-phase approach (Oct 21, 2025)
 
-        # Check if we have all data cached
-        all_cached = self._check_all_data_cached()
+        PHASE 1: Build CVD-enriched bars (requires IBKR)
+        PHASE 2: Backtest using cached CVD data (no IBKR needed after first run)
+        """
+        # Always connect to IBKR for CVD build phase
+        if not self.connect():
+            print("✗ IBKR connection failed - cannot build CVD data")
+            return
 
-        if all_cached:
-            print("✓ All data available in cache - running without IBKR connection")
+        try:
+            # Initialize Data Processor
+            data_processor = DataProcessor(self.ib, self.config, self.logger)
+
+            # Get symbols from scanner
+            if self.using_enhanced_scoring:
+                watchlist = self.strategy.filter_enhanced_scanner_results(self.scanner_results)
+            else:
+                watchlist = self.strategy.filter_scanner_results(self.scanner_results)
+
+            symbols = [stock['symbol'] for stock in watchlist]
+
+            # Prepare all data (tick data, 1-min bars, CVD-enriched bars)
+            print(f"\n{'='*80}")
+            print(f"DATA PROCESSOR - Checking/downloading data for {len(symbols)} symbols")
+            print(f"{'='*80}")
+
+            stats = data_processor.prepare_data_for_date(symbols, self.test_date)
+
+            # Log summary
+            print(f"\nData Processor Summary:")
+            print(f"  Symbols processed: {stats['symbols_processed']}/{len(symbols)}")
+            print(f"  Tick data downloaded: {stats['tick_data_downloaded']}")
+            print(f"  1-minute bars downloaded: {stats['bars_downloaded']}")
+            print(f"  CVD-enriched bars built: {stats['cvd_bars_built']}")
+            print(f"  Already cached: {stats['already_cached']}")
+            print(f"  Errors: {stats['errors']}")
+
+            # PHASE 1: Build/load CVD-enriched bars for all symbols
+            print(f"\n{'='*80}")
+            print(f"PHASE 1: Loading CVD-Enriched Bars")
+            print(f"{'='*80}")
+
+            print(f"Processing {len(watchlist)} symbols from scanner...")
+
+            for i, stock in enumerate(watchlist):
+                symbol = stock['symbol']
+                print(f"\n[{i+1}/{len(watchlist)}] {symbol}")
+
+                # Try to load from cache first
+                cvd_data = self.load_cvd_enriched_bars(symbol, self.test_date)
+
+                if cvd_data:
+                    print(f"  ✓ Loaded {cvd_data['total_bars']} CVD-enriched bars from cache")
+                    self.cvd_enriched_bars[symbol] = cvd_data
+                else:
+                    # Build new CVD data
+                    print(f"  Building CVD data from scratch...")
+                    try:
+                        cvd_data = self.build_cvd_enriched_bars(symbol, self.test_date)
+                        self.cvd_enriched_bars[symbol] = cvd_data
+                    except Exception as e:
+                        print(f"  ✗ Failed to build CVD data: {e}")
+                        continue
+
+            print(f"\n{'='*80}")
+            print(f"PHASE 1 COMPLETE: Built CVD data for {len(self.cvd_enriched_bars)} symbols")
+            print(f"{'='*80}")
+
+            # PHASE 2: Run backtest using CVD-enriched bars
+            print(f"\n{'='*80}")
+            print(f"PHASE 2: Running Backtest")
+            print(f"{'='*80}")
+
+            self.backtest_day()
+            self.save_trades_to_json()
+            self.print_results()
+
+        finally:
+            self.disconnect()
+
+    def build_cvd_enriched_bars(self, symbol, date):
+        """
+        Build CVD-enriched 1-minute bars for a symbol on a specific date
+
+        This method pre-builds all the bar data + CVD data needed for backtesting,
+        allowing subsequent backtests to run without IBKR connection.
+
+        CRITICAL (Oct 21, 2025): Uses persistent CVDCalculator across all bars
+        to maintain history for slope calculation.
+
+        Args:
+            symbol: Stock symbol
+            date: Trading date (datetime object)
+
+        Returns:
+            dict with structure:
+            {
+                'symbol': 'SMCI',
+                'date': '2025-10-21',
+                'total_bars': 390,
+                'bars': [
+                    {
+                        'minute': 1,
+                        'timestamp': '2025-10-21T09:30:00-04:00',
+                        'open': 54.50,
+                        'high': 54.60,
+                        'low': 54.40,
+                        'close': 54.55,
+                        'volume': 125000,
+                        'tick_count': 1038,
+                        'cvd': {
+                            'value': 5200.0,
+                            'slope': -400.0,
+                            'trend': 'NEUTRAL',
+                            'divergence': None,
+                            'data_source': 'TICK',
+                            'confidence': 1.0
+                        }
+                    },
+                    ...
+                ]
+            }
+        """
+        from indicators.cvd_calculator import CVDCalculator
+
+        print(f"\n{'='*80}")
+        print(f"Building CVD-enriched bars: {symbol} on {date.strftime('%Y-%m-%d')}")
+        print(f"{'='*80}")
+
+        # Check IBKR connection
+        if not self.ib or not self.ib.isConnected():
+            raise ValueError("IBKR connection required to build CVD-enriched bars")
+
+        # Fetch 1-minute bars for the trading day
+        print(f"Fetching 1-minute bars from IBKR...")
+        bars = self.get_bars(symbol)
+
+        if not bars:
+            raise ValueError(f"No bar data available for {symbol} on {date.strftime('%Y-%m-%d')}")
+
+        print(f"✓ Fetched {len(bars)} 1-minute bars")
+
+        # Create persistent CVD calculator (Oct 22, 2025 - Phase 1 Fix: Added imbalance_threshold)
+        # This calculator accumulates history across ALL bars
+        cvd_config = self.config.get('confirmation', {}).get('cvd', {})
+        cvd_calculator = CVDCalculator(
+            slope_lookback=cvd_config.get('slope_lookback', 5),
+            bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
+            bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
+            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
+        )
+
+        # Build enriched bars
+        enriched_bars = []
+
+        print(f"Building CVD for each bar...")
+        for i, bar in enumerate(bars):
+            bar_num = i + 1
+
+            # Get timestamp from bar
+            bar_timestamp = bar.date
+
+            # Fetch tick data for this specific 1-minute window
+            # This matches exactly what we do during backtesting
+            ticks = self.get_historical_ticks(symbol, bar_timestamp, lookback_seconds=60)
+
+            if not ticks:
+                print(f"⚠️  Bar {bar_num}/{len(bars)}: No tick data available")
+                # Skip this bar - we MUST have tick data for CVD
+                continue
+
+            # Calculate CVD using tick data
             try:
-                self.backtest_day()
-                self.save_trades_to_json()
-                self.print_results()
+                cvd_result = cvd_calculator.calculate_from_ticks(ticks)
+
+                # Log progress every 30 bars
+                if bar_num % 30 == 0:
+                    print(f"  Bar {bar_num}/{len(bars)}: CVD={cvd_result.cvd_value:.1f}, "
+                          f"slope={cvd_result.cvd_slope:.1f}, trend={cvd_result.cvd_trend}")
+
+                # Build enriched bar data (Oct 22, 2025 - Phase 1 Fix: Added imbalance_pct)
+                enriched_bar = {
+                    'minute': bar_num,
+                    'timestamp': bar_timestamp.isoformat(),
+                    'open': bar.open,
+                    'high': bar.high,
+                    'low': bar.low,
+                    'close': bar.close,
+                    'volume': bar.volume,
+                    'tick_count': len(ticks),
+                    'cvd': {
+                        'value': cvd_result.cvd_value,
+                        'slope': cvd_result.cvd_slope,  # DEPRECATED
+                        'trend': cvd_result.cvd_trend,
+                        'divergence': cvd_result.divergence,
+                        'data_source': cvd_result.data_source,
+                        'confidence': cvd_result.confidence,
+                        # NEW FIELDS (Oct 22, 2025 - Phase 1 Fix)
+                        'imbalance_pct': cvd_result.imbalance_pct,
+                        'buy_volume': cvd_result.buy_volume,
+                        'sell_volume': cvd_result.sell_volume
+                    }
+                }
+
+                enriched_bars.append(enriched_bar)
+
             except Exception as e:
-                print(f"✗ Error during cached backtest: {e}")
-                import traceback
-                traceback.print_exc()
-        else:
-            # Need to fetch data - connect to IBKR
-            if not self.connect():
-                return
+                print(f"⚠️  Bar {bar_num}/{len(bars)}: CVD calculation failed - {str(e)}")
+                continue
 
-            try:
-                self.backtest_day()
-                self.save_trades_to_json()  # Save trades to JSON file
-                self.print_results()
-            finally:
-                self.disconnect()
+        # Build final structure
+        enriched_data = {
+            'symbol': symbol,
+            'date': date.strftime('%Y-%m-%d'),
+            'total_bars': len(enriched_bars),
+            'bars': enriched_bars
+        }
+
+        print(f"\n{'='*80}")
+        print(f"✓ Built {len(enriched_bars)} CVD-enriched bars for {symbol}")
+        print(f"{'='*80}")
+
+        # Save to cache
+        cache_dir = Path(__file__).parent / 'data' / 'cvd_bars'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        date_str = date.strftime('%Y%m%d')
+        cache_file = cache_dir / f'{symbol}_{date_str}_cvd.json'
+
+        with open(cache_file, 'w') as f:
+            json.dump(enriched_data, f, indent=2)
+
+        print(f"✓ Saved CVD-enriched bars to: {cache_file}")
+
+        return enriched_data
+
+    def load_cvd_enriched_bars(self, symbol, date):
+        """
+        Load CVD-enriched bars from cache
+
+        Args:
+            symbol: Stock symbol
+            date: Trading date (datetime object)
+
+        Returns:
+            dict with CVD-enriched bars data, or None if not cached
+        """
+        cache_dir = Path(__file__).parent / 'data' / 'cvd_bars'
+        date_str = date.strftime('%Y%m%d')
+        cache_file = cache_dir / f'{symbol}_{date_str}_cvd.json'
+
+        if not cache_file.exists():
+            return None
+
+        try:
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+            return data
+        except Exception as e:
+            self.logger.warning(f"Failed to load CVD cache for {symbol}: {e}")
+            return None
 
     def backtest_day(self):
         """Backtest single trading day"""
@@ -517,8 +764,8 @@ class PS60Backtester:
             self.logger.warning(f"{symbol}: No historical data available")
             return
 
-        print(f"  ✓ Fetched {len(bars)} 5-second bars")
-        self.logger.info(f"{symbol}: Fetched {len(bars)} 5-second bars")
+        print(f"  ✓ Fetched {len(bars)} 1-minute bars")
+        self.logger.info(f"{symbol}: Fetched {len(bars)} 1-minute bars")
 
         # Gap detection is now handled by strategy.should_enter_long/short() which calls _check_gap_filter()
         # This ensures consistent gap handling between backtesting and live trading
@@ -580,7 +827,8 @@ class PS60Backtester:
                             bars, bar_count - 1, resistance, side='LONG',
                             target_price=highest_target,  # Use highest available target
                             symbol=stock['symbol'],  # For RSI/MACD momentum check
-                            cached_hourly_bars=cached_bars  # Pre-fetched hourly bars
+                            cached_hourly_bars=cached_bars,  # Pre-fetched hourly bars
+                            backtester=self  # Oct 21, 2025: For tick-based CVD
                         )
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - LONG confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
@@ -602,7 +850,8 @@ class PS60Backtester:
                             adjusted_stop = entry_state.get('adjusted_stop')
                             pivot_for_stop = adjusted_stop if adjusted_stop is not None else resistance
 
-                            # Use ATR-based stop calculation from strategy
+                            # Use configured stop calculation from strategy (Oct 23, 2025)
+                            # Supports both ATR-based and candle-based stops
                             # Create temporary position dict for stop calculation
                             temp_position = {
                                 'entry_price': price,
@@ -610,7 +859,13 @@ class PS60Backtester:
                                 'partials': 0,
                                 'pivot': pivot_for_stop  # PHASE 5: May be adjusted for pullback retests
                             }
-                            stop_price = self.strategy.calculate_stop_price(temp_position, price, stock)
+                            stop_price = self.strategy.calculate_stop_price(
+                                temp_position,
+                                price,
+                                stock,
+                                bars=bars,
+                                entry_bar_idx=bar_count
+                            )
 
                             if adjusted_stop is not None:
                                 self.logger.info(f"{symbol} Bar {bar_count} - ENTERING LONG @ ${price:.2f}, stop=${stop_price:.2f} (adjusted from pullback low ${adjusted_stop:.2f}), attempts={long_attempts}/{max_attempts}")
@@ -641,7 +896,8 @@ class PS60Backtester:
                             bars, bar_count - 1, support, side='SHORT',
                             target_price=lowest_downside,  # Use lowest available downside target
                             symbol=stock['symbol'],  # For RSI/MACD momentum check
-                            cached_hourly_bars=cached_bars  # Pre-fetched hourly bars
+                            cached_hourly_bars=cached_bars,  # Pre-fetched hourly bars
+                            backtester=self  # Oct 21, 2025: For tick-based CVD
                         )
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - SHORT confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
@@ -663,7 +919,8 @@ class PS60Backtester:
                             adjusted_stop = entry_state.get('adjusted_stop')
                             pivot_for_stop = adjusted_stop if adjusted_stop is not None else support
 
-                            # Use ATR-based stop calculation from strategy
+                            # Use configured stop calculation from strategy (Oct 23, 2025)
+                            # Supports both ATR-based and candle-based stops
                             # Create temporary position dict for stop calculation
                             temp_position = {
                                 'entry_price': price,
@@ -671,7 +928,13 @@ class PS60Backtester:
                                 'partials': 0,
                                 'pivot': pivot_for_stop  # PHASE 5: May be adjusted for pullback retests
                             }
-                            stop_price = self.strategy.calculate_stop_price(temp_position, price, stock)
+                            stop_price = self.strategy.calculate_stop_price(
+                                temp_position,
+                                price,
+                                stock,
+                                bars=bars,
+                                entry_bar_idx=bar_count
+                            )
 
                             if adjusted_stop is not None:
                                 self.logger.info(f"{symbol} Bar {bar_count} - ENTERING SHORT @ ${price:.2f}, stop=${stop_price:.2f} (adjusted from pullback high ${adjusted_stop:.2f}), attempts={short_attempts}/{max_attempts}")
@@ -725,7 +988,12 @@ class PS60Backtester:
             self.trades.append(closed_trade)
 
     def get_bars(self, symbol):
-        """Fetch 1-second bars from IBKR (with local caching)"""
+        """
+        Fetch 1-minute bars from cache ONLY - NO IBKR fallback (Oct 23, 2025)
+
+        IMPORTANT: Backtester now requires pre-downloaded tick data in data/ticks/
+        This ensures consistent backtest results and avoids rate limits.
+        """
         # Check in-memory cache first (fastest)
         if symbol in self.bars_cache:
             return self.bars_cache[symbol]
@@ -735,7 +1003,7 @@ class PS60Backtester:
         cache_dir.mkdir(exist_ok=True)
 
         date_str = self.test_date.strftime('%Y%m%d')
-        cache_file = cache_dir / f'{symbol}_{date_str}_5sec.json'
+        cache_file = cache_dir / f'{symbol}_{date_str}_1min.json'
 
         # Load from cache if exists
         if cache_file.exists():
@@ -767,57 +1035,158 @@ class PS60Backtester:
                 self.bars_cache[symbol] = bars
                 return bars
             except Exception as e:
-                print(f"  ⚠️  Cache read error: {e}, fetching fresh...")
+                print(f"  ⚠️  Cache read error: {e}")
+
+        # Check if tick data exists before failing
+        tick_dir = cache_dir / 'ticks'
+        if tick_dir.exists():
+            # Check if ANY tick files exist for this symbol/date
+            tick_pattern = f"{symbol}_{date_str}_*_ticks.json"
+            tick_files = list(tick_dir.glob(tick_pattern))
+
+            if tick_files:
+                print(f"  ❌ ERROR: Tick data exists ({len(tick_files)} files) but 1-minute bars not built")
+                print(f"     Run: python3 build_bars_from_ticks.py --date {date_str} --symbol {symbol}")
+                print(f"     Or rebuild CVD-enriched data to auto-generate 1-minute bars")
+                return []
+
+        # NO FALLBACK TO IBKR - Fail immediately
+        print(f"  ❌ ERROR: No cached 1-minute bars found for {symbol} on {date_str}")
+        print(f"     Expected file: {cache_file}")
+        print(f"     Tick data directory: {tick_dir}")
+        print(f"")
+        print(f"  To fix this:")
+        print(f"     1. Download tick data first:")
+        print(f"        python3 download_tick_data.py --date {self.test_date.strftime('%Y-%m-%d')} --symbol {symbol}")
+        print(f"     2. Then run backtest (it will auto-build bars from ticks)")
+        print(f"")
+        return []
+
+    def get_historical_ticks(self, symbol, bar_timestamp, lookback_seconds=60):
+        """
+        Fetch historical tick data for CVD calculation (Oct 21, 2025)
+
+        This method fetches tick-by-tick trade data from IBKR for a specific time window,
+        allowing more accurate CVD calculation in backtesting (matches live trading methodology).
+
+        Args:
+            symbol: Stock symbol
+            bar_timestamp: Timestamp of the bar being analyzed (datetime object)
+            lookback_seconds: How many seconds of tick data to fetch (default: 60 seconds)
+
+        Returns:
+            List of tick objects with .price and .size attributes, or None if unavailable
+
+        Note:
+            - IBKR historical ticks only available for last ~60 days
+            - Falls back to bar approximation for older dates
+            - Uses disk caching to avoid repeated API calls
+        """
+        # Check if tick-based CVD is enabled
+        if not self.use_tick_based_cvd:
+            self.logger.debug(f"Tick-based CVD disabled for {symbol}")
+            return None
+
+        # Check if we're connected to IBKR (required for tick data)
+        if not self.ib or not self.ib.isConnected():
+            self.logger.debug(f"No IBKR connection for {symbol} tick fetch")
+            return None
+
+        # Log entry into tick fetching
+        self.logger.info(f"🔍 Fetching historical ticks for {symbol} @ {bar_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Calculate time window
+        end_time = bar_timestamp
+        start_time = bar_timestamp - timedelta(seconds=lookback_seconds)
+
+        # Create cache key
+        cache_key = (symbol, bar_timestamp.isoformat())
+
+        # Check in-memory cache first
+        if self.tick_cache_enabled and cache_key in self.tick_cache:
+            return self.tick_cache[cache_key]
+
+        # Check disk cache
+        cache_dir = Path(__file__).parent / 'data' / 'ticks'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        date_str = self.test_date.strftime('%Y%m%d')
+        time_str = bar_timestamp.strftime('%H%M%S')
+        cache_file = cache_dir / f'{symbol}_{date_str}_{time_str}_ticks.json'
+
+        # Load from cache if exists
+        if cache_file.exists() and self.tick_cache_enabled:
+            try:
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+
+                # Convert to tick objects (matching CVD calculator format)
+                from dataclasses import dataclass
+
+                @dataclass
+                class TickData:
+                    price: float
+                    size: int
+
+                tick_list = [TickData(price=t['price'], size=t['size']) for t in cached_data]
+
+                # Store in memory cache
+                self.tick_cache[cache_key] = tick_list
+                self.logger.info(f"✅ Loaded {len(tick_list)} ticks from cache for {symbol}")
+                return tick_list
+
+            except Exception as e:
+                self.logger.warning(f"Tick cache read error for {symbol}: {e}")
 
         # Fetch from IBKR
-        contract = Stock(symbol, 'SMART', 'USD')
-
         try:
-            # Request historical 1-second bars for the day
-            end_datetime = f'{self.test_date.strftime("%Y%m%d")} 16:00:00'
+            contract = Stock(symbol, 'SMART', 'USD')
 
-            bars = self.ib.reqHistoricalData(
+            # Request historical ticks
+            # Note: IBKR limits to last ~60 days for tick data
+            ticks = self.ib.reqHistoricalTicks(
                 contract,
-                endDateTime=end_datetime,
-                durationStr='1 D',
-                barSizeSetting='5 secs',  # 5-second bars (1-second not supported)
+                startDateTime=start_time,
+                endDateTime=end_time,
+                numberOfTicks=1000,
                 whatToShow='TRADES',
-                useRTH=True,  # Regular trading hours only
-                formatDate=1
+                useRth=True
             )
 
-            # Cache the data for future use
-            if bars:
-                import json
-                cache_data = []
-                for bar in bars:
-                    cache_data.append({
-                        'date': bar.date.isoformat(),
-                        'open': bar.open,
-                        'high': bar.high,
-                        'low': bar.low,
-                        'close': bar.close,
-                        'volume': bar.volume,
-                        'average': bar.average,
-                        'barCount': bar.barCount
-                    })
+            if not ticks:
+                self.logger.debug(f"No tick data available for {symbol} at {bar_timestamp}")
+                return None
 
+            # Convert to format CVD calculator expects
+            from dataclasses import dataclass
+
+            @dataclass
+            class TickData:
+                price: float
+                size: int
+
+            tick_list = [TickData(price=t.price, size=t.size) for t in ticks]
+
+            # Cache to disk
+            if self.tick_cache_enabled:
+                cache_data = [{'price': t.price, 'size': t.size} for t in tick_list]
                 with open(cache_file, 'w') as f:
-                    json.dump(cache_data, f, indent=2)
-                print(f"  💾 Cached to: {cache_file.name}")
+                    json.dump(cache_data, f)
+
+            # Store in memory cache
+            self.tick_cache[cache_key] = tick_list
 
             # Add small delay to respect rate limits
             self.ib.sleep(0.5)
 
-            # Store in memory cache
-            if bars:
-                self.bars_cache[symbol] = bars
-
-            return bars
+            self.logger.info(f"✅ Fetched {len(tick_list)} ticks from IBKR for {symbol}, cached to disk")
+            return tick_list
 
         except Exception as e:
-            print(f"  ✗ Error fetching data: {e}")
-            return []
+            # Historical ticks may not be available (>60 days old or other API error)
+            # This is expected and not an error - will fall back to bar approximation
+            self.logger.debug(f"Could not fetch historical ticks for {symbol}: {e}")
+            return None
 
     def enter_long(self, stock, price, timestamp, bar_num, setup_type='BREAKOUT', stop_override=None):
         """Enter long position"""
@@ -954,6 +1323,52 @@ class PS60Backtester:
             if self.strategy.should_move_stop_to_breakeven(pos):
                 pos['stop'] = pos['entry_price']
                 self.logger.debug(f"{pos['symbol']} Bar {bar_num} - Stop moved to breakeven @ ${pos['stop']:.2f}")
+
+        # ========================================================================
+        # TARGET-HIT STALL DETECTION (Oct 21, 2025 - Phase 9)
+        # ========================================================================
+        # Check if price is stalling after hitting target1 (runner positions only)
+        # Tighten trailing stop from 0.5% → 0.1% to exit quickly and free capital
+        config_stall = self.config.get('trading', {}).get('exits', {}).get('target_hit_stall_detection', {})
+        if config_stall.get('enabled', False):
+            # Check for stall after target hit
+            is_stalled, new_trail_pct = self.strategy.check_target_hit_stall(
+                pos, price, timestamp
+            )
+
+            if is_stalled and new_trail_pct:
+                # STALL DETECTED! Tighten trailing stop dramatically
+                old_trail = pos.get('trailing_distance', self.config['trading']['exits']['trailing_stop']['percentage'])
+
+                # Calculate new stop with tighter trail
+                if pos['side'] == 'LONG':
+                    new_stop = price * (1 - new_trail_pct)
+                else:  # SHORT
+                    new_stop = price * (1 + new_trail_pct)
+
+                old_stop = pos['stop']
+                pos['stop'] = new_stop
+                pos['trailing_distance'] = new_trail_pct
+
+                # Calculate gain for logging
+                if pos['side'] == 'LONG':
+                    gain_pct = ((price - pos['entry_price']) / pos['entry_price']) * 100
+                else:
+                    gain_pct = ((pos['entry_price'] - price) / pos['entry_price']) * 100
+
+                # Calculate stall duration in minutes
+                stall_duration_min = int((timestamp - pos['stall_window_start']).total_seconds() / 60)
+
+                self.logger.info(f"\n⏸️  STALL DETECTED: {pos['symbol']}")
+                self.logger.info(f"   Entry: ${pos['entry_price']:.2f}")
+                self.logger.info(f"   Current: ${price:.2f} ({gain_pct:+.2f}%)")
+                self.logger.info(f"   Target1: ${pos.get('target1', 0):.2f} (hit!)")
+                self.logger.info(f"   Stall Range: {pos['stall_window_high']:.2f} - {pos['stall_window_low']:.2f}")
+                self.logger.info(f"   Duration: {stall_duration_min} minutes")
+                self.logger.info(f"   🔔 Tightening trail: {old_trail*100:.1f}% → {new_trail_pct*100:.1f}%")
+                self.logger.info(f"   🛡️  New stop: ${old_stop:.2f} → ${new_stop:.2f}")
+
+                print(f"     ⏸️  STALL @ bar {bar_num}: Tightened trail {old_trail*100:.1f}% → {new_trail_pct*100:.1f}% (stop ${old_stop:.2f} → ${new_stop:.2f})")
 
         # Update trailing stop for runners (per requirements)
         stop_updated, new_stop, trail_reason = self.strategy.update_trailing_stop(pos, price)

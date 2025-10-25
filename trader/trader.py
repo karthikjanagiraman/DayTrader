@@ -965,7 +965,7 @@ class PS60Trader:
         if symbol not in self.positions and long_attempts < self.strategy.max_attempts_per_pivot:
             if current_price > support * 0.99 and current_price < support * 1.01:
                 bounce_confirmed, bounce_reason = self.strategy.check_bounce_setup(
-                    bars, current_idx, support, side='LONG'
+                    bars, array_idx, support, side='LONG'
                 )
 
                 if bounce_confirmed:
@@ -984,7 +984,7 @@ class PS60Trader:
         if symbol not in self.positions and short_attempts < self.strategy.max_attempts_per_pivot:
             if current_price < resistance * 1.01 and current_price > resistance * 0.99:
                 rejection_confirmed, rejection_reason = self.strategy.check_rejection_setup(
-                    bars, current_idx, resistance, side='SHORT'
+                    bars, array_idx, resistance, side='SHORT'
                 )
 
                 if rejection_confirmed:
@@ -1095,26 +1095,27 @@ class PS60Trader:
             self.logger.error(f"⚠️  Error checking fill for {symbol}: {e}")
             fill_price = current_price  # Use current price as fallback
 
-        # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
-        # Prevents getting stopped out by normal price noise
-        MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
-        PULLBACK_MIN_STOP_PCT = 0.003  # 0.3% for pullback/retest
-        BOUNCE_MIN_STOP_PCT = 0.004    # 0.4% for bounce setups
+        # Get bars history from bar buffer (for candle-based stops - Oct 23, 2025)
+        bars = self.bar_buffers[symbol].get_bars_for_strategy()
+        entry_bar_idx = self.bar_buffers[symbol].get_current_array_index()
 
-        # Determine minimum stop distance based on entry reason
-        base_stop = resistance  # Default to pivot
-        if 'MOMENTUM' in entry_reason.upper():
-            min_stop_pct = MOMENTUM_MIN_STOP_PCT
-        elif 'BOUNCE' in entry_reason.upper():
-            min_stop_pct = BOUNCE_MIN_STOP_PCT
-        else:  # PULLBACK or other
-            min_stop_pct = PULLBACK_MIN_STOP_PCT
+        # Create temporary position dict for stop calculation
+        temp_position = {
+            'entry_price': fill_price,
+            'side': 'LONG',
+            'partials': 0,
+            'pivot': resistance  # Fallback pivot
+        }
 
-        # Calculate minimum stop price
-        min_stop_price = fill_price * (1 - min_stop_pct)
-
-        # Use the LOWER of base_stop or min_stop (provides more protection)
-        stop_price = min(base_stop, min_stop_price)
+        # Calculate stop price using strategy module (supports both ATR and candle-based)
+        # Oct 23, 2025: Now supports candle-based stops via config
+        stop_price = self.strategy.calculate_stop_price(
+            position=temp_position,
+            current_price=fill_price,
+            stock_data=stock_data,
+            bars=bars,
+            entry_bar_idx=entry_bar_idx
+        )
 
         # Create position using position manager
         position = self.pm.create_position(
@@ -1122,7 +1123,7 @@ class PS60Trader:
             side='LONG',
             entry_price=fill_price,
             shares=shares,
-            pivot=stop_price,  # Use widened stop instead of raw pivot
+            pivot=stop_price,  # Use calculated stop (ATR or candle-based)
             contract=contract,
             target1=stock_data['target1'],
             target2=stock_data['target2']
@@ -1192,26 +1193,27 @@ class PS60Trader:
             self.logger.error(f"⚠️  Error checking fill for {symbol}: {e}")
             fill_price = current_price  # Use current price as fallback
 
-        # PHASE 1 FIX (Oct 9, 2025): Enforce minimum stop distances
-        # Prevents getting stopped out by normal price noise
-        MOMENTUM_MIN_STOP_PCT = 0.005  # 0.5% for momentum breakouts
-        PULLBACK_MIN_STOP_PCT = 0.003  # 0.3% for pullback/retest
-        REJECTION_MIN_STOP_PCT = 0.004 # 0.4% for rejection setups
+        # Get bars history from bar buffer (for candle-based stops - Oct 23, 2025)
+        bars = self.bar_buffers[symbol].get_bars_for_strategy()
+        entry_bar_idx = self.bar_buffers[symbol].get_current_array_index()
 
-        # Determine minimum stop distance based on entry reason
-        base_stop = support  # Default to pivot
-        if 'MOMENTUM' in entry_reason.upper():
-            min_stop_pct = MOMENTUM_MIN_STOP_PCT
-        elif 'REJECTION' in entry_reason.upper():
-            min_stop_pct = REJECTION_MIN_STOP_PCT
-        else:  # PULLBACK or other
-            min_stop_pct = PULLBACK_MIN_STOP_PCT
+        # Create temporary position dict for stop calculation
+        temp_position = {
+            'entry_price': fill_price,
+            'side': 'SHORT',
+            'partials': 0,
+            'pivot': support  # Fallback pivot
+        }
 
-        # Calculate minimum stop price (ABOVE entry for shorts)
-        min_stop_price = fill_price * (1 + min_stop_pct)
-
-        # Use the HIGHER of base_stop or min_stop (provides more protection for shorts)
-        stop_price = max(base_stop, min_stop_price)
+        # Calculate stop price using strategy module (supports both ATR and candle-based)
+        # Oct 23, 2025: Now supports candle-based stops via config
+        stop_price = self.strategy.calculate_stop_price(
+            position=temp_position,
+            current_price=fill_price,
+            stock_data=stock_data,
+            bars=bars,
+            entry_bar_idx=entry_bar_idx
+        )
 
         # Create position using position manager
         position = self.pm.create_position(
@@ -1219,7 +1221,7 @@ class PS60Trader:
             side='SHORT',
             entry_price=fill_price,
             shares=shares,
-            pivot=stop_price,  # Use widened stop instead of raw pivot
+            pivot=stop_price,  # Use calculated stop (ATR or candle-based)
             contract=contract,
             target1=stock_data.get('downside1', support * 0.98),
             target2=stock_data.get('downside2', support * 0.96)
@@ -1444,6 +1446,69 @@ class PS60Trader:
                                     self.logger.error(f"      Position may be unprotected - MANUAL CHECK REQUIRED")
                             else:
                                 self.logger.debug(f"  {symbol}: Trailing stop already active, skipping activation")
+
+            # ========================================================================
+            # TARGET-HIT STALL DETECTION (Oct 21, 2025 - Phase 9)
+            # ========================================================================
+            # Purpose: Detect when price stalls after hitting target1, tighten trail quickly
+            #
+            # Problem: After target hit, price often ranges for extended periods
+            #          Example: PATH hit target1 $16.42, ranged for 86 min → $3 on runner
+            #
+            # Solution: Detect stall (0.2% range for 5+ min) → tighten trail 0.5% → 0.1%
+            #          PATH example: Exit at $16.40 after 5 min vs $16.34 after 86 min
+            #          Result: +$21 vs +$3 = 7x better on runner
+            # ========================================================================
+
+            config_stall = self.config.get('trading', {}).get('exits', {}).get('target_hit_stall_detection', {})
+            if config_stall.get('enabled', False):
+                # Check for stall after target hit
+                is_stalled, new_trail_pct = self.strategy.check_target_hit_stall(
+                    position, current_price, current_time
+                )
+
+                if is_stalled and new_trail_pct:
+                    # STALL DETECTED! Tighten trailing stop dramatically
+                    old_trail = position.get('trailing_distance', self.config['trading']['exits']['trailing_stop']['percentage'])
+
+                    # Calculate new stop with tighter trail
+                    if position['side'] == 'LONG':
+                        new_stop = current_price * (1 - new_trail_pct)
+                    else:  # SHORT
+                        new_stop = current_price * (1 + new_trail_pct)
+
+                    old_stop = position['stop']
+                    position['stop'] = new_stop
+                    position['trailing_distance'] = new_trail_pct
+
+                    self.logger.info(f"\n⏸️  STALL DETECTED: {symbol}")
+                    self.logger.info(f"   Entry: ${position['entry_price']:.2f}")
+                    self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%)")
+                    self.logger.info(f"   Target1: ${position.get('target1', 0):.2f} (hit!)")
+                    self.logger.info(f"   Stall Range: {position['stall_window_high']:.2f} - {position['stall_window_low']:.2f}")
+                    self.logger.info(f"   Duration: {int((current_time - position['stall_window_start']).total_seconds() / 60)} minutes")
+                    self.logger.info(f"   🔔 Tightening trail: {old_trail*100:.1f}% → {new_trail_pct*100:.1f}%")
+                    self.logger.info(f"   🛡️  New stop: ${old_stop:.2f} → ${new_stop:.2f}")
+
+                    # Update IBKR stop order with tighter stop
+                    stop_canceled = False
+                    if 'stop_order' in position and position['stop_order']:
+                        try:
+                            old_order = position['stop_order']
+                            self.ib.cancelOrder(old_order.order)
+                            self.ib.sleep(0.5)
+                            self.logger.info(f"   ✓ Cancelled old stop order")
+                            stop_canceled = True
+                        except Exception as e:
+                            self.logger.error(f"   ✗ Could not cancel old stop order: {e}")
+
+                    # Place new stop order with tightened trail
+                    if stop_canceled or not ('stop_order' in position and position['stop_order']):
+                        success = self.place_stop_order(position)
+                        if success:
+                            self.logger.info(f"   ✓ Placed tightened stop order @ ${new_stop:.2f}")
+                        else:
+                            self.logger.error(f"   ✗ CRITICAL: Failed to place tightened stop order")
 
             # Check 15-minute rule (PS60 methodology - exit stuck positions)
             self.logger.debug(f"  {symbol}: Checking 15-minute rule (time in trade: {int(time_in_trade)}m)...")

@@ -28,13 +28,18 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CVDResult:
-    """CVD calculation result"""
-    cvd_value: float           # Current CVD value
-    cvd_slope: float           # Slope over last N bars (positive = buying, negative = selling)
+    """CVD calculation result (Oct 22, 2025 - Phase 1 Fix)"""
+    cvd_value: float           # Current CVD value (cumulative delta)
+    cvd_slope: float           # DEPRECATED: Slope over last N bars (kept for compatibility)
     cvd_trend: str             # 'BULLISH', 'BEARISH', 'NEUTRAL'
     divergence: Optional[str]  # 'BULLISH_DIV', 'BEARISH_DIV', None
     data_source: str           # 'TICK' or 'BAR'
     confidence: float          # 0.0-1.0 confidence in the signal
+
+    # NEW METRICS (Oct 22, 2025 - Phase 1 Fix)
+    buy_volume: float = 0.0    # Total buying volume
+    sell_volume: float = 0.0   # Total selling volume
+    imbalance_pct: float = 0.0 # (sell - buy) / total * 100 (positive = selling, negative = buying)
 
 
 class CVDCalculator:
@@ -44,16 +49,22 @@ class CVDCalculator:
     """
 
     def __init__(self, slope_lookback: int = 5, bullish_threshold: float = 1000,
-                 bearish_threshold: float = -1000):
+                 bearish_threshold: float = -1000,
+                 imbalance_threshold: float = 10.0):
         """
+        Oct 22, 2025 - Phase 1 Fix: Added percentage-based imbalance threshold
+
         Args:
-            slope_lookback: Number of bars to calculate CVD slope
-            bullish_threshold: Minimum slope for BULLISH trend
-            bearish_threshold: Maximum slope for BEARISH trend
+            slope_lookback: Number of bars to calculate CVD slope (DEPRECATED)
+            bullish_threshold: Minimum slope for BULLISH trend (DEPRECATED)
+            bearish_threshold: Maximum slope for BEARISH trend (DEPRECATED)
+            imbalance_threshold: Percentage imbalance for trend classification
+                                10.0 = 10% more selling (BEARISH) or 10% more buying (BULLISH)
         """
         self.slope_lookback = slope_lookback
         self.bullish_threshold = bullish_threshold
         self.bearish_threshold = bearish_threshold
+        self.imbalance_threshold = imbalance_threshold  # NEW: Percentage-based threshold
         self.cvd_history = []  # Running CVD values
         self.price_history = []  # Price history for divergence detection
 
@@ -61,9 +72,15 @@ class CVDCalculator:
         """
         Calculate CVD from tick data (live trading)
 
+        Oct 22, 2025 - Phase 1 Fix: Now uses percentage-based imbalance
+
         Uses tick classification:
         - Uptick (price > last): Buying pressure
         - Downtick (price < last): Selling pressure
+
+        NEW: Tracks buy_volume and sell_volume separately
+        NEW: Calculates imbalance_pct = (sell - buy) / total * 100
+        NEW: Trend based on percentage imbalance (not slope)
 
         Args:
             ticks: List of tick objects with .price, .size attributes
@@ -74,14 +91,21 @@ class CVDCalculator:
         if not ticks or len(ticks) == 0:
             return CVDResult(
                 cvd_value=0.0,
-                cvd_slope=0.0,
+                cvd_slope=0.0,  # DEPRECATED
                 cvd_trend='NEUTRAL',
                 divergence=None,
                 data_source='TICK',
-                confidence=0.0
+                confidence=0.0,
+                buy_volume=0.0,
+                sell_volume=0.0,
+                imbalance_pct=0.0
             )
 
+        # Phase 1 Fix: Track buy/sell volume separately
         cvd = 0.0
+        buy_volume = 0.0
+        sell_volume = 0.0
+        neutral_volume = 0.0
         last_price = None
 
         for tick in ticks:
@@ -89,21 +113,36 @@ class CVDCalculator:
                 # Classify tick as buy or sell based on price movement
                 if tick.price > last_price:
                     # Uptick = buying pressure
+                    buy_volume += tick.size
                     cvd += tick.size
                 elif tick.price < last_price:
                     # Downtick = selling pressure
+                    sell_volume += tick.size
                     cvd -= tick.size
-                # Equal price = no change
+                else:
+                    # Equal price = neutral (don't count towards imbalance)
+                    neutral_volume += tick.size
 
             last_price = tick.price
             self.price_history.append(tick.price)
 
-        # Store in history
+        # Store in history (for divergence detection)
         self.cvd_history.append(cvd)
 
-        # Calculate slope
+        # Phase 1 Fix: Calculate percentage imbalance
+        total_volume = buy_volume + sell_volume  # Excludes neutral ticks
+        if total_volume > 0:
+            # Positive imbalance_pct = more selling (BEARISH)
+            # Negative imbalance_pct = more buying (BULLISH)
+            imbalance_pct = ((sell_volume - buy_volume) / total_volume) * 100.0
+        else:
+            imbalance_pct = 0.0
+
+        # Phase 1 Fix: Determine trend based on PERCENTAGE IMBALANCE (not slope)
+        trend = self._determine_trend_from_imbalance(imbalance_pct)
+
+        # Calculate slope for backward compatibility (DEPRECATED)
         slope = self._calculate_slope()
-        trend = self._determine_trend(slope)
 
         # Detect divergence (need price history)
         divergence = None
@@ -115,18 +154,27 @@ class CVDCalculator:
         # Confidence: 1.0 for tick data (most accurate)
         confidence = 1.0
 
+        # Log detailed CVD breakdown (for debugging)
+        logger.debug(f"CVD from ticks: buy={buy_volume:.0f}, sell={sell_volume:.0f}, "
+                    f"neutral={neutral_volume:.0f}, imbalance={imbalance_pct:.1f}%, trend={trend}")
+
         return CVDResult(
             cvd_value=cvd,
-            cvd_slope=slope,
+            cvd_slope=slope,  # DEPRECATED, kept for compatibility
             cvd_trend=trend,
             divergence=divergence,
             data_source='TICK',
-            confidence=confidence
+            confidence=confidence,
+            buy_volume=buy_volume,
+            sell_volume=sell_volume,
+            imbalance_pct=imbalance_pct
         )
 
     def calculate_from_bars(self, bars: List, current_idx: int) -> CVDResult:
         """
         Calculate CVD from OHLCV bars (backtesting)
+
+        Oct 22, 2025 - Phase 1 Fix: Now uses percentage-based imbalance
 
         Uses close position heuristic:
         - Close in upper 50% of range = buying pressure dominates
@@ -136,6 +184,9 @@ class CVDCalculator:
             buying_volume = volume * ((close - low) / (high - low))
             selling_volume = volume * ((high - close) / (high - low))
             delta = buying_volume - selling_volume
+
+        NEW: Tracks buy_volume and sell_volume separately
+        NEW: Calculates imbalance_pct = (sell - buy) / total * 100
 
         Args:
             bars: List of bar objects with .open, .high, .low, .close, .volume
@@ -147,11 +198,14 @@ class CVDCalculator:
         if not bars or current_idx < 0:
             return CVDResult(
                 cvd_value=0.0,
-                cvd_slope=0.0,
+                cvd_slope=0.0,  # DEPRECATED
                 cvd_trend='NEUTRAL',
                 divergence=None,
                 data_source='BAR',
-                confidence=0.0
+                confidence=0.0,
+                buy_volume=0.0,
+                sell_volume=0.0,
+                imbalance_pct=0.0
             )
 
         # Reset history for new calculation
@@ -163,6 +217,8 @@ class CVDCalculator:
         lookback_start = max(0, current_idx - 20)
 
         cvd = 0.0
+        total_buy_volume = 0.0
+        total_sell_volume = 0.0
 
         for i in range(lookback_start, current_idx + 1):
             bar = bars[i]
@@ -180,6 +236,10 @@ class CVDCalculator:
                 selling_volume = bar.volume * (1 - close_position)
 
                 delta = buying_volume - selling_volume
+
+                # Phase 1 Fix: Accumulate buy/sell volumes
+                total_buy_volume += buying_volume
+                total_sell_volume += selling_volume
             else:
                 # No range (high == low) = neutral, no volume delta
                 delta = 0
@@ -190,9 +250,18 @@ class CVDCalculator:
             self.cvd_history.append(cvd)
             self.price_history.append(bar.close)
 
-        # Calculate slope over last N bars
+        # Phase 1 Fix: Calculate percentage imbalance
+        total_volume = total_buy_volume + total_sell_volume
+        if total_volume > 0:
+            imbalance_pct = ((total_sell_volume - total_buy_volume) / total_volume) * 100.0
+        else:
+            imbalance_pct = 0.0
+
+        # Phase 1 Fix: Determine trend based on PERCENTAGE IMBALANCE (not slope)
+        trend = self._determine_trend_from_imbalance(imbalance_pct)
+
+        # Calculate slope for backward compatibility (DEPRECATED)
         slope = self._calculate_slope()
-        trend = self._determine_trend(slope)
 
         # Detect divergence
         divergence = None
@@ -204,39 +273,49 @@ class CVDCalculator:
         # Confidence: 0.7 for bar approximation (less accurate than ticks)
         confidence = 0.7
 
+        # Log detailed CVD breakdown (for debugging)
+        logger.debug(f"CVD from bars: buy={total_buy_volume:.0f}, sell={total_sell_volume:.0f}, "
+                    f"imbalance={imbalance_pct:.1f}%, trend={trend}")
+
         return CVDResult(
             cvd_value=cvd,
-            cvd_slope=slope,
+            cvd_slope=slope,  # DEPRECATED, kept for compatibility
             cvd_trend=trend,
             divergence=divergence,
             data_source='BAR',
-            confidence=confidence
+            confidence=confidence,
+            buy_volume=total_buy_volume,
+            sell_volume=total_sell_volume,
+            imbalance_pct=imbalance_pct
         )
 
     def calculate_auto(self, bars: List, current_idx: int, ticks: Optional[List] = None) -> CVDResult:
         """
-        Auto-select calculation method based on data availability
+        Calculate CVD from tick data ONLY - NO APPROXIMATIONS
 
-        Priority:
-        1. Tick data (if available and non-empty) - most accurate
-        2. Bar approximation (fallback) - good enough for backtesting
+        Oct 21, 2025: Removed bar approximation fallback. System must provide tick data
+        or explicitly handle the failure. No silent fallbacks to inaccurate methods.
 
         Args:
-            bars: Bar data (always available)
-            current_idx: Current bar index
-            ticks: Optional tick data (only available in live trading)
+            bars: Bar data (NOT USED - kept for interface compatibility)
+            current_idx: Current bar index (NOT USED)
+            ticks: REQUIRED tick data for accurate CVD
 
         Returns:
-            CVDResult from best available data source
+            CVDResult from tick data ONLY
+
+        Raises:
+            ValueError: If no tick data is available
         """
         if ticks and len(ticks) > 0:
-            # Live trading - use tick data
-            logger.debug(f"Using TICK data for CVD calculation ({len(ticks)} ticks)")
+            # Use tick data - the ONLY acceptable source
+            logger.info(f"✅ CVD: Using TICK data ({len(ticks)} ticks)")
             return self.calculate_from_ticks(ticks)
         else:
-            # Backtesting - use bar approximation
-            logger.debug(f"Using BAR approximation for CVD calculation (idx={current_idx})")
-            return self.calculate_from_bars(bars, current_idx)
+            # FAIL EXPLICITLY - no approximations allowed
+            error_msg = f"❌ CVD FAILURE: No tick data available at bar {current_idx}. Cannot calculate accurate CVD."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def _calculate_slope(self) -> float:
         """
@@ -269,7 +348,9 @@ class CVDCalculator:
 
     def _determine_trend(self, slope: float) -> str:
         """
-        Classify CVD trend based on slope
+        DEPRECATED (Oct 22, 2025): Use _determine_trend_from_imbalance instead
+
+        Classify CVD trend based on slope (OLD METHOD)
 
         Args:
             slope: CVD slope from linear regression
@@ -282,6 +363,40 @@ class CVDCalculator:
         elif slope < self.bearish_threshold:
             return 'BEARISH'
         else:
+            return 'NEUTRAL'
+
+    def _determine_trend_from_imbalance(self, imbalance_pct: float) -> str:
+        """
+        Classify CVD trend based on PERCENTAGE IMBALANCE (Oct 22, 2025 - Phase 1 Fix)
+
+        This is the NEW method that replaces slope-based classification.
+        Uses percentage of buy/sell volume to determine trend direction.
+
+        Args:
+            imbalance_pct: (sell_volume - buy_volume) / total_volume * 100
+                          Positive = more selling (BEARISH)
+                          Negative = more buying (BULLISH)
+
+        Returns:
+            'BULLISH' if imbalance < -threshold (more buying)
+            'BEARISH' if imbalance > +threshold (more selling)
+            'NEUTRAL' otherwise
+
+        Example:
+            Buy: 10,000, Sell: 15,000, Total: 25,000
+            imbalance_pct = (15000 - 10000) / 25000 * 100 = 20.0% (BEARISH)
+
+            Buy: 18,000, Sell: 12,000, Total: 30,000
+            imbalance_pct = (12000 - 18000) / 30000 * 100 = -20.0% (BULLISH)
+        """
+        if imbalance_pct < -self.imbalance_threshold:
+            # Negative imbalance = more buying than selling
+            return 'BULLISH'
+        elif imbalance_pct > self.imbalance_threshold:
+            # Positive imbalance = more selling than buying
+            return 'BEARISH'
+        else:
+            # Within threshold = balanced trading
             return 'NEUTRAL'
 
     def _detect_divergence(self, price_history: List[float], cvd_history: List[float]) -> Optional[str]:

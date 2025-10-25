@@ -31,18 +31,20 @@ class PS60Strategy:
     - Risk: 5-7 min rule for reload sellers, stops at pivot
     """
 
-    def __init__(self, config, ib_connection=None):
+    def __init__(self, config, ib_connection=None, bar_size_seconds=5):
         """
         Initialize PS60 strategy with configuration
 
         Args:
             config: Trading configuration dict from trader_config.yaml
             ib_connection: Optional IB connection for fetching hourly bars (RSI/MACD)
+            bar_size_seconds: Size of each bar in seconds (5 for live trading, 60 for 1-min backtest)
         """
         self.config = config
         self.trading_config = config['trading']
         self.filters = config['filters']
         self.ib = ib_connection  # For fetching hourly bars for momentum indicators
+        self.bar_size_seconds = bar_size_seconds  # Store bar resolution (Oct 22, 2025)
 
         # Entry timing
         self.min_entry_time = self._parse_time(
@@ -227,12 +229,16 @@ class PS60Strategy:
         # FIX #2 (Oct 4, 2025): Entry position filter to prevent chasing
         self.enable_entry_position_filter = confirmation_config.get('enable_entry_position_filter', False)
         self.max_entry_position_pct = confirmation_config.get('max_entry_position_pct', 70)
-        self.entry_position_lookback_bars = confirmation_config.get('entry_position_lookback_bars', 60)
+        # Entry position lookback: 5 minutes of bars (dynamic based on bar resolution)
+        entry_position_lookback_seconds = confirmation_config.get('entry_position_lookback_seconds', 300)  # 5 minutes default
+        self.entry_position_lookback_bars = entry_position_lookback_seconds // self.bar_size_seconds  # e.g., 5 bars @ 1-min or 60 bars @ 5-sec
 
         # FIX #4 (Oct 4, 2025): Choppy filter to avoid consolidation entries
         self.enable_choppy_filter = confirmation_config.get('enable_choppy_filter', False)
         self.choppy_atr_multiplier = confirmation_config.get('choppy_atr_multiplier', 0.5)
-        self.choppy_lookback_bars = confirmation_config.get('choppy_lookback_bars', 60)
+        # Choppy lookback: 5 minutes of bars (dynamic based on bar resolution)
+        choppy_lookback_seconds = confirmation_config.get('choppy_lookback_seconds', 300)  # 5 minutes default
+        self.choppy_lookback_bars = choppy_lookback_seconds // self.bar_size_seconds  # e.g., 5 bars @ 1-min or 60 bars @ 5-sec
 
         # ATR period for stop calculation (needed by _calculate_atr)
         self.atr_period = self.atr_stop_period
@@ -269,20 +275,39 @@ class PS60Strategy:
         """Parse time string to time object"""
         return datetime.strptime(time_str, '%H:%M').time()
 
-    def get_tick_data(self, symbol):
+    def get_tick_data(self, symbol, bar_timestamp=None, backtester=None):
         """
         Fetch recent tick data for CVD calculation (PHASE 5 - Oct 19, 2025)
+        Updated Oct 21, 2025: Support both live and backtest modes
 
-        This method is used by the CVD filter for live trading to get accurate
-        buy/sell volume data. For backtesting, CVD uses bar approximation instead.
+        This method is used by the CVD filter to get accurate buy/sell volume data.
+
+        Live Trading Mode:
+            - Fetches last 10 seconds of real-time ticks
+            - Uses datetime.now() as end time
+
+        Backtest Mode:
+            - Fetches historical ticks for specific timestamp
+            - Uses bar_timestamp parameter
+            - Delegates to backtester's get_historical_ticks()
 
         Args:
             symbol: Stock ticker symbol
+            bar_timestamp: (Optional) Timestamp for historical tick fetching (backtest mode)
+            backtester: (Optional) Backtester instance with get_historical_ticks() method
 
         Returns:
             List of tick objects with 'price' and 'size' attributes, or None
         """
-        # Check if IB connection is available
+        # BACKTEST MODE: Use historical ticks if timestamp and backtester provided
+        if bar_timestamp is not None and backtester is not None:
+            # Delegate to backtester's historical tick fetcher
+            if hasattr(backtester, 'get_historical_ticks'):
+                return backtester.get_historical_ticks(symbol, bar_timestamp)
+            else:
+                return None
+
+        # LIVE TRADING MODE: Check if IB connection is available
         if not self.ib or not self.ib.isConnected():
             return None
 
@@ -573,8 +598,8 @@ class PS60Strategy:
         Returns:
             bool - True if this looks like a retest setup
         """
-        # Look back in retest window (e.g., 5 minutes = 60 bars @ 5-sec bars)
-        window_bars = self.retest_window_minutes * 12  # 12 bars per minute @ 5-sec
+        # Look back in retest window (e.g., 5 minutes = 5 bars @ 1-min or 60 bars @ 5-sec)
+        window_bars = self.retest_window_minutes * (60 // self.bar_size_seconds)  # Dynamic based on bar resolution
         lookback_start = max(0, current_idx - window_bars)
         lookback_bars = bars[lookback_start:current_idx]
 
@@ -763,7 +788,7 @@ class PS60Strategy:
                 return (current_price < pivot_price), "Immediate entry", None
 
         # Look back to find the sequence: breakout → 1-min candle close → pullback → re-break
-        bars_per_candle = self.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
+        bars_per_candle = self.candle_timeframe_seconds // self.bar_size_seconds  # Dynamic based on bar resolution
 
         # Find where price first broke the pivot (look back up to max_pullback_bars)
         lookback_start = max(0, current_idx - self.max_pullback_bars - bars_per_candle)
@@ -922,8 +947,8 @@ class PS60Strategy:
         if not self.sustained_break_enabled:
             return False, "Sustained break disabled", None
 
-        # Calculate how many 5-second bars = sustained_break_minutes
-        bars_required = (self.sustained_break_minutes * 60) // 5  # e.g., 2 min = 24 bars
+        # Calculate how many bars = sustained_break_minutes (dynamic based on bar resolution)
+        bars_required = (self.sustained_break_minutes * 60) // self.bar_size_seconds  # e.g., 2 min = 2 bars @ 1-min or 24 bars @ 5-sec
 
         # Look back to find when price first broke pivot
         lookback = min(current_idx, bars_required + 60)  # Extra lookback to find break
@@ -986,8 +1011,9 @@ class PS60Strategy:
         window_volume = sum(b.volume for b in sustained_window)
 
         # Get average volume from bars before breakout
-        if breakout_bar >= 120:  # Need 10 min history (120 five-sec bars)
-            pre_break_bars = bars[breakout_bar-120:breakout_bar]
+        min_history_bars = (600 // self.bar_size_seconds)  # 10 minutes of history (dynamic)
+        if breakout_bar >= min_history_bars:  # Need 10 min history
+            pre_break_bars = bars[breakout_bar-min_history_bars:breakout_bar]
             avg_volume_per_bar = sum(b.volume for b in pre_break_bars) / len(pre_break_bars)
             avg_window_volume = avg_volume_per_bar * len(sustained_window)
 
@@ -1078,7 +1104,7 @@ class PS60Strategy:
             print(f"⚠️  Error checking momentum for {symbol}: {e}")
             return True, f"Momentum check error: {e}", {}
 
-    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None):
+    def check_hybrid_entry(self, bars, current_idx, pivot_price, side='LONG', target_price=None, symbol=None, cached_hourly_bars=None, absolute_idx=None, bar_buffer=None, backtester=None):
         """
         HYBRID Entry Strategy (Oct 4, 2025) - STATE MACHINE VERSION (Oct 9, 2025)
 
@@ -1097,7 +1123,7 @@ class PS60Strategy:
         - If breakout candle is weak → wait for PULLBACK/RETEST OR SUSTAINED_BREAK
 
         Args:
-            bars: List of 5-second bars
+            bars: List of bars (resolution determined by bar_size_seconds: 5-sec for live, 60-sec for backtest)
             current_idx: Current bar ARRAY index (for bars[] access)
             pivot_price: Resistance (long) or support (short)
             side: 'LONG' or 'SHORT'
@@ -1106,6 +1132,7 @@ class PS60Strategy:
             cached_hourly_bars: Hourly bars for RSI/MACD (optional)
             absolute_idx: Absolute bar count (for state machine tracking)
             bar_buffer: BarBuffer instance (for candle mapping, PART 3 fix)
+            backtester: (Optional) Backtester instance for historical tick fetching (Oct 21, 2025)
 
         Returns:
             tuple: (should_enter, reason, entry_state)
@@ -1116,6 +1143,7 @@ class PS60Strategy:
             # State machine uses absolute_idx for tracking bar numbers over time
             # current_idx is used for bars[] access
             # CRITICAL FIX PART 3 (Oct 20, 2025): Pass bar_buffer for candle mapping
+            # Updated Oct 21, 2025: Pass backtester for tick-based CVD
             return check_entry_state_machine(
                 strategy=self,
                 symbol=symbol,
@@ -1126,7 +1154,8 @@ class PS60Strategy:
                 target_price=target_price,
                 cached_hourly_bars=cached_hourly_bars,
                 absolute_idx=absolute_idx,
-                bar_buffer=bar_buffer
+                bar_buffer=bar_buffer,
+                backtester=backtester
             )
 
         # FALLBACK: Old logic if symbol not provided (shouldn't happen)
@@ -1138,7 +1167,7 @@ class PS60Strategy:
             else:
                 return (current_price < pivot_price), "Immediate entry (no symbol)", None
 
-        bars_per_candle = self.candle_timeframe_seconds // 5  # 60 sec / 5 sec = 12 bars
+        bars_per_candle = self.candle_timeframe_seconds // self.bar_size_seconds  # Dynamic based on bar resolution
 
         # FIX (Oct 9, 2025): Don't search for original breakout - just check current price vs pivot
         # Old logic searched last 36 bars for initial breakout, failed 93% of the time
@@ -1536,7 +1565,7 @@ class PS60Strategy:
             SHORT entry with RED candle → ALLOWED (volume confirms selling)
         """
         # Calculate 1-minute candle direction (12 five-second bars = 1 minute)
-        bars_per_candle = 12
+        bars_per_candle = self.candle_timeframe_seconds // self.bar_size_seconds  # Dynamic based on bar resolution
         candle_start = (current_idx // bars_per_candle) * bars_per_candle
         candle_end = min(candle_start + bars_per_candle - 1, len(bars) - 1)
 
@@ -2426,6 +2455,121 @@ class PS60Strategy:
 
         return False, None
 
+    def check_target_hit_stall(self, position, current_price, current_time):
+        """
+        Check if price is stalling after hitting target1 (Phase 9 - Oct 21, 2025)
+
+        Problem: After hitting target, price often consolidates for extended periods.
+                 Example: PATH hit target1 $16.42, then ranged $16.40-$16.42 for 86 min,
+                         held 50% runner earning only $3 (+$0.01/share) = capital inefficiency
+
+        Solution: Detect when price stays in tight range (0.2%) for 5+ minutes after
+                 target hit → tighten trailing stop from 0.5% to 0.1% → exit quickly
+
+        Args:
+            position: Position dict with entry details
+            current_price: Current market price
+            current_time: Current datetime (timezone-aware)
+
+        Returns:
+            tuple: (is_stalled: bool, new_trail_pct: float or None)
+                  - is_stalled: True if stall detected
+                  - new_trail_pct: Tightened trail distance (e.g., 0.001 for 0.1%)
+
+        Example:
+            PATH @ 10:31: Target1 hit at $16.42
+            PATH @ 10:36: Price in $16.40-$16.42 range for 5 min → STALL!
+            Action: Tighten trail 0.5% → 0.1%, exit at $16.40 vs holding till 11:57
+            Result: +$21 vs +$3 on runner = 7x better
+        """
+        # Get config
+        config = self.config.get('trading', {}).get('exits', {}).get('target_hit_stall_detection', {})
+
+        # Check if enabled
+        if not config.get('enabled', False):
+            return False, None
+
+        # Guard #1: Only check if we have target1 price
+        target1 = position.get('target1')
+        if not target1:
+            return False, None
+
+        # Guard #2: Only check runner positions (after partials taken)
+        # Rationale: Stall detection is for optimizing runner exits, not initial position
+        if position.get('remaining', 1.0) >= 0.9:  # No partials taken yet
+            return False, None
+
+        # Initialize stall tracking fields if not present
+        if 'target1_hit_time' not in position:
+            position['target1_hit_time'] = None
+            position['stall_window_start'] = None
+            position['stall_window_high'] = None
+            position['stall_window_low'] = None
+            position['stall_detected'] = False
+
+        # Detect if target1 was just hit
+        side = position['side']
+        if side == 'LONG':
+            target_hit = current_price >= target1 and position['target1_hit_time'] is None
+        else:  # SHORT
+            target_hit = current_price <= target1 and position['target1_hit_time'] is None
+
+        if target_hit:
+            # Mark target1 as hit - start monitoring for stall
+            position['target1_hit_time'] = current_time
+            position['stall_window_start'] = current_time
+            position['stall_window_high'] = current_price
+            position['stall_window_low'] = current_price
+            return False, None  # Just hit target, not stalled yet
+
+        # If target1 not hit yet, nothing to check
+        if position['target1_hit_time'] is None:
+            return False, None
+
+        # If stall already detected and trail tightened, don't re-trigger
+        if position.get('stall_detected', False):
+            return False, None
+
+        # Update stall window high/low
+        if current_price > position['stall_window_high']:
+            # Price broke out above window - reset stall tracking
+            position['stall_window_start'] = current_time
+            position['stall_window_high'] = current_price
+            position['stall_window_low'] = current_price
+            return False, None
+
+        if current_price < position['stall_window_low']:
+            position['stall_window_low'] = current_price
+
+        # Calculate how long price has been in current window
+        window_duration = (current_time - position['stall_window_start']).total_seconds()
+        stall_duration_threshold = config.get('stall_duration_seconds', 300)  # 5 minutes
+
+        # Check if window duration exceeds threshold
+        if window_duration < stall_duration_threshold:
+            return False, None  # Not in window long enough yet
+
+        # Calculate range within window
+        window_range = (position['stall_window_high'] - position['stall_window_low']) / current_price
+        stall_range_threshold = config.get('stall_range_pct', 0.002)  # 0.2%
+
+        # Check if range is tight enough to be considered "stalled"
+        if window_range > stall_range_threshold:
+            # Range too wide - reset window
+            position['stall_window_start'] = current_time
+            position['stall_window_high'] = current_price
+            position['stall_window_low'] = current_price
+            return False, None
+
+        # STALL DETECTED!
+        # Price stayed in tight range for required duration after target hit
+        position['stall_detected'] = True
+
+        # Return tightened trail distance
+        new_trail_pct = config.get('tighten_trail_to_pct', 0.001)  # 0.1%
+
+        return True, new_trail_pct
+
     def calculate_atr_based_stop_width(self, atr_percent):
         """
         Calculate stop width based on ATR (volatility)
@@ -2445,14 +2589,84 @@ class PS60Strategy:
         else:
             return 0.025  # 2.5% for very high volatility
 
-    def calculate_stop_price(self, position, current_price=None, stock_data=None):
+    def calculate_candle_based_stop(self, bars, entry_bar_idx, side, pivot_price=None):
         """
-        Calculate stop price for position using ATR-based stops
+        Calculate stop price based on last opposing candle (Oct 23, 2025)
+
+        Logic:
+        - LONG: Find last RED candle before entry, use its LOW as stop
+        - SHORT: Find last GREEN candle before entry, use its HIGH as stop
+        - Fallback: Use pivot price if no opposing candle found
+
+        Args:
+            bars: List of Bar objects (with open, high, low, close)
+            entry_bar_idx: Index of entry candle in bars array
+            side: 'LONG' or 'SHORT'
+            pivot_price: Fallback pivot price (resistance for LONG, support for SHORT)
+
+        Returns:
+            float: Stop price
+        """
+        # Configuration
+        lookback = self.config['trading']['risk'].get('candle_stop_lookback', 20)
+        fallback_to_pivot = self.config['trading']['risk'].get('candle_stop_fallback_to_pivot', True)
+
+        # Search backwards from entry candle (skip entry candle itself)
+        start_idx = entry_bar_idx - 1
+        end_idx = max(0, entry_bar_idx - lookback)
+
+        for i in range(start_idx, end_idx - 1, -1):
+            if i < 0:
+                break
+
+            bar = bars[i]
+            is_red = bar.close < bar.open    # Red candle (bearish)
+            is_green = bar.close > bar.open  # Green candle (bullish)
+
+            if side == 'LONG':
+                # Looking for last RED candle (selling pressure)
+                if is_red:
+                    stop = bar.low  # Use LOW of red candle
+                    if hasattr(self, 'logger'):
+                        self.logger.debug(f"  Candle-based stop (LONG): Found red candle at idx {i}")
+                        self.logger.debug(f"    Candle: O=${bar.open:.2f} H=${bar.high:.2f} L=${bar.low:.2f} C=${bar.close:.2f}")
+                        self.logger.debug(f"    Stop: ${stop:.2f} (LOW of red candle)")
+                    return stop
+
+            elif side == 'SHORT':
+                # Looking for last GREEN candle (buying pressure)
+                if is_green:
+                    stop = bar.high  # Use HIGH of green candle
+                    if hasattr(self, 'logger'):
+                        self.logger.debug(f"  Candle-based stop (SHORT): Found green candle at idx {i}")
+                        self.logger.debug(f"    Candle: O=${bar.open:.2f} H=${bar.high:.2f} L=${bar.low:.2f} C=${bar.close:.2f}")
+                        self.logger.debug(f"    Stop: ${stop:.2f} (HIGH of green candle)")
+                    return stop
+
+        # No opposing candle found - fallback to pivot
+        if fallback_to_pivot and pivot_price:
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"  Candle-based stop ({side}): No opposing candle found in {lookback} bars")
+                self.logger.debug(f"    Falling back to pivot: ${pivot_price:.2f}")
+            return pivot_price
+
+        # Last resort: Use entry price (tight stop)
+        entry_price = bars[entry_bar_idx].close
+        if hasattr(self, 'logger'):
+            self.logger.warning(f"  Candle-based stop ({side}): No opposing candle AND no pivot!")
+            self.logger.warning(f"    Using entry price as stop: ${entry_price:.2f}")
+        return entry_price
+
+    def calculate_stop_price(self, position, current_price=None, stock_data=None, bars=None, entry_bar_idx=None):
+        """
+        Calculate stop price for position using configured method (ATR or candle-based)
 
         Args:
             position: Position dict with entry_price, side, partials, etc.
             current_price: Current market price (optional)
             stock_data: Stock data dict with ATR info (optional)
+            bars: List of Bar objects for candle-based stops (optional)
+            entry_bar_idx: Index of entry bar in bars array (optional)
 
         Returns:
             float - Stop price
@@ -2461,29 +2675,55 @@ class PS60Strategy:
         if position.get('partials', 0) > 0 and self.breakeven_after_partial:
             return position['entry_price']
 
-        # Use ATR-based stops if enabled and data available
-        if self.use_atr_stops and stock_data:
-            atr_pct = stock_data.get('atr%', 5.0)  # Default 5% if missing
-            stop_width = self.calculate_atr_based_stop_width(atr_pct)
+        # Get stop loss method from config (Oct 23, 2025)
+        stop_method = self.config['trading']['risk'].get('stop_loss_method', 'atr')
 
-            entry_price = position['entry_price']
-            if position['side'] == 'LONG':
-                stop_price = entry_price * (1 - stop_width)
-            else:  # SHORT
-                stop_price = entry_price * (1 + stop_width)
-
+        # METHOD 1: Candle-based stops (price action)
+        if stop_method == 'candle' and bars is not None and entry_bar_idx is not None:
+            pivot_price = position.get('pivot')  # Fallback to pivot
+            stop_price = self.calculate_candle_based_stop(
+                bars=bars,
+                entry_bar_idx=entry_bar_idx,
+                side=position['side'],
+                pivot_price=pivot_price
+            )
+            if hasattr(self, 'logger'):
+                self.logger.info(f"  Stop (candle-based): ${stop_price:.2f}")
             return stop_price
+
+        # METHOD 2: ATR-based stops (volatility)
+        elif stop_method == 'atr' or (stop_method == 'candle' and (bars is None or entry_bar_idx is None)):
+            # Use ATR-based stops if enabled and data available
+            if self.use_atr_stops and stock_data:
+                atr_pct = stock_data.get('atr%', 5.0)  # Default 5% if missing
+                stop_width = self.calculate_atr_based_stop_width(atr_pct)
+
+                entry_price = position['entry_price']
+                if position['side'] == 'LONG':
+                    stop_price = entry_price * (1 - stop_width)
+                else:  # SHORT
+                    stop_price = entry_price * (1 + stop_width)
+
+                if hasattr(self, 'logger'):
+                    self.logger.info(f"  Stop (ATR-based): ${stop_price:.2f} (width: {stop_width*100:.1f}%)")
+                return stop_price
 
         # Fallback: Initial stop at pivot
         if self.stop_at_pivot and 'pivot' in position:
+            if hasattr(self, 'logger'):
+                self.logger.info(f"  Stop (pivot): ${position['pivot']:.2f}")
             return position['pivot']
 
         # Last resort: Use tight stop (not recommended)
         entry_price = position['entry_price']
         if position['side'] == 'LONG':
-            return entry_price * 0.995  # 0.5% stop
+            stop_price = entry_price * 0.995  # 0.5% stop
         else:
-            return entry_price * 1.005  # 0.5% stop
+            stop_price = entry_price * 1.005  # 0.5% stop
+
+        if hasattr(self, 'logger'):
+            self.logger.warning(f"  Stop (fallback 0.5%): ${stop_price:.2f}")
+        return stop_price
 
     def update_trailing_stop(self, position, current_price):
         """

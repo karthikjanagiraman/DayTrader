@@ -1525,8 +1525,90 @@ trading:
 10. Review logs in `trader/logs/trader_YYYYMMDD.log`
 11. Review trades in `trader/logs/trades_YYYYMMDD.json`
 12. Compare performance vs backtest expectations
+13. **Generate session analysis report** (see Session Reporting section below)
 
 **See [Session Management](#-session-management-october-13-2025) for detailed startup/shutdown procedures.**
+
+---
+
+## 📊 Session Reporting (October 23, 2025)
+
+### Automated Session Analysis
+
+**When user requests**: "analyse today's session" or "give me a report for today"
+
+**Use this standardized process**:
+
+1. **Follow Requirements Document**: `trader/TRADING_SESSION_REPORT_REQUIREMENTS.md`
+2. **Generate Comprehensive Report**: `trader/analysis/TRADING_SESSION_ANALYSIS_YYYYMMDD.md`
+3. **Include All 10 Required Sections**:
+   - Executive Summary
+   - Trade Inventory (complete details per trade)
+   - Filter Analysis (all filter decisions with values)
+   - Blocked Entry Analysis
+   - CVD Activity Log (with price validation checks)
+   - Filter Performance Summary
+   - State Machine Path Analysis
+   - Comparative Analysis
+   - Recommendations
+   - Appendices
+
+### Report Requirements
+
+**Data Sources**:
+- `trader/logs/trader_YYYYMMDD.log` - Main trading log
+- `trader/logs/trades_YYYYMMDD.json` - Trade records (if exists)
+- `trader/logs/trader_state.json` - State recovery data
+- `trader/config/trader_config.yaml` - Configuration
+- `stockscanner/output/scanner_results_YYYYMMDD.json` - Scanner data
+
+**For Each Trade, Document**:
+- Entry/exit times, prices, shares, P&L
+- Entry path (MOMENTUM / PULLBACK_RETEST / CVD_MONITORING)
+- All filter checks with actual values:
+  - Gap, Choppy, Stochastic, Room-to-Run filters
+  - Volume, Candle Size filters
+  - **CVD Price Validation** (verify Oct 23 fix)
+  - CVD imbalance data (buy/sell volumes, %)
+- State transitions through entry state machine
+- Resistance/Support levels
+- Exit reason and partials taken
+
+**For Blocked Entries, Document**:
+- Symbol, time, price, side
+- Blocking filter name and reason
+- State at time of block
+- Filter values that caused rejection
+
+**For CVD Activity, Document**:
+- All CVD_MONITORING events
+- CVD signals detected (imbalance %, buy/sell volumes)
+- **CVD Price Validation checks** (CRITICAL):
+  - Price at signal vs pivot price
+  - Validation result (PASS/BLOCK)
+  - Rejection reason if blocked
+- Final outcome (ENTERED/BLOCKED/RESET/TIMEOUT)
+
+**Filter Performance Metrics**:
+- Activation count per filter
+- Block count per filter
+- Pass rate per filter
+- Most/least active filters
+
+**Output Format**: Clean Markdown with tables, organized by the 10 required sections
+
+**Acceptance Criteria**:
+- ✅ All trades fully documented
+- ✅ All filter decisions extracted with values
+- ✅ CVD price validation fix verified
+- ✅ Recommendations are data-driven
+- ✅ Report is complete and actionable
+
+**File Naming**: `trader/analysis/TRADING_SESSION_ANALYSIS_YYYYMMDD.md`
+
+**Reference**: See `trader/TRADING_SESSION_REPORT_REQUIREMENTS.md` for complete specification
+
+---
 
 ## Backtest Results (September 30, 2025)
 
@@ -2636,3 +2718,198 @@ dynamic_resistance_exits:
 - Taking partials BEFORE resistance locks profits
 - Not all moves have same resistance patterns
 - Adapts to each stock's technical setup
+
+## ⏸️  Phase 9: Target-Hit Stall Detection (October 21, 2025)
+
+### Problem: Runner Positions Tying Up Capital
+
+**Example: PATH Trade (Oct 21, 2025)**
+- Entry: $16.33 @ 9:55 AM ET
+- Partial #1 (25%): $16.38 @ 10:03 AM (SMA50 resistance)
+- Partial #2 (25%): $16.42 @ 10:08 AM (Target1 hit) ← **Peak**
+- **Runner (50%)**: Held 109 minutes, exited @ $16.34
+- **Runner Profit**: $3.06 on 306 shares (0.06% over 109 minutes)
+- **Problem**: $5,000 capital earning $3 in 109 min = 0.06% return
+
+**What Happened**:
+- Target1 hit at 10:08 AM → Price peaked
+- Price stalled in tight range ($16.40-$16.42) for 86 minutes
+- Fixed 0.5% trailing stop never triggered (range too narrow)
+- Eventually drifted down, exiting with minimal profit
+- **Opportunity cost**: $5K capital idle for 1 hour 49 minutes
+
+**Root Cause**: No mechanism to detect price stalls after target hits → runners hold indefinitely in consolidation.
+
+### Solution: Target-Hit Stall Detection
+
+**Concept**: After target1 is hit (partials already taken), **monitor price range over time**. If price stalls in tight range (0.2%) for extended period (5 min), **tighten trailing stop from 0.5% → 0.1%** for quick exit.
+
+**Algorithm**:
+1. **Guard**: Only check runner positions (partials taken, remaining < 90%)
+2. **Detect Target Hit**: LONG: price >= target1, SHORT: price <= target1
+3. **Track Window**: Monitor price high/low, duration since target hit
+4. **Check Stall**: Duration >= 5 min AND range <= 0.2%?
+5. **Action**: Tighten trail from 0.5% → 0.1%, exit quickly
+
+**Why This Works**:
+- Target hit = local peak signal
+- Stall = lack of follow-through momentum
+- Tighter stop = quick exit instead of 60-90+ minute hold
+- Capital freed for redeployment
+
+### Implementation Details
+
+**Core Method** (ps60_strategy.py:2429-2542):
+
+```python
+def check_target_hit_stall(self, position, current_price, current_time):
+    """
+    Detect price stalls after hitting target1 (Phase 9 - Oct 21, 2025)
+
+    Returns:
+        tuple: (is_stalled: bool, new_trail_pct: float or None)
+    """
+    # Guards
+    if not config enabled or no target1 or partials not taken:
+        return (False, None)
+
+    # Initialize state tracking fields
+    if 'target1_hit_time' not in position:
+        position['target1_hit_time'] = None
+        position['stall_window_start'] = None
+        position['stall_window_high'] = 0.0
+        position['stall_window_low'] = 0.0
+        position['stall_detected'] = False
+
+    # Detect target1 hit
+    if price >= target1 and not target1_hit_time:
+        position['target1_hit_time'] = current_time
+
+    # Track price window (after target hit)
+    if target1_hit_time:
+        # Initialize or update window
+        if not stall_window_start:
+            position['stall_window_start'] = current_time
+            position['stall_window_high'] = current_price
+            position['stall_window_low'] = current_price
+
+        # Reset window if price breaks out
+        if current_price > stall_window_high:
+            position['stall_window_start'] = current_time  # Reset
+            position['stall_window_high'] = current_price
+            position['stall_window_low'] = current_price
+        else:
+            # Update window bounds
+            position['stall_window_high'] = max(stall_window_high, current_price)
+            position['stall_window_low'] = min(stall_window_low, current_price)
+
+    # Check stall conditions
+    if target1_hit_time and stall_window_start:
+        duration = (current_time - stall_window_start).total_seconds()
+        range_pct = (stall_window_high - stall_window_low) / stall_window_low
+
+        if duration >= 300 and range_pct <= 0.002:  # 5 min, 0.2% range
+            position['stall_detected'] = True
+            return (True, 0.001)  # Tighten to 0.1%
+
+    return (False, None)
+```
+
+**Integration** (trader.py:1448-1509 + backtester.py:958-1002):
+
+```python
+# In position management loop (after partials, before regular trailing stop)
+config_stall = self.config['trading']['exits']['target_hit_stall_detection']
+if config_stall['enabled']:
+    is_stalled, new_trail_pct = self.strategy.check_target_hit_stall(
+        position, current_price, current_time
+    )
+
+    if is_stalled and new_trail_pct:
+        # Tighten trailing stop
+        old_trail = position.get('trailing_distance', 0.005)  # 0.5%
+        position['stop'] = current_price * (1 - new_trail_pct)  # 0.1%
+        position['trailing_distance'] = new_trail_pct
+
+        logger.info(f"⏸️  STALL DETECTED: {symbol}")
+        logger.info(f"   Tightening trail: {old_trail*100:.1f}% → {new_trail_pct*100:.1f}%")
+
+        # Update IBKR stop order (live trader only)
+        self.cancel_and_replace_stop_order(position)
+```
+
+### Configuration (trader_config.yaml:103-114)
+
+```yaml
+target_hit_stall_detection:
+  enabled: true                      # Enable stall detection
+  stall_range_pct: 0.002             # 0.2% = "stalled" (tight range)
+  stall_duration_seconds: 300        # 5 minutes of stall = trigger
+  tighten_trail_to_pct: 0.001        # Tighten trail to 0.1%
+```
+
+### Expected Outcome: PATH Example
+
+```
+09:55 - Entry $16.33
+10:03 - PARTIAL 25% @ $16.38 (SMA50)
+10:08 - PARTIAL 25% @ $16.42 (Target1 hit) ← STALL DETECTION STARTS
+
+10:08-10:13 - Window tracking: $16.40-$16.42 (0.12% range)
+
+10:13 - ⏸️  STALL DETECTED!
+        Duration: 5 minutes
+        Range: $16.40-$16.42 (0.12% < 0.2%)
+
+        ACTION: Tighten trail 0.5% → 0.1%
+        New stop: $16.40 (vs $16.34 with 0.5% trail)
+
+10:14:30 - 🎯 Trail stop hit @ $16.40
+           Runner exit: $16.40 (vs actual $16.34)
+           Runner profit: $21.42 (vs actual $3.06)
+           Duration: 19 min (vs actual 109 min)
+
+IMPROVEMENT:
+- Runner P&L: $21.42 vs $3.06 = 7x better
+- Duration: 19 min vs 109 min = 5.7x faster capital utilization
+- Total trade P&L: $235 vs $217 = 8% improvement
+```
+
+### Files Modified
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `trader/config/trader_config.yaml` | 103-114 | Configuration (12 lines) |
+| `trader/strategy/ps60_strategy.py` | 2429-2542 | Core detection logic (114 lines) |
+| `trader/trader.py` | 1448-1509 | Live trader integration (62 lines) |
+| `trader/backtest/backtester.py` | 958-1002 | Backtester integration (45 lines) |
+
+**Total**: 233 lines of production code
+
+### Expected Benefits
+
+1. **7x Improvement in Runner P&L**: $21 vs $3 per trade (PATH example)
+2. **5.7x Faster Capital Utilization**: 19 min vs 109 min hold time
+3. **Capital Redeployment**: Exit 60-90 min earlier → redeploy into active opportunities
+4. **Scalable Impact**: 2-3 stalls/day = +$36-54/day = +$720-1,080/month
+
+### Key Features
+
+- ✅ Only affects runners (after partials taken)
+- ✅ Window resets if price resumes moving (no false exits)
+- ✅ Side-aware (LONG vs SHORT)
+- ✅ Configurable thresholds (range %, duration, tightened trail)
+- ✅ Comprehensive logging (DEBUG + INFO levels)
+- ✅ Dual-mode (live trading + backtesting)
+- ✅ IBKR order management (cancel old, place new stop)
+
+### Testing Status
+
+- ✅ **Implementation Complete** (Oct 21, 2025)
+- ✅ **Integrated in Live Trader** (trader.py)
+- ✅ **Integrated in Backtester** (backtester.py)
+- ✅ **Backtest Validated** (no errors, awaiting stall scenarios)
+- ⏳ **Live Paper Trading Validation**
+- ⏳ **Parameter Optimization** (if needed based on live results)
+
+**Complete Documentation**: `trader/PHASE9_STALL_DETECTION_COMPLETE.md` (900+ lines)

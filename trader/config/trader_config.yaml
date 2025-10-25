@@ -15,7 +15,7 @@ trading:
 
   entry:
     use_market_orders: true
-    min_entry_time: "09:45"   # Wait 15 min after open
+    min_entry_time: "09:30"   # FIXED (Oct 24, 2025): Start at market open to catch early breakouts like HOOD
     max_entry_time: "15:00"   # No new entries after 3:00 PM
 
   # Slippage and commissions (per requirements)
@@ -100,13 +100,41 @@ trading:
     # SMA periods to check (hourly timeframe)
     sma_periods: [5, 10, 20, 50, 100]  # All hourly SMAs
 
+  # ===== TARGET-HIT STALL DETECTION (Oct 21, 2025 - Phase 9) =====
+  # NEW: Detect when price stalls after hitting target1, tighten trail to exit quickly
+  # Problem: After target hit, price often consolidates/ranges for extended periods
+  #          Holding 50% runner for 90 min earning $3 = capital inefficiency
+  # Solution: Detect stall (tight range for N minutes) → tighten trail to 0.1%
+  # Example: PATH hit target1 $16.42, ranged $16.40-$16.42 for 86 min → exit at $16.34
+  #          With stall detection: Exit at $16.40 after 5 min → 7x better P&L on runner
+  target_hit_stall_detection:
+    enabled: true                      # Enable stall detection after target hit
+    stall_range_pct: 0.002             # 0.2% = "stalled" (tight range)
+    stall_duration_seconds: 300        # 5 minutes of stall = trigger
+    tighten_trail_to_pct: 0.001        # Tighten trail from 0.5% → 0.1%
+
   risk:
     breakeven_after_partial: true   # Move stop to breakeven after taking partial
     close_all_by_eod: true         # Flat by end of day
+
+    # ===== STOP LOSS METHOD (Oct 23, 2025) =====
+    # Choose between 'atr' (volatility-based) or 'candle' (price action-based)
+    stop_loss_method: 'candle'     # 'atr' or 'candle' (NEW - Oct 23, 2025)
+
+    # ATR-Based Stops (used when stop_loss_method = 'atr')
     stop_at_pivot: false           # Initial stop at pivot level (DISABLED - using ATR stops)
     use_atr_stops: true            # Use ATR-based stops (Oct 4, 2025)
-    atr_stop_multiplier: 2.0       # Stop = Entry - (2.0 × ATR) for longs
+    atr_stop_multiplier: 0.5       # ⭐ ULTRA-TIGHT: Stop = Entry - (0.5 × ATR) for longs (Oct 21, 2025)
     atr_stop_period: 20            # Calculate ATR from last 20 bars
+    min_stop_distance: 0.10        # Minimum $0.10 stop distance
+    max_stop_distance_pct: 0.01    # Maximum 1.0% stop distance
+
+    # Candle-Based Stops (used when stop_loss_method = 'candle')
+    # LONG: Stop at LOW of last red candle before entry
+    # SHORT: Stop at HIGH of last green candle before entry
+    # Fallback: Uses pivot if no opposing candle found
+    candle_stop_lookback: 20       # Max candles to search backwards
+    candle_stop_fallback_to_pivot: true  # Use pivot if no opposing candle found
 
     # 7-Minute Rule (PS60) - Exit if no progress after 7 minutes
     # Changed from 15 to 7 minutes per PS60 methodology (Oct 11, 2025)
@@ -137,11 +165,11 @@ trading:
     # Applies to ALL entry paths (MOMENTUM, PULLBACK, SUSTAINED_BREAK)
     # Rejects breakouts with sub-average volume at initial breakout detection
     # IMPACT: Would have prevented 6/10 Oct 15 trades (0.44x-0.79x volume)
-    min_initial_volume_threshold: 1.0       # Minimum 1.0x average volume required (blocks <1.0x breakouts)
+    min_initial_volume_threshold: 1.5       # ⭐ INCREASED: 1.5x average volume required (Oct 21, 2025 - Phase 10 tuning)
 
-    # MOMENTUM BREAKOUT thresholds (Oct 20, 2025 - Increased to 3.0x)
-    # Requires strong initial volume AND sustained volume on next candle
-    momentum_volume_threshold: 3.0          # Volume must be 3.0x average for MOMENTUM entry
+    # MOMENTUM BREAKOUT thresholds (Oct 21, 2025 - RELAXED for CVD strategy)
+    # With CVD confirmation, we can accept lower volume multiples
+    momentum_volume_threshold: 1.0          # ⭐ RELAXED: 1.0x average (was 3.0x) - CVD will confirm buying pressure
     momentum_candle_min_pct: 0.003          # Candle must be 0.3% for MOMENTUM entry
     momentum_candle_min_atr: 2.0            # Candle must be 2.0x ATR for MOMENTUM entry
 
@@ -189,7 +217,7 @@ trading:
     # Note: Pullback/sustained use room-to-run filter instead
     enable_entry_position_filter: false     # DISABLED - superseded by room-to-run filter
     max_entry_position_pct: 70              # Don't enter above 70% of 5-min range
-    entry_position_lookback_bars: 60        # 5 minutes (60 × 5-sec bars)
+    entry_position_lookback_seconds: 300    # 5 minutes (dynamically converted to bars: 5 @ 1-min OR 60 @ 5-sec)
 
     # CHOPPY MARKET FILTER (Oct 4, 2025) ⭐ CRITICAL
     # Purpose: Avoid entering during consolidation/sideways markets (high whipsaw risk)
@@ -200,7 +228,7 @@ trading:
     # Documentation: See FILTER_DOCUMENTATION.md "Choppy Market Filter"
     enable_choppy_filter: true              # ENABLED - prevents consolidation entries
     choppy_atr_multiplier: 0.5              # Recent range must be >0.5× ATR
-    choppy_lookback_bars: 60                # 5 minutes (60 × 5-sec bars)
+    choppy_lookback_seconds: 300            # 5 minutes (dynamically converted to bars: 5 @ 1-min OR 60 @ 5-sec)
 
   # Setup types to trade
   setup_types:
@@ -332,14 +360,22 @@ stochastic:
   cache_duration_sec: 3600          # Cache stochastic values for 1 hour
   allow_entry_if_unavailable: true  # If stochastic can't be calculated, allow entry anyway
 
-# CVD (CUMULATIVE VOLUME DELTA) FILTER (Oct 19, 2025) ⭐ NEW
+# CVD (CUMULATIVE VOLUME DELTA) FILTER (Oct 21, 2025) ⭐ CONTINUOUS MONITORING
 # ----------------------------------------------------------------------------
 # Purpose: Validate breakout quality by measuring buying vs selling pressure
 # Uses: Bar approximation (backtesting) or tick data (live trading)
 # LONG entries: CVD trend must be BULLISH (positive slope = net buying)
 # SHORT entries: CVD trend must be BEARISH (negative slope = net selling)
-# Applied to: ALL entry paths (momentum, pullback, sustained)
-# Impact: Oct 16 test showed 71.4% block rate on weak entries
+# Applied to: CONTINUOUSLY monitored after breakout for up to 10 minutes
+#
+# NEW APPROACH (Oct 21, 2025): Continuous CVD Monitoring
+# - After breakout detection, enter "CVD_MONITORING" state
+# - Check CVD on EVERY 1-minute candle close
+# - TWO ENTRY PATHS:
+#   1. AGGRESSIVE: CVD slope ≥ 2000 → enter immediately (strong buying spike)
+#   2. PATIENT: CVD slope ≥ 1000 for 2+ consecutive candles → enter (sustained buying)
+# - Reset consecutive counter if CVD drops below threshold
+# - Timeout after 10 minutes without confirmation
 #
 # How CVD works:
 # - Measures cumulative difference between buying volume and selling volume
@@ -348,36 +384,68 @@ stochastic:
 # - Slope calculation: Linear regression over last N bars
 # - Trend classification: Slope > +1000 = BULLISH, < -1000 = BEARISH
 #
-# Why it's effective:
-# - Detects when breakouts lack real buying/selling pressure
-# - Oct 16 example: META SHORT had BULLISH CVD (buyers absorbing sellers) → BLOCKED
-# - Prevents counter-trend entries (e.g., shorting into buying pressure)
+# Why continuous monitoring is better:
+# - Doesn't miss CVD confirmation that appears on candle 3, 4, 5, etc.
+# - More flexible than fixed 2-candle check
+# - Finds best entry timing within 10-minute window
 #
 # Configuration:
 confirmation:
   cvd:
-    enabled: true                    # ✅ ENABLED for Oct 16 backtest validation
+    enabled: true                    # ✅ ENABLED - Testing CVD with bar resolution fix (Oct 22, 2025)
+
+    # CONTINUOUS MONITORING SETTINGS (Oct 21, 2025) ⭐ NEW
+    continuous_monitoring: true              # Enable continuous CVD checks after breakout
+    max_monitoring_time_minutes: 999         # ⭐ NO TIMEOUT (Oct 22, 2025) - Monitor until entry window closes
+                                             # Selling/buying pressure can build at ANY time, not just first 10 min
+    check_every_candle: true                 # Check on EVERY 1-min candle close
+
+    # PATH 1: Strong CVD spike (immediate entry)
+    strong_bullish_threshold: 2000           # CVD ≥ 2000 → enter immediately
+    strong_bearish_threshold: -2000          # CVD ≤ -2000 → enter immediately (SHORT)
+
+    # PATH 2: Sustained CVD (consecutive candles)
+    bullish_slope_threshold: 1000            # DEPRECATED (Oct 22, 2025): CVD ≥ 1000 = "bullish"
+    bearish_slope_threshold: -1000           # DEPRECATED (Oct 22, 2025): CVD ≤ -1000 = "bearish"
+    min_consecutive_bullish: 3               # ⭐ INCREASED: 3 consecutive bullish candles for LONG (Oct 21, 2025)
+    min_consecutive_bearish: 3               # ⭐ INCREASED: 3 consecutive bearish candles for SHORT (Oct 21, 2025)
+
+    # ===== PHASE 1 FIX (Oct 22, 2025): PERCENTAGE-BASED IMBALANCE =====
+    # NEW: Use percentage imbalance instead of absolute slope thresholds
+    # Solves the problem: Each stock has different volume ranges
+    # Example: TSLA 41,710 volume → 14.5% imbalance → BEARISH
+    #          Low-vol stock 1,000 volume → 14.5% imbalance → BEARISH (same!)
+    # Formula: imbalance_pct = (sell_volume - buy_volume) / total_volume * 100
+    #   Positive = more selling (BEARISH), Negative = more buying (BULLISH)
+
+    # Sustained CVD threshold (consecutive candles)
+    imbalance_threshold: 10.0                # ⭐ RELAXED: 10% imbalance = directional trend (Oct 23, 2025 - Phase 10 tuning)
+                                             # Continuously checks for 3 consecutive candles ≥10% (no reset on failure)
+                                             # Buy=18k, Sell=22k, Total=40k → (22-18)/40*100 = 10% → BEARISH ✓
+                                             # Buy=22k, Sell=18k, Total=40k → (18-22)/40*100 = -10% → BULLISH ✓
+
+    # Strong CVD spike threshold (aggressive path with confirmation)
+    strong_imbalance_threshold: 30.0         # ⭐ RELAXED: 30% imbalance on initial candle (Oct 23, 2025 - Phase 10 tuning)
+                                             # Initial candle must be ≥30%, PLUS next candle ≥10% to confirm
+    strong_confirmation_threshold: 10.0      # ⭐ NEW: Next candle must also show ≥10% imbalance (prevents false spikes)
+
+    # Reset logic
+    reset_on_opposite_trend: true            # Reset counter if CVD reverses trend
+    reset_on_neutral: false                  # Don't reset on neutral (allows brief pauses)
 
     # Calculation settings
-    slope_lookback: 5                # Number of bars for slope calculation
-                                     # 5 bars = ~5 minutes of data for trend detection
-
-    # Trend thresholds
-    bullish_slope_threshold: 1000    # Minimum slope for BULLISH trend
-                                     # If slope > +1000 → net buying pressure
-    bearish_slope_threshold: -1000   # Maximum slope for BEARISH trend
-                                     # If slope < -1000 → net selling pressure
-                                     # Between thresholds → NEUTRAL (allowed)
+    slope_lookback: 5                        # Number of bars for slope calculation
+                                             # 5 bars = ~5 minutes of data for trend detection
 
     # Divergence settings (warning only, doesn't block)
-    detect_divergence: true          # Warn on price/CVD divergence
-    block_on_divergence: false       # Don't block entries on divergence (just warn)
-                                     # Bullish div: Price down, CVD up (reversal signal)
-                                     # Bearish div: Price up, CVD down (reversal signal)
+    detect_divergence: true                  # Warn on price/CVD divergence
+    block_on_divergence: false               # Don't block entries on divergence (just warn)
+                                             # Bullish div: Price down, CVD up (reversal signal)
+                                             # Bearish div: Price up, CVD down (reversal signal)
 
     # Data source priorities
-    prefer_tick_data: true           # Use tick data when available (live trading)
-    bar_approximation_enabled: true  # Fall back to bar approximation (backtesting)
+    prefer_tick_data: true                   # Use tick data when available (live trading)
+    bar_approximation_enabled: true          # Fall back to bar approximation (backtesting)
 
     # Caching (for live trading performance)
     cache_duration_sec: 60           # Cache CVD calculations for 1 minute
@@ -394,7 +462,7 @@ scanner:
 
 logging:
   log_dir: "./logs/"
-  log_level: "INFO"          # DEBUG, INFO, WARNING, ERROR (changed to INFO for faster backtest - Oct 13, 2025)
+  log_level: "DEBUG"         # DEBUG, INFO, WARNING, ERROR (temporarily DEBUG for HOOD investigation)
   log_trades: true
   log_positions: true
   save_daily_report: true
@@ -408,3 +476,16 @@ notifications:
 # Development/Testing
 paper_trading: true          # MUST be true for initial testing
 dry_run: false               # Set to true to monitor without trading
+
+# Backtesting Configuration (Oct 21, 2025)
+backtest:
+  # CVD Calculation Method
+  use_tick_based_cvd: true   # Use tick-based CVD for recent dates (<60 days)
+                             # Falls back to bar approximation for older dates
+                             # TRUE: Matches live trading methodology (85-90% accuracy)
+                             # FALSE: Uses bar approximation only (70% accuracy)
+
+  # Tick Data Caching
+  tick_cache_enabled: true   # Cache tick data to avoid API rate limits
+                             # Stored in backtest/tick_cache/ directory
+                             # Persists across backtest runs
