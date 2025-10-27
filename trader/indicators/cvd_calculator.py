@@ -41,6 +41,12 @@ class CVDResult:
     sell_volume: float = 0.0   # Total selling volume
     imbalance_pct: float = 0.0 # (sell - buy) / total * 100 (positive = selling, negative = buying)
 
+    # PRICE VALIDATION (Oct 26, 2025 - Phase 2 Fix)
+    price_direction: str = 'NEUTRAL'  # 'UP', 'DOWN', 'NEUTRAL' (bar-to-bar movement)
+    price_change_pct: float = 0.0     # Percentage price change
+    signals_aligned: bool = True      # Do CVD and price agree?
+    validation_reason: str = ''       # Why signals don't align (if applicable)
+
 
 class CVDCalculator:
     """
@@ -68,7 +74,7 @@ class CVDCalculator:
         self.cvd_history = []  # Running CVD values
         self.price_history = []  # Price history for divergence detection
 
-    def calculate_from_ticks(self, ticks: List) -> CVDResult:
+    def calculate_from_ticks(self, ticks: List, bar=None) -> CVDResult:
         """
         Calculate CVD from tick data (live trading)
 
@@ -154,9 +160,50 @@ class CVDCalculator:
         # Confidence: 1.0 for tick data (most accurate)
         confidence = 1.0
 
+        # PRICE VALIDATION (Oct 26, 2025 - Phase 2 Fix)
+        # Check if CVD signal aligns with candle color (Open vs Close)
+        price_direction = 'NEUTRAL'
+        price_change_pct = 0.0
+        signals_aligned = True
+        validation_reason = ''
+
+        if bar is not None:
+            # Use bar's Open and Close to determine candle color
+            # This is the correct way - candle color shows who won (buyers or sellers)
+            bar_open = bar.open
+            bar_close = bar.close
+            price_change = bar_close - bar_open
+            price_change_pct = (price_change / bar_open) * 100 if bar_open > 0 else 0.0
+
+            # Determine candle color
+            if price_change > 0:
+                price_direction = 'UP'  # Green candle - buyers won
+            elif price_change < 0:
+                price_direction = 'DOWN'  # Red candle - sellers won
+            # else: NEUTRAL (doji - open == close)
+
+            # Check alignment with CVD trend
+            # BEARISH CVD (more selling) should produce RED candle (sellers won)
+            # BULLISH CVD (more buying) should produce GREEN candle (buyers won)
+            # DOJI (neutral) = misalignment (CVD showed pressure but no winner)
+            if trend == 'BEARISH' and price_direction == 'UP':
+                signals_aligned = False
+                validation_reason = f"CVD BEARISH ({imbalance_pct:+.2f}% selling) but GREEN candle ({price_change_pct:+.2f}%)"
+            elif trend == 'BULLISH' and price_direction == 'DOWN':
+                signals_aligned = False
+                validation_reason = f"CVD BULLISH ({imbalance_pct:+.2f}% buying) but RED candle ({price_change_pct:+.2f}%)"
+            elif trend == 'BEARISH' and price_direction == 'NEUTRAL':
+                signals_aligned = False
+                validation_reason = f"CVD BEARISH ({imbalance_pct:+.2f}% selling) but DOJI (no winner)"
+            elif trend == 'BULLISH' and price_direction == 'NEUTRAL':
+                signals_aligned = False
+                validation_reason = f"CVD BULLISH ({imbalance_pct:+.2f}% buying) but DOJI (no winner)"
+
         # Log detailed CVD breakdown (for debugging)
         logger.debug(f"CVD from ticks: buy={buy_volume:.0f}, sell={sell_volume:.0f}, "
                     f"neutral={neutral_volume:.0f}, imbalance={imbalance_pct:.1f}%, trend={trend}")
+        logger.debug(f"Price validation: direction={price_direction}, change={price_change_pct:+.2f}%, "
+                    f"aligned={signals_aligned}")
 
         return CVDResult(
             cvd_value=cvd,
@@ -167,7 +214,11 @@ class CVDCalculator:
             confidence=confidence,
             buy_volume=buy_volume,
             sell_volume=sell_volume,
-            imbalance_pct=imbalance_pct
+            imbalance_pct=imbalance_pct,
+            price_direction=price_direction,
+            price_change_pct=price_change_pct,
+            signals_aligned=signals_aligned,
+            validation_reason=validation_reason
         )
 
     def calculate_from_bars(self, bars: List, current_idx: int) -> CVDResult:

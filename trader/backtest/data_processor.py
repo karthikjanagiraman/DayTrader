@@ -383,9 +383,20 @@ class DataProcessor:
 
                 ticks = [MockTick(t['price'], t['size'], t['time']) for t in tick_data]
 
-                # Calculate CVD
+                # Create mock bar object for price validation (Oct 26, 2025 - Phase 2 Fix)
+                class MockBar:
+                    def __init__(self, bar_dict):
+                        self.open = bar_dict['open']
+                        self.close = bar_dict['close']
+                        self.high = bar_dict['high']
+                        self.low = bar_dict['low']
+                        self.volume = bar_dict['volume']
+
+                mock_bar = MockBar(bar)
+
+                # Calculate CVD with price validation (Oct 26, 2025 - Phase 2 Fix)
                 try:
-                    cvd_result = cvd_calculator.calculate_from_ticks(ticks)
+                    cvd_result = cvd_calculator.calculate_from_ticks(ticks, bar=mock_bar)
 
                     # Build enriched bar
                     enriched_bar = {
@@ -406,7 +417,12 @@ class DataProcessor:
                             'confidence': cvd_result.confidence,
                             'imbalance_pct': cvd_result.imbalance_pct,
                             'buy_volume': cvd_result.buy_volume,
-                            'sell_volume': cvd_result.sell_volume
+                            'sell_volume': cvd_result.sell_volume,
+                            # Phase 2 Fix (Oct 26, 2025) - Price validation fields
+                            'price_direction': cvd_result.price_direction,
+                            'price_change_pct': cvd_result.price_change_pct,
+                            'signals_aligned': cvd_result.signals_aligned,
+                            'validation_reason': cvd_result.validation_reason
                         }
                     }
 

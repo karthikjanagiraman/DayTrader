@@ -548,6 +548,20 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                             logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
                                        f"✅ CVD from CACHE: imbalance={imbalance_pct:.1f}%, trend={cvd_trend}")
 
+                            # CVD PRICE VALIDATION (Phase 2 - Oct 26, 2025)
+                            # Check if CVD signal aligns with candle color
+                            signals_aligned = bar_cvd.get('signals_aligned', True)
+                            validation_reason = bar_cvd.get('validation_reason', '')
+
+                            if not signals_aligned:
+                                logger.info(f"[CVD_MONITORING] {symbol}: ❌ CVD PRICE VALIDATION FAILED - {validation_reason}")
+                                tracker.reset_state(symbol)
+                                return False, f"CVD price validation: {validation_reason}", {
+                                    'phase': 'cvd_price_validation_failed'
+                                }
+
+                            logger.debug(f"[CVD_MONITORING] {symbol}: ✅ CVD PRICE VALIDATION PASSED")
+
             # PHASE 2: If no cached data, calculate CVD from ticks (fallback for live trading)
             if imbalance_pct is None:
                 # Get tick data - REQUIRED, no fallbacks allowed
@@ -627,7 +641,48 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                             tracker.reset_state(symbol)
                             return False, f"Price fell below pivot", {'phase': 'cvd_price_reversal'}
 
-                        # Run filters
+                        # VOLUME FILTER (Oct 26, 2025 - Phase 11): ALL entry paths must check volume
+                        # Calculate 1-minute candle volume
+                        candle_bars = _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer, current_idx)
+                        if candle_bars and len(candle_bars) == bars_per_candle:
+                            candle_volume = sum(b.volume for b in candle_bars)
+
+                            # Calculate average volume (previous 20 1-minute candles)
+                            candle_start_abs = (tracking_idx // bars_per_candle) * bars_per_candle
+                            avg_volume_lookback_abs = max(0, candle_start_abs - (20 * bars_per_candle))
+
+                            if bar_buffer is not None:
+                                lookback_start_array = bar_buffer.map_absolute_to_array_index(avg_volume_lookback_abs)
+                                candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+                                if lookback_start_array is not None and candle_start_array is not None:
+                                    past_bars = bars[lookback_start_array:candle_start_array]
+                                else:
+                                    past_bars = []
+                            else:
+                                # Backtester mode
+                                candle_start_array = (tracking_idx // bars_per_candle) * bars_per_candle
+                                avg_volume_lookback_array = max(0, candle_start_array - (20 * bars_per_candle))
+                                past_bars = bars[avg_volume_lookback_array:candle_start_array]
+
+                            if past_bars:
+                                avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
+                                avg_candle_volume = avg_volume_per_bar * bars_per_candle
+                                volume_ratio = candle_volume / avg_candle_volume if avg_candle_volume > 0 else 1.0
+
+                                # Use CVD volume threshold (default 1.5x for CVD confirmations)
+                                cvd_volume_threshold = cvd_config.get('cvd_volume_threshold', 1.5)
+
+                                if volume_ratio < cvd_volume_threshold:
+                                    logger.info(f"[CVD_MONITORING] {symbol}: ❌ VOLUME FILTER - "
+                                               f"{candle_volume:,.0f} shares ({volume_ratio:.2f}x) < {cvd_volume_threshold:.1f}x threshold")
+                                    state.pending_strong_spike = False
+                                    tracker.reset_state(symbol)
+                                    return False, f"Volume filter: {volume_ratio:.2f}x < {cvd_volume_threshold:.1f}x", {'phase': 'volume_filter'}
+
+                                logger.info(f"[CVD_MONITORING] {symbol}: ✅ VOLUME PASSED - "
+                                           f"{candle_volume:,.0f} shares ({volume_ratio:.2f}x) >= {cvd_volume_threshold:.1f}x")
+
+                        # Run other filters
                         fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
                         if fails_stochastic:
                             state.pending_strong_spike = False
@@ -665,7 +720,48 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                             tracker.reset_state(symbol)
                             return False, f"Price rose above pivot", {'phase': 'cvd_price_reversal'}
 
-                        # Run filters
+                        # VOLUME FILTER (Oct 26, 2025 - Phase 11): ALL entry paths must check volume
+                        # Calculate 1-minute candle volume
+                        candle_bars = _get_candle_bars(bars, tracking_idx, bars_per_candle, bar_buffer, current_idx)
+                        if candle_bars and len(candle_bars) == bars_per_candle:
+                            candle_volume = sum(b.volume for b in candle_bars)
+
+                            # Calculate average volume (previous 20 1-minute candles)
+                            candle_start_abs = (tracking_idx // bars_per_candle) * bars_per_candle
+                            avg_volume_lookback_abs = max(0, candle_start_abs - (20 * bars_per_candle))
+
+                            if bar_buffer is not None:
+                                lookback_start_array = bar_buffer.map_absolute_to_array_index(avg_volume_lookback_abs)
+                                candle_start_array = bar_buffer.map_absolute_to_array_index(candle_start_abs)
+                                if lookback_start_array is not None and candle_start_array is not None:
+                                    past_bars = bars[lookback_start_array:candle_start_array]
+                                else:
+                                    past_bars = []
+                            else:
+                                # Backtester mode
+                                candle_start_array = (tracking_idx // bars_per_candle) * bars_per_candle
+                                avg_volume_lookback_array = max(0, candle_start_array - (20 * bars_per_candle))
+                                past_bars = bars[avg_volume_lookback_array:candle_start_array]
+
+                            if past_bars:
+                                avg_volume_per_bar = sum(b.volume for b in past_bars) / len(past_bars)
+                                avg_candle_volume = avg_volume_per_bar * bars_per_candle
+                                volume_ratio = candle_volume / avg_candle_volume if avg_candle_volume > 0 else 1.0
+
+                                # Use CVD volume threshold (default 1.5x for CVD confirmations)
+                                cvd_volume_threshold = cvd_config.get('cvd_volume_threshold', 1.5)
+
+                                if volume_ratio < cvd_volume_threshold:
+                                    logger.info(f"[CVD_MONITORING] {symbol}: ❌ VOLUME FILTER - "
+                                               f"{candle_volume:,.0f} shares ({volume_ratio:.2f}x) < {cvd_volume_threshold:.1f}x threshold")
+                                    state.pending_strong_spike = False
+                                    tracker.reset_state(symbol)
+                                    return False, f"Volume filter: {volume_ratio:.2f}x < {cvd_volume_threshold:.1f}x", {'phase': 'volume_filter'}
+
+                                logger.info(f"[CVD_MONITORING] {symbol}: ✅ VOLUME PASSED - "
+                                           f"{candle_volume:,.0f} shares ({volume_ratio:.2f}x) >= {cvd_volume_threshold:.1f}x")
+
+                        # Run other filters
                         fails_stochastic, stochastic_reason = strategy._check_stochastic_filter(symbol, side)
                         if fails_stochastic:
                             state.pending_strong_spike = False

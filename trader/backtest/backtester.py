@@ -19,6 +19,7 @@ import logging
 sys.path.append(str(Path(__file__).parent.parent))
 from strategy import PS60Strategy, PositionManager
 from data_processor import DataProcessor
+from utils import EntryDecisionLogger, capture_filter_data
 
 class PS60Backtester:
     """
@@ -101,6 +102,10 @@ class PS60Backtester:
         # Direction filters (for testing scanner quality)
         self.enable_shorts = self.config['trading'].get('enable_shorts', True)
         self.enable_longs = self.config['trading'].get('enable_longs', True)
+
+        # Entry Decision Logger (Oct 25, 2025)
+        # Logs ALL entry attempts (entered + blocked) with complete filter data
+        self.entry_logger = EntryDecisionLogger(self.test_date)
 
         # Slippage simulation (per requirements - use strategy config)
         self.entry_slippage = self.strategy.slippage_pct if self.strategy.slippage_enabled else 0.0
@@ -410,6 +415,13 @@ class PS60Backtester:
             self.save_trades_to_json()
             self.print_results()
 
+            # Entry Decision Logging (Oct 25, 2025)
+            # Save comprehensive entry decision data for validation
+            results_dir = Path(__file__).parent / 'results'
+            decision_file = self.entry_logger.save_to_json(results_dir)
+            print(f"\n💾 Saved entry decisions to: {decision_file}")
+            self.entry_logger.print_summary()
+
         finally:
             self.disconnect()
 
@@ -504,16 +516,16 @@ class PS60Backtester:
                 # Skip this bar - we MUST have tick data for CVD
                 continue
 
-            # Calculate CVD using tick data
+            # Calculate CVD using tick data (Oct 26, 2025 - Phase 2 Fix: Pass bar for price validation)
             try:
-                cvd_result = cvd_calculator.calculate_from_ticks(ticks)
+                cvd_result = cvd_calculator.calculate_from_ticks(ticks, bar=bar)
 
                 # Log progress every 30 bars
                 if bar_num % 30 == 0:
                     print(f"  Bar {bar_num}/{len(bars)}: CVD={cvd_result.cvd_value:.1f}, "
                           f"slope={cvd_result.cvd_slope:.1f}, trend={cvd_result.cvd_trend}")
 
-                # Build enriched bar data (Oct 22, 2025 - Phase 1 Fix: Added imbalance_pct)
+                # Build enriched bar data (Oct 26, 2025 - Phase 2 Fix: Added price validation fields)
                 enriched_bar = {
                     'minute': bar_num,
                     'timestamp': bar_timestamp.isoformat(),
@@ -530,10 +542,15 @@ class PS60Backtester:
                         'divergence': cvd_result.divergence,
                         'data_source': cvd_result.data_source,
                         'confidence': cvd_result.confidence,
-                        # NEW FIELDS (Oct 22, 2025 - Phase 1 Fix)
+                        # Phase 1 Fix (Oct 22, 2025)
                         'imbalance_pct': cvd_result.imbalance_pct,
                         'buy_volume': cvd_result.buy_volume,
-                        'sell_volume': cvd_result.sell_volume
+                        'sell_volume': cvd_result.sell_volume,
+                        # Phase 2 Fix (Oct 26, 2025) - Price validation
+                        'price_direction': cvd_result.price_direction,
+                        'price_change_pct': cvd_result.price_change_pct,
+                        'signals_aligned': cvd_result.signals_aligned,
+                        'validation_reason': cvd_result.validation_reason
                     }
                 }
 
@@ -597,12 +614,13 @@ class PS60Backtester:
 
     def backtest_day(self):
         """Backtest single trading day"""
-        # Detect market trend first (skip if no IBKR connection)
-        if self.ib and self.ib.isConnected():
-            self.market_trend = self.detect_market_trend()
-        else:
-            self.market_trend = 'NEUTRAL'  # Assume neutral when running from cache
-            print("⚠️  Skipping market trend detection (no IBKR connection)")
+        # DISABLED: Market trend detection (Oct 25, 2025)
+        # Was causing SPY fetch timeouts and not used in trading logic
+        # if self.ib and self.ib.isConnected():
+        #     self.market_trend = self.detect_market_trend()
+        # else:
+        #     self.market_trend = 'NEUTRAL'
+        self.market_trend = 'NEUTRAL'  # Always NEUTRAL (trend detection disabled)
 
         # Filter scanner using strategy module (score, R/R, distance)
         # Use enhanced filtering if enhanced scoring CSV was loaded
@@ -833,6 +851,81 @@ class PS60Backtester:
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - LONG confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
 
+                        # ═══════════════════════════════════════════════════════════════
+                        # ENTRY DECISION LOGGING (Oct 25, 2025)
+                        # ═══════════════════════════════════════════════════════════════
+                        # Log EVERY entry attempt (entered + blocked) with complete filter data
+                        # This enables validation of backtest results:
+                        #   - Find missed valid entries (all filters passed but didn't enter)
+                        #   - Identify invalid breakouts (conflicting signals but entered anyway)
+                        #   - Analyze filter effectiveness (which filters block most?)
+                        #   - Optimize filter parameters (test different thresholds)
+                        #
+                        # Output: backtest/results/backtest_entry_decisions_YYYYMMDD.json
+                        # ═══════════════════════════════════════════════════════════════
+
+                        # Capture filter data at decision time
+                        entry_path_data = {
+                            'volume_ratio': entry_state.get('volume_ratio', 0),
+                            'volume_threshold': self.strategy.momentum_volume_threshold,
+                            'candle_size_pct': entry_state.get('candle_size_pct', 0),
+                            'candle_threshold_pct': self.strategy.momentum_candle_min_pct,
+                            'path_chosen': entry_state.get('phase', 'unknown')
+                        }
+
+                        # COMPREHENSIVE FILTER EVALUATION (Oct 26, 2025)
+                        # If state machine provided comprehensive filter results, use those directly
+                        # Otherwise fall back to old capture_filter_data() for backwards compatibility
+                        if 'all_filters' in entry_state:
+                            # Use comprehensive results from state machine
+                            filters = entry_state['all_filters']
+                        else:
+                            # Fall back to old extraction method
+                            filters = capture_filter_data(
+                                self.strategy, bars, bar_count - 1, 'LONG',
+                                entry_path_data, target_price=highest_target,
+                                symbol=stock['symbol'],
+                                entry_state=entry_state
+                            )
+
+                        # CRITICAL FIX (Oct 26, 2025): Prioritize actual filter blocking reasons
+                        # Problem: confirm_reason shows "Breakout detected, waiting for candle close"
+                        #          even when stochastic/CVD/other filters already blocked entry
+                        # Solution: Check filters dict for BLOCK results, use their reason instead
+                        actual_reason = confirm_reason  # Default to hybrid entry reason
+                        if not confirmed and filters:
+                            # Search for the first filter that blocked
+                            for filter_name, filter_data in filters.items():
+                                if isinstance(filter_data, dict) and filter_data.get('result') == 'BLOCK':
+                                    filter_reason = filter_data.get('reason', 'Filter blocked')
+                                    actual_reason = f"Breakout rejected: {filter_name.replace('_', ' ').title()} ({filter_reason})"
+                                    break  # Use first blocking filter found
+
+                        # Log this entry attempt
+                        self.entry_logger.log_entry_attempt(
+                            timestamp=timestamp,
+                            symbol=stock['symbol'],
+                            side='LONG',
+                            bar_idx=bar_count,
+                            price=price,
+                            pivot_data={
+                                'resistance': resistance,
+                                'support': support,
+                                'through_pivot': True  # Passed should_enter_long
+                            },
+                            pivot_checks={
+                                'price_vs_pivot': 'PASS',
+                                'attempt_count': f'{long_attempts}/{max_attempts}',
+                                'avoid_list': 'PASS' if stock['symbol'] not in self.strategy.avoid_symbols else 'FAIL',
+                                'position_size': 'PASS'  # Calculated in should_enter_long
+                            },
+                            entry_path=entry_path_data,
+                            filters=filters,
+                            decision='ENTERED' if confirmed else 'BLOCKED',
+                            phase=entry_state.get('phase', 'unknown'),
+                            reason=actual_reason  # Use actual blocking reason, not generic confirm_reason
+                        )
+
                         # CVD Analytics (Oct 19, 2025): Track CVD filter blocks
                         if not confirmed and entry_state.get('phase') == 'cvd_filter':
                             self.cvd_analytics['total_blocks'] += 1
@@ -901,6 +994,75 @@ class PS60Backtester:
                         )
 
                         self.logger.debug(f"{symbol} Bar {bar_count} - SHORT confirmation: confirmed={confirmed}, reason='{confirm_reason}', entry_state='{entry_state}'")
+
+                        # ═══════════════════════════════════════════════════════════════
+                        # ENTRY DECISION LOGGING (Oct 25, 2025)
+                        # ═══════════════════════════════════════════════════════════════
+                        # Log EVERY entry attempt (entered + blocked) with complete filter data
+                        # See LONG entry logging above for detailed explanation
+                        # ═══════════════════════════════════════════════════════════════
+
+                        # Capture filter data at decision time
+                        entry_path_data = {
+                            'volume_ratio': entry_state.get('volume_ratio', 0),
+                            'volume_threshold': self.strategy.momentum_volume_threshold,
+                            'candle_size_pct': entry_state.get('candle_size_pct', 0),
+                            'candle_threshold_pct': self.strategy.momentum_candle_min_pct,
+                            'path_chosen': entry_state.get('phase', 'unknown')
+                        }
+
+                        # COMPREHENSIVE FILTER EVALUATION (Oct 26, 2025)
+                        # If state machine provided comprehensive filter results, use those directly
+                        # Otherwise fall back to old capture_filter_data() for backwards compatibility
+                        if 'all_filters' in entry_state:
+                            # Use comprehensive results from state machine
+                            filters = entry_state['all_filters']
+                        else:
+                            # Fall back to old extraction method
+                            filters = capture_filter_data(
+                                self.strategy, bars, bar_count - 1, 'SHORT',
+                                entry_path_data, target_price=lowest_downside,
+                                symbol=stock['symbol'],
+                                entry_state=entry_state
+                            )
+
+                        # CRITICAL FIX (Oct 26, 2025): Prioritize actual filter blocking reasons
+                        # Problem: confirm_reason shows "Breakout detected, waiting for candle close"
+                        #          even when stochastic/CVD/other filters already blocked entry
+                        # Solution: Check filters dict for BLOCK results, use their reason instead
+                        actual_reason = confirm_reason  # Default to hybrid entry reason
+                        if not confirmed and filters:
+                            # Search for the first filter that blocked
+                            for filter_name, filter_data in filters.items():
+                                if isinstance(filter_data, dict) and filter_data.get('result') == 'BLOCK':
+                                    filter_reason = filter_data.get('reason', 'Filter blocked')
+                                    actual_reason = f"Breakout rejected: {filter_name.replace('_', ' ').title()} ({filter_reason})"
+                                    break  # Use first blocking filter found
+
+                        # Log this entry attempt
+                        self.entry_logger.log_entry_attempt(
+                            timestamp=timestamp,
+                            symbol=stock['symbol'],
+                            side='SHORT',
+                            bar_idx=bar_count,
+                            price=price,
+                            pivot_data={
+                                'resistance': resistance,
+                                'support': support,
+                                'through_pivot': True  # Passed should_enter_short
+                            },
+                            pivot_checks={
+                                'price_vs_pivot': 'PASS',
+                                'attempt_count': f'{short_attempts}/{max_attempts}',
+                                'avoid_list': 'PASS' if stock['symbol'] not in self.strategy.avoid_symbols else 'FAIL',
+                                'position_size': 'PASS'  # Calculated in should_enter_short
+                            },
+                            entry_path=entry_path_data,
+                            filters=filters,
+                            decision='ENTERED' if confirmed else 'BLOCKED',
+                            phase=entry_state.get('phase', 'unknown'),
+                            reason=actual_reason  # Use actual blocking reason, not generic confirm_reason
+                        )
 
                         # CVD Analytics (Oct 19, 2025): Track CVD filter blocks
                         if not confirmed and entry_state.get('phase') == 'cvd_filter':

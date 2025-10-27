@@ -345,7 +345,7 @@ filters:
 # Applied to: ALL entry paths (momentum, pullback, sustained)
 # Documentation: See explained/STOCHASTIC_21_1_3_EXPLAINED.md
 stochastic:
-  enabled: true                     # Enable stochastic confirmation filter
+  enabled: false                    # Enable stochastic confirmation filter (DISABLED - Oct 26, 2025)
   k_period: 21                      # Lookback period (21 hourly bars = ~2.5 days)
   k_smooth: 1                       # %K smoothing (1 = no smoothing, raw stochastic)
   d_smooth: 3                       # %D smoothing (3-period SMA of %K)
@@ -436,6 +436,12 @@ confirmation:
     # Calculation settings
     slope_lookback: 5                        # Number of bars for slope calculation
                                              # 5 bars = ~5 minutes of data for trend detection
+
+    # Volume Filter for CVD_MONITORING (Phase 11 - Oct 26, 2025)
+    # ALL entry paths must pass volume threshold (user requirement)
+    cvd_volume_threshold: 1.5                # ✅ NEW: 1.5x average volume required for CVD entries
+                                             # Applies to CVD_MONITORING state (aggressive + patient paths)
+                                             # Ensures breakout has sufficient participation
 
     # Divergence settings (warning only, doesn't block)
     detect_divergence: true                  # Warn on price/CVD divergence
