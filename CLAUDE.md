@@ -828,6 +828,309 @@ python3 trader.py --config config/trader_config.yaml
 
 ---
 
+## 🚀 Complete Usage Guide: Live Trading, Backtesting & Validation
+
+### 1. Starting the Live Trader
+
+**Prerequisites:**
+- ✅ TWS/Gateway running on port 7497 (paper trading) or 7496 (live)
+- ✅ Scanner results generated for today: `stockscanner/output/scanner_results_YYYYMMDD.json`
+- ✅ Account size configured in `trader/config/trader_config.yaml` (default: $50,000)
+
+**Command:**
+```bash
+cd /Users/karthik/projects/DayTrader/trader
+python3 trader.py
+```
+
+**What Happens:**
+1. **Automatic Cleanup**:
+   - Cancels all pending orders
+   - Closes any orphaned positions from previous sessions
+   - Verifies clean slate before starting
+
+2. **Scanner Loading**:
+   - Automatically loads `scanner_results_YYYYMMDD.json` based on today's date
+   - Example: On 2025-10-28, loads `scanner_results_20251028.json`
+   - Filters setups by score, R/R ratio, and gap analysis
+
+3. **Market Data Subscription**:
+   - Subscribes to real-time data for all watchlist symbols
+   - Monitors tick-by-tick price action
+
+4. **Trading Session**:
+   - Entry window: 9:45 AM - 3:00 PM ET
+   - EOD close: 3:55 PM ET (automatic)
+   - All positions closed by market close
+
+**Monitoring the Session:**
+```bash
+# Watch live logs (in another terminal)
+tail -f logs/live_session_YYYYMMDD.log
+
+# Filter for trades only
+tail -f logs/live_session_YYYYMMDD.log | grep -E "🟢|🔴|ENTERING|EXIT|P&L"
+
+# Check watchlist status
+grep "WATCHLIST\|Subscribed" logs/live_session_YYYYMMDD.log
+```
+
+**Stopping the Trader:**
+```bash
+# Graceful shutdown (recommended)
+Ctrl+C
+
+# What happens:
+# - Closes all open positions
+# - Saves session state
+# - Generates P&L summary
+# - Disconnects from IBKR
+```
+
+**Output Files:**
+- `logs/trader_YYYYMMDD.log` - Detailed trading log with all decisions
+- `logs/trades_YYYYMMDD.json` - JSON trade records
+- `logs/live_entry_decisions_YYYYMMDD.json` - All entry attempts with filter results
+- `logs/trader_state.json` - Session state (for recovery)
+
+---
+
+### 2. Running Backtests
+
+**Prerequisites:**
+- ✅ Scanner results file for the date you want to test
+- ✅ IBKR connection (for fetching historical data)
+- ✅ Historical data cached in `backtest/data/SYMBOL_YYYYMMDD_*.json` (or will be downloaded)
+
+**Basic Backtest (Single Day):**
+```bash
+cd /Users/karthik/projects/DayTrader/trader
+
+# Backtest a specific date
+python3 backtest/backtester.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --date 2025-10-21 \
+  --account-size 50000
+```
+
+**Output:**
+```
+================================================================================
+BACKTEST RESULTS
+================================================================================
+
+📊 TRADE SUMMARY:
+  Total trades: 8
+  Winners: 1 (12.5%)
+  Losers: 7 (87.5%)
+
+💰 P&L ANALYSIS:
+  Total P&L: $-2,478.87
+  Avg trade: $-309.86
+  Avg winner: $15.92
+  Avg loser: $-356.40
+  Profit factor: 0.01
+
+⏱️  TRADE DURATION:
+  Avg duration: 4.9 minutes
+
+🎯 EXIT REASONS:
+  7MIN_RULE: 3 trades
+  STOP: 5 trades
+```
+
+**Advanced Options:**
+```bash
+# Backtest with custom account size
+python3 backtest/backtester.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --date 2025-10-21 \
+  --account-size 100000
+
+# Backtest will use cached data if available, otherwise downloads from IBKR
+```
+
+**Output Files:**
+- `backtest/results/backtest_trades_YYYYMMDD.json` - All trade records
+- `backtest/results/backtest_entry_decisions_YYYYMMDD.json` - Complete entry decision log
+- `backtest/logs/backtest_YYYYMMDD_HHMMSS.log` - Detailed backtest log
+
+**Understanding Entry Decisions File:**
+```json
+{
+  "backtest_date": "2025-10-21",
+  "total_attempts": 265,
+  "entered": 8,
+  "blocked": 257,
+  "blocks_by_filter": {
+    "unknown": 134,
+    "volume_filter": 72,
+    "cvd_monitoring": 32,
+    "cvd_price_validation_failed": 17,
+    "room_to_run_filter": 2
+  }
+}
+```
+
+This shows:
+- **97% block rate** - Filters are working (maybe too strict?)
+- **Volume filter blocking 28%** of attempts
+- **CVD monitoring blocking 12.5%** - Never confirms
+
+---
+
+### 3. Running Validation Analysis
+
+**Prerequisites:**
+- ✅ Scanner results file
+- ✅ Backtest entry decisions file (generated from backtest)
+- ✅ IBKR connection (for fetching actual market outcomes)
+
+**Basic Validation:**
+```bash
+cd /Users/karthik/projects/DayTrader/trader
+
+# Validate a backtest against actual market outcomes
+python3 validation/validate_market_outcomes.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --entry-log backtest/results/backtest_entry_decisions_20251021.json \
+  --date 2025-10-21 \
+  --account-size 50000
+```
+
+**What It Does:**
+1. **Loads scanner setups** - What stocks were identified pre-market
+2. **Loads entry decisions** - What the strategy decided (ENTERED or BLOCKED)
+3. **Fetches market data** - Gets actual 1-minute bars from IBKR for the day
+4. **Classifies outcomes**:
+   - ✅ **WINNER**: Price moved ≥2% in breakout direction
+   - ⚠️ **MODERATE**: Price moved 1-2%
+   - ❌ **STOPPED_OUT**: Would have hit stop (0.5-1% move)
+   - 🔴 **CHOPPY**: False breakout (<0.5% move)
+
+5. **Generates comprehensive report** showing:
+   - **Missed winners**: Setups that were BLOCKED but became winners
+   - **Correct blocks**: Setups that were BLOCKED and failed (good filter!)
+   - **Bad entries**: Setups that were ENTERED but lost
+   - **Correct entries**: Setups that were ENTERED and won
+
+**Output:**
+```
+================================================================================
+VALIDATION REPORT - 2025-10-21
+================================================================================
+
+DECISION ACCURACY
+  Correct Entries: 1/8 (12.5%)
+  Correct Blocks: 12/257 (4.7%)
+  Overall Accuracy: 13/265 (4.9%)
+
+⭐⭐⭐⭐⭐ MISSED WINNERS (High Priority)
+  1. NVDA SHORT (+8.5%)
+     Entry confirmation sequence (4 attempts):
+       Attempt 1 [State Init]: Breakout detected, waiting for candle close
+       Attempt 2 [Filter Result]: BLOCKED by volume_filter (0.93x < 1.0x)
+       Attempt 3 [State Init]: Breakout detected, waiting for candle close
+       Attempt 4 [Filter Result]: BLOCKED by volume_filter (0.97x < 1.0x)
+
+     Analysis: Volume filter too strict - missed by 0.03x!
+     Recommendation: Lower volume threshold from 1.0x to 0.75x
+
+  2. SMCI LONG (+12.2%)
+     Entry confirmation sequence (6 attempts):
+       Attempt 1-6: All blocked by volume filter (0.55x-0.72x)
+
+     Analysis: Consistent volume rejection across all attempts
+     Recommendation: Volume threshold needs adjustment
+```
+
+**Output Files:**
+- `validation/reports/validation_results_YYYYMMDD.json` - Machine-readable validation data
+- Terminal output with color-coded analysis
+
+---
+
+### 4. Complete Analysis Workflow
+
+**Daily Post-Market Analysis (Recommended):**
+
+```bash
+cd /Users/karthik/projects/DayTrader/trader
+
+# Step 1: Run backtest for today
+python3 backtest/backtester.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --date 2025-10-21 \
+  --account-size 50000
+
+# Step 2: Validate backtest against market outcomes
+python3 validation/validate_market_outcomes.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --entry-log backtest/results/backtest_entry_decisions_20251021.json \
+  --date 2025-10-21 \
+  --account-size 50000
+
+# Step 3: Review validation report
+cat validation/reports/validation_results_20251021.json | python3 -m json.tool
+
+# Step 4: Generate session analysis (if live trading)
+# Ask Claude: "analyze today's session" (see Session Reporting section)
+```
+
+**Weekly/Monthly Analysis:**
+```bash
+# Run backtests for date range
+for date in 20251021 20251022 20251023; do
+  python3 backtest/backtester.py \
+    --scanner ../stockscanner/output/scanner_results_$date.json \
+    --date ${date:0:4}-${date:4:2}-${date:6:2} \
+    --account-size 50000
+done
+
+# Aggregate results
+python3 validation/analyze_weekly_performance.py --start 2025-10-21 --end 2025-10-25
+```
+
+---
+
+### 5. Quick Reference Commands
+
+**Start Live Trading:**
+```bash
+cd /Users/karthik/projects/DayTrader/trader && python3 trader.py
+```
+
+**Run Today's Backtest:**
+```bash
+cd /Users/karthik/projects/DayTrader/trader && \
+python3 backtest/backtester.py \
+  --scanner ../stockscanner/output/scanner_results_$(date +%Y%m%d).json \
+  --date $(date +%Y-%m-%d) \
+  --account-size 50000
+```
+
+**Validate Today's Backtest:**
+```bash
+cd /Users/karthik/projects/DayTrader/trader && \
+python3 validation/validate_market_outcomes.py \
+  --scanner ../stockscanner/output/scanner_results_$(date +%Y%m%d).json \
+  --entry-log backtest/results/backtest_entry_decisions_$(date +%Y%m%d).json \
+  --date $(date +%Y-%m-%d) \
+  --account-size 50000
+```
+
+**Monitor Live Session:**
+```bash
+tail -f /Users/karthik/projects/DayTrader/trader/logs/live_session_$(date +%Y%m%d).log
+```
+
+**Check Today's Trades:**
+```bash
+cat /Users/karthik/projects/DayTrader/trader/logs/trades_$(date +%Y%m%d).json | python3 -m json.tool
+```
+
+---
+
 ## 📊 Session Reporting (October 23, 2025)
 
 ### Automated Session Analysis
