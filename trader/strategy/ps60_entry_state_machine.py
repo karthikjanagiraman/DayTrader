@@ -511,6 +511,9 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
             return False, f"CVD monitoring timeout ({time_elapsed:.1f} min)", {}
 
         # Wait for 1-minute candle close
+        # bars_per_candle dynamically calculated:
+        #   - 1-min bars: bars_per_candle=1 (check every bar since each bar IS a candle)
+        #   - 5-sec bars: bars_per_candle=12 (check only on bar 11 = candle close)
         bars_into_candle = tracking_idx % bars_per_candle
         if bars_into_candle < (bars_per_candle - 1):
             return False, f"CVD monitoring: waiting for candle close ({bars_into_candle}/{bars_per_candle})", {
@@ -604,6 +607,21 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                     logger.info(f"[CVD_MONITORING] {symbol} Bar {current_idx}: "
                                f"✅ CVD from TICKS: imbalance={imbalance_pct:.1f}%, trend={cvd_trend}, "
                                f"buy={cvd_result.buy_volume:.0f}, sell={cvd_result.sell_volume:.0f}")
+
+                    # CANDLE COLOR VALIDATION (Oct 27, 2025 - Phase 11)
+                    # Check if CVD signal aligns with candle color (same as cached path)
+                    signals_aligned = cvd_result.signals_aligned
+                    validation_reason = cvd_result.validation_reason
+
+                    if not signals_aligned:
+                        logger.info(f"[CVD_MONITORING] {symbol}: ❌ CANDLE COLOR CONFLICT - {validation_reason}")
+                        tracker.reset_state(symbol)
+                        return False, f"Candle color conflict: {validation_reason}", {
+                            'phase': 'cvd_candle_color_conflict'
+                        }
+
+                    logger.debug(f"[CVD_MONITORING] {symbol}: ✅ CANDLE COLOR VALIDATION PASSED")
+
                 except ValueError as e:
                     # No tick data available - FAIL EXPLICITLY
                     logger.error(f"[CVD_MONITORING] {symbol} Bar {current_idx}: CVD FAILURE - {str(e)}")

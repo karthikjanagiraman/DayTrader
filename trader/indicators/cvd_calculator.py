@@ -347,13 +347,15 @@ class CVDCalculator:
         Oct 21, 2025: Removed bar approximation fallback. System must provide tick data
         or explicitly handle the failure. No silent fallbacks to inaccurate methods.
 
+        Oct 27, 2025: Added candle color validation by passing bar to calculate_from_ticks
+
         Args:
-            bars: Bar data (NOT USED - kept for interface compatibility)
-            current_idx: Current bar index (NOT USED)
+            bars: Bar data (used for candle color validation)
+            current_idx: Current bar index
             ticks: REQUIRED tick data for accurate CVD
 
         Returns:
-            CVDResult from tick data ONLY
+            CVDResult from tick data with candle color validation
 
         Raises:
             ValueError: If no tick data is available
@@ -361,7 +363,12 @@ class CVDCalculator:
         if ticks and len(ticks) > 0:
             # Use tick data - the ONLY acceptable source
             logger.info(f"✅ CVD: Using TICK data ({len(ticks)} ticks)")
-            return self.calculate_from_ticks(ticks)
+
+            # CANDLE COLOR VALIDATION (Oct 27, 2025 - Phase 11)
+            # Pass current bar to enable candle color alignment check
+            current_bar = bars[current_idx] if bars and current_idx < len(bars) else None
+
+            return self.calculate_from_ticks(ticks, bar=current_bar)
         else:
             # FAIL EXPLICITLY - no approximations allowed
             error_msg = f"❌ CVD FAILURE: No tick data available at bar {current_idx}. Cannot calculate accurate CVD."

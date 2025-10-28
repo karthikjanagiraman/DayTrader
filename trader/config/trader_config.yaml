@@ -418,16 +418,18 @@ confirmation:
     # Formula: imbalance_pct = (sell_volume - buy_volume) / total_volume * 100
     #   Positive = more selling (BEARISH), Negative = more buying (BULLISH)
 
-    # Sustained CVD threshold (consecutive candles)
-    imbalance_threshold: 10.0                # ⭐ RELAXED: 10% imbalance = directional trend (Oct 23, 2025 - Phase 10 tuning)
-                                             # Continuously checks for 3 consecutive candles ≥10% (no reset on failure)
-                                             # Buy=18k, Sell=22k, Total=40k → (22-18)/40*100 = 10% → BEARISH ✓
-                                             # Buy=22k, Sell=18k, Total=40k → (18-22)/40*100 = -10% → BULLISH ✓
+    # Sustained CVD threshold (consecutive candles) - PATH 2 (PATIENT)
+    imbalance_threshold: 2.0                 # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): 2% sustained imbalance
+                                             # For LONG: 3 consecutive candles with ≥2% buying pressure
+                                             # For SHORT: 3 consecutive candles with ≥2% selling pressure
+                                             # Balanced approach: Not too strict (10%) or too loose (0.1%)
+                                             # Other filters (volume, price, stochastic, room-to-run) provide validation
 
-    # Strong CVD spike threshold (aggressive path with confirmation)
-    strong_imbalance_threshold: 30.0         # ⭐ RELAXED: 30% imbalance on initial candle (Oct 23, 2025 - Phase 10 tuning)
-                                             # Initial candle must be ≥30%, PLUS next candle ≥10% to confirm
-    strong_confirmation_threshold: 10.0      # ⭐ NEW: Next candle must also show ≥10% imbalance (prevents false spikes)
+    # Strong CVD spike threshold (aggressive path with confirmation) - PATH 1 (AGGRESSIVE)
+    strong_imbalance_threshold: 10.0         # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): >10% imbalance on initial candle
+                                             # Initial candle must be >10%, PLUS next candle >5% to confirm
+    strong_confirmation_threshold: 5.0       # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): Next candle must show >5% imbalance
+                                             # Volume spike + strong CVD confirmation = high-quality entry
 
     # Reset logic
     reset_on_opposite_trend: true            # Reset counter if CVD reverses trend
