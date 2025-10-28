@@ -343,11 +343,9 @@ class DataProcessor:
                 self.log(f"    No bars data found", 'WARNING')
                 return False
 
-            # Create CVD calculator
+            # Create CVD calculator (Oct 27, 2025 - Cleaned up deprecated parameters)
             cvd_calculator = CVDCalculator(
                 slope_lookback=self.cvd_config.get('slope_lookback', 5),
-                bullish_threshold=self.cvd_config.get('bullish_slope_threshold', 1000),
-                bearish_threshold=self.cvd_config.get('bearish_slope_threshold', -1000),
                 imbalance_threshold=self.cvd_config.get('imbalance_threshold', 10.0)
             )
 

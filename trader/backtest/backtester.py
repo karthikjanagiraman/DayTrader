@@ -487,14 +487,12 @@ class PS60Backtester:
 
         print(f"✓ Fetched {len(bars)} 1-minute bars")
 
-        # Create persistent CVD calculator (Oct 22, 2025 - Phase 1 Fix: Added imbalance_threshold)
+        # Create persistent CVD calculator (Oct 27, 2025 - Cleaned up deprecated parameters)
         # This calculator accumulates history across ALL bars
         cvd_config = self.config.get('confirmation', {}).get('cvd', {})
         cvd_calculator = CVDCalculator(
             slope_lookback=cvd_config.get('slope_lookback', 5),
-            bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
-            bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
-            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
+            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)
         )
 
         # Build enriched bars

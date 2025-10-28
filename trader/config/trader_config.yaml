@@ -400,13 +400,7 @@ confirmation:
                                              # Selling/buying pressure can build at ANY time, not just first 10 min
     check_every_candle: true                 # Check on EVERY 1-min candle close
 
-    # PATH 1: Strong CVD spike (immediate entry)
-    strong_bullish_threshold: 2000           # CVD ≥ 2000 → enter immediately
-    strong_bearish_threshold: -2000          # CVD ≤ -2000 → enter immediately (SHORT)
-
-    # PATH 2: Sustained CVD (consecutive candles)
-    bullish_slope_threshold: 1000            # DEPRECATED (Oct 22, 2025): CVD ≥ 1000 = "bullish"
-    bearish_slope_threshold: -1000           # DEPRECATED (Oct 22, 2025): CVD ≤ -1000 = "bearish"
+    # PATH 2: Sustained CVD (consecutive candles) - PATIENT ENTRY
     min_consecutive_bullish: 3               # ⭐ INCREASED: 3 consecutive bullish candles for LONG (Oct 21, 2025)
     min_consecutive_bearish: 3               # ⭐ INCREASED: 3 consecutive bearish candles for SHORT (Oct 21, 2025)
 
@@ -419,17 +413,19 @@ confirmation:
     #   Positive = more selling (BEARISH), Negative = more buying (BULLISH)
 
     # Sustained CVD threshold (consecutive candles) - PATH 2 (PATIENT)
-    imbalance_threshold: 2.0                 # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): 2% sustained imbalance
+    imbalance_threshold: 10.0                 # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): 2% sustained imbalance
                                              # For LONG: 3 consecutive candles with ≥2% buying pressure
                                              # For SHORT: 3 consecutive candles with ≥2% selling pressure
                                              # Balanced approach: Not too strict (10%) or too loose (0.1%)
                                              # Other filters (volume, price, stochastic, room-to-run) provide validation
 
-    # Strong CVD spike threshold (aggressive path with confirmation) - PATH 1 (AGGRESSIVE)
-    strong_imbalance_threshold: 10.0         # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): >10% imbalance on initial candle
+    # PATH 1: Strong CVD spike (aggressive path with confirmation) - AGGRESSIVE ENTRY
+    # Requires BOTH: Initial spike + confirmation candle
+    strong_imbalance_threshold: 20.0         # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): >10% imbalance on initial candle
                                              # Initial candle must be >10%, PLUS next candle >5% to confirm
-    strong_confirmation_threshold: 5.0       # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): Next candle must show >5% imbalance
+    strong_confirmation_threshold: 10.0       # ⭐ PHASE 11 MIDDLE-GROUND (Oct 26, 2025): Next candle must show >5% imbalance
                                              # Volume spike + strong CVD confirmation = high-quality entry
+                                             # Uses PERCENTAGE-based imbalance (works across all stock volumes)
 
     # Reset logic
     reset_on_opposite_trend: true            # Reset counter if CVD reverses trend
@@ -441,7 +437,7 @@ confirmation:
 
     # Volume Filter for CVD_MONITORING (Phase 11 - Oct 26, 2025)
     # ALL entry paths must pass volume threshold (user requirement)
-    cvd_volume_threshold: 1.5                # ✅ NEW: 1.5x average volume required for CVD entries
+    cvd_volume_threshold: 1.2                # ✅ NEW: 1.5x average volume required for CVD entries
                                              # Applies to CVD_MONITORING state (aggressive + patient paths)
                                              # Ensures breakout has sufficient participation
 

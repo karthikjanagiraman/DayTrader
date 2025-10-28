@@ -1077,14 +1077,99 @@ python3 validation/validate_market_outcomes.py \
 
 ---
 
+## October 27, 2025 Analysis Results
+
+### Critical Findings
+
+**Decision Accuracy**: Only 36% (9 correct blocks out of 25 decisions)
+
+#### Missed Winners Analysis (16 Total)
+- **Perfect 5-Star Winners**: 2 trades that hit ALL checkpoints
+  - NVDA SHORT @ 09:41: Blocked by volume (0.93x, 0.97x vs 1.0x threshold)
+  - PATH LONG @ 10:31: Blocked by CVD monitoring that never confirmed
+
+- **High-Value 3-Star Winners**: 6 SMCI trades hitting 2 checkpoints
+  - All blocked by volume filter (0.57x to 0.80x)
+
+- **Estimated Lost P&L**: $8,930 in missed opportunities
+
+#### Losing Trades Analysis (6 Total)
+- Total losses: -$1,501.94
+- 7-minute rule saved $1,540 by avoiding full stops
+- 4 of 6 exits via 7-minute rule (average -$122 vs -$507 for stops)
+
+### Root Causes Identified
+
+1. **Volume Filter Too Strict** (Biggest Issue)
+   - Current: 1.0x threshold
+   - Blocking at 0.93x, 0.97x (missing by <7%)
+   - Recommendation: Lower to 0.75x
+
+2. **CVD Monitoring Rarely Confirms**
+   - 94 blocks, never confirms entry
+   - Current: 10% imbalance for 3 candles
+   - Recommendation: Lower to 5%
+
+3. **Filter Configuration Issues**
+   - 98.6% of attempts blocked
+   - Only 1.4% entry rate
+
+### Enhanced Validator Script
+
+**File**: `validation/enhanced_validator.py`
+
+**Features**:
+- Automatic missed winner detection using IBKR market data
+- Confirmation sequence tracking (all retry attempts)
+- Filter effectiveness measurement
+- Financial impact calculation
+- Automated recommendations
+
+**Usage**:
+```bash
+python3 validation/enhanced_validator.py \
+  --scanner ../stockscanner/output/scanner_results_20251021.json \
+  --entry-log backtest/results/backtest_entry_decisions_20251021.json \
+  --trade-log backtest/results/backtest_trades_20251021.json \
+  --date 2025-10-21 \
+  --account-size 50000
+```
+
+### Recommended Configuration Changes
+
+```yaml
+# Current (losing)
+confirmation:
+  momentum_volume_threshold: 1.0
+  cvd:
+    imbalance_threshold: 10.0
+    strong_imbalance_threshold: 20.0
+    cvd_volume_threshold: 1.2
+
+# Recommended (optimized)
+confirmation:
+  momentum_volume_threshold: 0.75  # ← CRITICAL
+  cvd:
+    imbalance_threshold: 5.0  # ← IMPORTANT
+    strong_imbalance_threshold: 15.0
+    strong_confirmation_threshold: 7.0
+    cvd_volume_threshold: 1.0
+```
+
+### Expected Impact After Changes
+
+- Capture 50% of missed winners: +$4,465/day
+- Reduce losses by 50%: +$751/day
+- **Net improvement**: +$5,216/day
+
 ## Next Steps
 
-1. **Implement Phase 1 scripts** (find_missed_entries.py, find_invalid_breakouts.py)
-2. **Run on Oct 21 data** (first validation test)
-3. **Fix any bugs found** in entry logic or filters
-4. **Iterate** until zero discrepancies
-5. **Deploy** to daily workflow
+1. **Apply configuration changes** to trader_config.yaml
+2. **Re-run October 21 backtest** with new settings
+3. **Validate improvements** with enhanced_validator.py
+4. **Test on October 22-25** data
+5. **Deploy to paper trading** if improvement confirmed
 
 ---
 
-**Ready to start building validation scripts!** 🚀
+**Enhanced validation system operational!** 🚀

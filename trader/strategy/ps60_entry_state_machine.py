@@ -64,12 +64,10 @@ def _check_cvd_filter(strategy, symbol, bars, current_idx, side, bar_timestamp=N
         return False, None
 
     try:
-        # Initialize CVD calculator (Oct 22, 2025 - Phase 1 Fix: Added imbalance_threshold)
+        # Initialize CVD calculator (Oct 27, 2025 - Cleaned up deprecated parameters)
         calculator = CVDCalculator(
             slope_lookback=cvd_config.get('slope_lookback', 5),
-            bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
-            bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
-            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
+            imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)
         )
 
         # Get tick data if available
@@ -592,9 +590,7 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                 from indicators.cvd_calculator import CVDCalculator
                 calculator = CVDCalculator(
                     slope_lookback=cvd_config.get('slope_lookback', 5),
-                    bullish_threshold=cvd_config.get('bullish_slope_threshold', 1000),
-                    bearish_threshold=cvd_config.get('bearish_slope_threshold', -1000),
-                    imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)  # NEW: Percentage-based threshold
+                    imbalance_threshold=cvd_config.get('imbalance_threshold', 10.0)
                 )
 
                 # CVD calculation WILL FAIL if no tick data - this is intentional

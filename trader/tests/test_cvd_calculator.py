@@ -37,7 +37,7 @@ class TestCVDCalculatorBarMode:
 
     def test_bar_approximation_bullish(self):
         """Test CVD calculation from bars - bullish case (closes in upper half)"""
-        calculator = CVDCalculator(slope_lookback=3, bullish_threshold=1000, bearish_threshold=-1000)
+        calculator = CVDCalculator(slope_lookback=3)
 
         # Create mock bars with closes in upper half of range (bullish)
         bars = [
@@ -63,7 +63,7 @@ class TestCVDCalculatorBarMode:
 
     def test_bar_approximation_bearish(self):
         """Test CVD calculation from bars - bearish case (closes in lower half)"""
-        calculator = CVDCalculator(slope_lookback=3, bullish_threshold=1000, bearish_threshold=-1000)
+        calculator = CVDCalculator(slope_lookback=3)
 
         # Create mock bars with closes in lower half of range (bearish)
         bars = [
@@ -85,7 +85,7 @@ class TestCVDCalculatorBarMode:
 
     def test_divergence_bullish(self):
         """Test bullish divergence detection (price down, CVD up)"""
-        calculator = CVDCalculator(slope_lookback=5, bullish_threshold=1000, bearish_threshold=-1000)
+        calculator = CVDCalculator(slope_lookback=5)
 
         # Bullish divergence: price declining but CVD increasing (buying on dips)
         bars = [
@@ -117,7 +117,7 @@ class TestCVDCalculatorBarMode:
 
     def test_divergence_bearish(self):
         """Test bearish divergence detection (price up, CVD down)"""
-        calculator = CVDCalculator(slope_lookback=5, bullish_threshold=1000, bearish_threshold=-1000)
+        calculator = CVDCalculator(slope_lookback=5)
 
         # Bearish divergence: price rising but CVD decreasing (selling into strength)
         bars = [
@@ -173,7 +173,7 @@ class TestCVDCalculatorTickMode:
 
     def test_tick_data_bullish(self):
         """Test CVD from tick data - bullish (upticks dominate)"""
-        calculator = CVDCalculator(slope_lookback=5, bullish_threshold=100, bearish_threshold=-100)
+        calculator = CVDCalculator(slope_lookback=5, imbalance_threshold=10.0)
 
         # Create mock ticks with more upticks (bullish)
         ticks = [
@@ -200,7 +200,7 @@ class TestCVDCalculatorTickMode:
 
     def test_tick_data_bearish(self):
         """Test CVD from tick data - bearish (downticks dominate)"""
-        calculator = CVDCalculator(slope_lookback=5, bullish_threshold=100, bearish_threshold=-100)
+        calculator = CVDCalculator(slope_lookback=5, imbalance_threshold=10.0)
 
         # Create mock ticks with more downticks (bearish)
         ticks = [

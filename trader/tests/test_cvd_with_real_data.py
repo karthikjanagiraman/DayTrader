@@ -92,7 +92,7 @@ def test_oct16_weak_entries():
             print(f"  ✓ Fetched {len(bars)} 1-minute bars")
 
             # Calculate CVD at entry time
-            calculator = CVDCalculator(slope_lookback=5, bullish_threshold=1000, bearish_threshold=-1000)
+            calculator = CVDCalculator(slope_lookback=5)
 
             # Use last bar (at entry time)
             cvd_result = calculator.calculate_from_bars(bars, current_idx=len(bars)-1)

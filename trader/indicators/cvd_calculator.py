@@ -54,23 +54,19 @@ class CVDCalculator:
     Auto-selects tick or bar mode based on data availability
     """
 
-    def __init__(self, slope_lookback: int = 5, bullish_threshold: float = 1000,
-                 bearish_threshold: float = -1000,
-                 imbalance_threshold: float = 10.0):
+    def __init__(self, slope_lookback: int = 5, imbalance_threshold: float = 10.0):
         """
+        Oct 27, 2025 - Cleaned up deprecated slope-based parameters
         Oct 22, 2025 - Phase 1 Fix: Added percentage-based imbalance threshold
 
         Args:
-            slope_lookback: Number of bars to calculate CVD slope (DEPRECATED)
-            bullish_threshold: Minimum slope for BULLISH trend (DEPRECATED)
-            bearish_threshold: Maximum slope for BEARISH trend (DEPRECATED)
+            slope_lookback: Number of bars for divergence detection (still used)
             imbalance_threshold: Percentage imbalance for trend classification
                                 10.0 = 10% more selling (BEARISH) or 10% more buying (BULLISH)
+                                Formula: (sell_volume - buy_volume) / total_volume * 100
         """
         self.slope_lookback = slope_lookback
-        self.bullish_threshold = bullish_threshold
-        self.bearish_threshold = bearish_threshold
-        self.imbalance_threshold = imbalance_threshold  # NEW: Percentage-based threshold
+        self.imbalance_threshold = imbalance_threshold
         self.cvd_history = []  # Running CVD values
         self.price_history = []  # Price history for divergence detection
 
@@ -404,25 +400,6 @@ class CVDCalculator:
             logger.warning(f"Failed to calculate CVD slope: {e}")
             return 0.0
 
-    def _determine_trend(self, slope: float) -> str:
-        """
-        DEPRECATED (Oct 22, 2025): Use _determine_trend_from_imbalance instead
-
-        Classify CVD trend based on slope (OLD METHOD)
-
-        Args:
-            slope: CVD slope from linear regression
-
-        Returns:
-            'BULLISH', 'BEARISH', or 'NEUTRAL'
-        """
-        if slope > self.bullish_threshold:
-            return 'BULLISH'
-        elif slope < self.bearish_threshold:
-            return 'BEARISH'
-        else:
-            return 'NEUTRAL'
-
     def _determine_trend_from_imbalance(self, imbalance_pct: float) -> str:
         """
         Classify CVD trend based on PERCENTAGE IMBALANCE (Oct 22, 2025 - Phase 1 Fix)
@@ -511,6 +488,5 @@ class CVDCalculator:
             'current_cvd': self.cvd_history[-1] if self.cvd_history else None,
             'current_slope': self._calculate_slope(),
             'lookback': self.slope_lookback,
-            'bullish_threshold': self.bullish_threshold,
-            'bearish_threshold': self.bearish_threshold
+            'imbalance_threshold': self.imbalance_threshold
         }
