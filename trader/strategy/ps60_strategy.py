@@ -2570,6 +2570,122 @@ class PS60Strategy:
 
         return True, new_trail_pct
 
+    def get_current_candle_metrics(self, bars: List, current_idx: int) -> dict:
+        """
+        Get metrics for current 1-minute candle (Oct 28, 2025 - Issue #2 Fix)
+
+        Aggregates 5-second bars to 1-minute candle (live trading)
+        or uses 1-minute bar directly (backtesting)
+
+        Handles both modes automatically using bars_per_candle.
+
+        Args:
+            bars: Bar array
+            current_idx: Current bar index in array
+
+        Returns:
+            dict: {
+                'open': float,
+                'close': float,
+                'volume': float,
+                'size_pct': float,
+            } or None if insufficient data
+        """
+        bars_per_candle = self.candle_timeframe_seconds // self.bar_size_seconds
+
+        if bars_per_candle > 1:
+            # Live trading (5-second bars): aggregate to 1-minute candle
+            candle_start_idx = (current_idx // bars_per_candle) * bars_per_candle
+            candle_end_idx = min(candle_start_idx + bars_per_candle, len(bars))
+
+            if candle_end_idx <= candle_start_idx:
+                return None
+
+            candle_bars = bars[candle_start_idx:candle_end_idx]
+
+            if not candle_bars:
+                return None
+
+            candle_open = candle_bars[0].open
+            candle_close = candle_bars[-1].close
+            candle_volume = sum(b.volume for b in candle_bars)
+        else:
+            # Backtest (1-minute bars): current bar IS the candle
+            if current_idx >= len(bars):
+                return None
+
+            current_bar = bars[current_idx]
+            candle_open = current_bar.open
+            candle_close = current_bar.close
+            candle_volume = current_bar.volume
+
+        # Calculate candle size percentage
+        if candle_open == 0:
+            return None
+
+        candle_size_pct = abs(candle_close - candle_open) / candle_open
+
+        return {
+            'open': candle_open,
+            'close': candle_close,
+            'volume': candle_volume,
+            'size_pct': candle_size_pct
+        }
+
+    def get_average_candle_volume(self, bars: List, current_idx: int, lookback_candles: int = 20) -> float:
+        """
+        Calculate average 1-minute candle volume over last N candles (Oct 28, 2025 - Issue #3 Fix)
+
+        Aggregates 5-second bars to 1-minute candles (live trading)
+        or uses 1-minute bars directly (backtesting)
+
+        Handles both modes automatically using bars_per_candle.
+
+        Args:
+            bars: Bar array
+            current_idx: Current bar index
+            lookback_candles: Number of 1-minute candles to look back (default 20 = 20 minutes)
+
+        Returns:
+            float: Average candle volume, or None if insufficient data
+        """
+        bars_per_candle = self.candle_timeframe_seconds // self.bar_size_seconds
+        lookback_bars = lookback_candles * bars_per_candle  # e.g., 20 candles * 12 bars/candle = 240 bars
+
+        if current_idx < lookback_bars - 1:
+            # Not enough history, use what we have
+            start_idx = 0
+            end_idx = current_idx + 1
+        else:
+            # Full lookback available
+            start_idx = current_idx - lookback_bars + 1
+            end_idx = current_idx + 1
+
+        if end_idx <= start_idx:
+            return None
+
+        past_bars = bars[start_idx:end_idx]
+
+        if not past_bars:
+            return None
+
+        if bars_per_candle > 1:
+            # Live trading (5-second bars): Aggregate to candle volumes
+            candle_volumes = []
+            for i in range(0, len(past_bars), bars_per_candle):
+                candle_bars = past_bars[i:i+bars_per_candle]
+                if len(candle_bars) == bars_per_candle:  # Only complete candles
+                    candle_vol = sum(b.volume for b in candle_bars)
+                    candle_volumes.append(candle_vol)
+
+            if not candle_volumes:
+                return None
+
+            return sum(candle_volumes) / len(candle_volumes)
+        else:
+            # Backtest (1-minute bars): bars are already candles
+            return sum(b.volume for b in past_bars) / len(past_bars)
+
     def calculate_atr_based_stop_width(self, atr_percent):
         """
         Calculate stop width based on ATR (volatility)
@@ -3701,4 +3817,323 @@ class PS60Strategy:
 
     # ========================================================================
     # END: DYNAMIC RESISTANCE EXITS
+    # ========================================================================
+
+    # ========================================================================
+    # DYNAMIC PIVOT UPDATES (October 28, 2025)
+    # ========================================================================
+    # Ultra-simple 3-step logic for updating pivots based on market structure:
+    # 1. Session Start: If gap above pivot → use session high as new pivot
+    # 2. Target Hit: When Target1 reached → Target1 becomes pivot, aim for Target2
+    # 3. Failure: When trade fails → update pivot to session high for next attempt
+    # ========================================================================
+
+    def get_session_high(self, symbol):
+        """
+        Get today's session high from IBKR real-time market data
+
+        Uses IBKR's reqMktData which provides session high/low automatically.
+        This is the EASIEST and most reliable approach - IBKR tracks it for us.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            float: Session high price, or None if unavailable
+        """
+        if not self.ib:
+            logger.warning(f"⚠️  No IBKR connection - cannot get session high for {symbol}")
+            return None
+
+        try:
+            from ib_insync import Stock
+
+            contract = Stock(symbol, 'SMART', 'USD')
+
+            # Request market data snapshot (doesn't require subscription)
+            ticker = self.ib.reqMktData(contract, '', True, False)
+            self.ib.sleep(0.5)  # Give IBKR time to populate data
+
+            # Get session high from ticker
+            if ticker.high and ticker.high > 0:
+                logger.info(f"📊 {symbol}: Session high from IBKR: ${ticker.high:.2f}")
+                return ticker.high
+            else:
+                logger.warning(f"⚠️  {symbol}: Session high not available from IBKR ticker")
+                return self._get_session_high_from_bars(symbol)
+
+        except Exception as e:
+            logger.error(f"❌ Error fetching session high for {symbol}: {e}")
+            return self._get_session_high_from_bars(symbol)
+
+    def _get_session_high_from_bars(self, symbol):
+        """
+        Fallback: Calculate session high from historical 1-minute bars
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            float: Session high price, or None if unavailable
+        """
+        if not self.ib:
+            return None
+
+        try:
+            from ib_insync import Stock
+
+            contract = Stock(symbol, 'SMART', 'USD')
+            today = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y%m%d")
+
+            # Request today's 1-minute bars
+            bars = self.ib.reqHistoricalData(
+                contract,
+                endDateTime=f'{today} 16:00:00',
+                durationStr='1 D',
+                barSizeSetting='1 min',
+                whatToShow='TRADES',
+                useRTH=True,
+                formatDate=1
+            )
+
+            if bars and len(bars) > 0:
+                session_high = max(bar.high for bar in bars)
+                logger.info(f"📊 {symbol}: Session high from bars: ${session_high:.2f}")
+                return session_high
+            else:
+                logger.warning(f"⚠️  {symbol}: No bars available for session high calculation")
+                return None
+
+        except Exception as e:
+            logger.error(f"❌ Error calculating session high from bars for {symbol}: {e}")
+            return None
+
+    def check_gap_and_update_pivot(self, stock, current_price, current_time=None):
+        """
+        Step 1: Check if stock gapped above pivot when trader initialized
+        If yes, update pivot to session high
+
+        Logic:
+        - Called once per stock when trader starts (initialization)
+        - Current price already above original pivot (gap condition)
+        - Session high is higher than original pivot
+        → Update pivot to session high (gap "ate up" the move)
+
+        This checks at TRADER INITIALIZATION time, not just 9:30-9:35 AM.
+        So if you start the trader at 10:00 AM and stock gapped, it still detects it.
+
+        Args:
+            stock: Stock dict with 'resistance', 'symbol', etc.
+            current_price: Current stock price
+            current_time: Current datetime (ET timezone), or None to use now
+
+        Returns:
+            bool: True if pivot was updated, False otherwise
+        """
+        # Skip if already checked (this runs once per stock at initialization)
+        if stock.get('gap_check_done'):
+            return False
+
+        # Mark as checked (so we don't check repeatedly)
+        stock['gap_check_done'] = True
+
+        # Get current time in ET
+        if current_time is None:
+            current_time = datetime.now(pytz.timezone('US/Eastern'))
+        elif not hasattr(current_time, 'tzinfo') or current_time.tzinfo is None:
+            current_time = pytz.timezone('US/Eastern').localize(current_time)
+
+        # Get original pivot (resistance for LONG)
+        original_pivot = stock.get('original_resistance', stock.get('resistance'))
+
+        # Check if price already above pivot (gap condition)
+        if current_price <= original_pivot:
+            return False
+
+        # Get session high - prefer tracked value (backtesting), fallback to IBKR (live)
+        # FIX (Oct 28, 2025): Backtester now tracks session_high in stock dict
+        session_high = stock.get('session_high')
+        if not session_high:
+            # Live trading: query IBKR
+            session_high = self.get_session_high(stock['symbol'])
+
+        if not session_high or session_high <= original_pivot:
+            return False
+
+        # GAP DETECTED - Update pivot to session high
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"🔄 GAP DETECTED AT INITIALIZATION: {stock['symbol']}")
+        logger.info(f"{'='*80}")
+        logger.info(f"   Trader started: {current_time.strftime('%H:%M:%S ET')}")
+        logger.info(f"   Current price: ${current_price:.2f}")
+        logger.info(f"   Scanner pivot: ${original_pivot:.2f}")
+        logger.info(f"   Session high: ${session_high:.2f}")
+        logger.info(f"   Gap amount: ${current_price - original_pivot:.2f} ({((current_price - original_pivot) / original_pivot * 100):.1f}%)")
+        logger.info(f"   📊 ACTION: Updating pivot to session high")
+        logger.info(f"{'='*80}")
+
+        # Store original pivot before updating
+        if 'original_resistance' not in stock:
+            stock['original_resistance'] = original_pivot
+
+        # Update pivot to session high
+        stock['resistance'] = session_high
+        stock['pivot_updated_for_gap'] = True
+        stock['pivot_update_time'] = current_time
+        stock['pivot_update_reason'] = 'GAP_AT_INIT'
+
+        return True
+
+    def check_target_progression_pivot(self, position, current_price):
+        """
+        Step 2: Check if Target1 was hit and update pivot for Target2 run
+
+        Logic:
+        - Position has hit Target1 (partials already taken)
+        - Target2 exists
+        - Room from Target1 to Target2 is >= 1.5%
+        → Update pivot to Target1, aim for Target2
+
+        Args:
+            position: Position dict with 'target1', 'target2', etc.
+            current_price: Current stock price
+
+        Returns:
+            bool: True if pivot was updated, False otherwise
+        """
+        # Skip if already updated to Target1
+        if position.get('pivot_updated_to_target1'):
+            return False
+
+        # Check if Target1 was hit
+        target1 = position.get('target1')
+        target2 = position.get('target2')
+
+        if not target1 or not target2:
+            return False
+
+        # Check if price reached Target1
+        side = position.get('side', 'LONG')
+        if side == 'LONG':
+            target1_hit = current_price >= target1
+        else:
+            target1_hit = current_price <= target1
+
+        if not target1_hit:
+            return False
+
+        # Check room to Target2
+        if side == 'LONG':
+            room_pct = ((target2 - target1) / target1) * 100
+        else:
+            room_pct = ((target1 - target2) / target1) * 100
+
+        if room_pct < 1.5:  # Need at least 1.5% room
+            logger.debug(f"{position['symbol']}: Target1 hit but insufficient room to Target2 ({room_pct:.1f}%)")
+            return False
+
+        # TARGET1 HIT - Update pivot for Target2 run
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"🎯 TARGET1 HIT: {position['symbol']}")
+        logger.info(f"{'='*80}")
+        logger.info(f"   Old pivot: ${position.get('pivot', position.get('entry_price')):.2f}")
+        logger.info(f"   New pivot: ${target1:.2f} (Target1)")
+        logger.info(f"   Target2: ${target2:.2f}")
+        logger.info(f"   Room to Target2: {room_pct:.1f}%")
+        logger.info(f"   📊 ACTION: Updating pivot to Target1, aiming for Target2")
+        logger.info(f"{'='*80}")
+
+        # Update pivot to Target1
+        position['pivot'] = target1
+        position['stop'] = target1  # Move stop to Target1 (breakeven++)
+        position['pivot_updated_to_target1'] = True
+        position['pivot_update_time'] = datetime.now(pytz.timezone('US/Eastern'))
+        position['pivot_update_reason'] = 'TARGET1_HIT'
+
+        return True
+
+    def check_failure_and_update_pivot(self, stock, current_price, failure_reason):
+        """
+        Step 3: Check if trade failed and update pivot to session high for next attempt
+
+        Logic:
+        - Trade stopped out, pulled back too deep, or hit 15-min rule
+        - Session high is higher than original pivot
+        - Pivot moved >= 1% from original
+        → Update pivot to session high, reset attempts
+
+        Args:
+            stock: Stock dict with 'resistance', 'symbol', etc.
+            current_price: Current stock price
+            failure_reason: Reason for failure (e.g., 'STOP_HIT', '15MIN_RULE')
+
+        Returns:
+            bool: True if pivot was updated, False otherwise
+        """
+        # Check if this is a valid failure reason
+        # FIX (Oct 28, 2025): Updated to match actual exit reasons used by system
+        valid_failures = [
+            'STOP',              # Backtester/Live: Stop-loss hit
+            'STOP_HIT',          # Legacy compatibility
+            'PULLBACK_TOO_DEEP', # Entry state machine rejection
+            '7MIN_RULE',         # Backtester/Live: 7-minute timeout
+            '15MIN_RULE',        # Live: 15-minute timeout
+            'TRAIL_STOP'         # Trailing stop hit
+        ]
+        if failure_reason not in valid_failures:
+            return False
+
+        # Get original pivot
+        original_pivot = stock.get('original_resistance', stock.get('resistance'))
+
+        # Get session high - prefer tracked value (backtesting), fallback to IBKR (live)
+        # FIX (Oct 28, 2025): Backtester now tracks session_high in stock dict
+        session_high = stock.get('session_high')
+        if not session_high:
+            # Live trading: query IBKR
+            session_high = self.get_session_high(stock['symbol'])
+
+        if not session_high or session_high <= original_pivot:
+            return False
+
+        # Check if pivot moved significantly (at least 1%)
+        pivot_move_pct = ((session_high - original_pivot) / original_pivot) * 100
+
+        if pivot_move_pct < 1.0:
+            logger.debug(f"{stock['symbol']}: Session high only {pivot_move_pct:.1f}% above pivot (need 1%+)")
+            return False
+
+        # FAILURE DETECTED - Update pivot to session high
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"💥 FAILURE PIVOT UPDATE: {stock['symbol']}")
+        logger.info(f"{'='*80}")
+        logger.info(f"   Failure reason: {failure_reason}")
+        logger.info(f"   Old pivot: ${original_pivot:.2f}")
+        logger.info(f"   Session high: ${session_high:.2f}")
+        logger.info(f"   Pivot move: {pivot_move_pct:.1f}%")
+        logger.info(f"   📊 ACTION: Updating pivot to session high for next attempt")
+        logger.info(f"{'='*80}")
+
+        # Store original pivot before updating
+        if 'original_resistance' not in stock:
+            stock['original_resistance'] = original_pivot
+
+        # Update pivot to session high
+        stock['resistance'] = session_high
+        stock['pivot_updated_after_failure'] = True
+        stock['pivot_update_time'] = datetime.now(pytz.timezone('US/Eastern'))
+        stock['pivot_update_reason'] = failure_reason
+
+        # Reset attempt counter (give new pivot a fresh chance)
+        if pivot_move_pct >= 1.0:
+            stock['long_attempts'] = 0
+            logger.info(f"   ↻ Reset attempt counter (pivot moved {pivot_move_pct:.1f}%)")
+
+        return True
+
+    # ========================================================================
+    # END: DYNAMIC PIVOT UPDATES
     # ========================================================================

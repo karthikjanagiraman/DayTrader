@@ -75,6 +75,7 @@ class CVDCalculator:
         Calculate CVD from tick data (live trading)
 
         Oct 22, 2025 - Phase 1 Fix: Now uses percentage-based imbalance
+        Oct 28, 2025 - CRITICAL BUG FIX: Use tick prices directly for candle color validation
 
         Uses tick classification:
         - Uptick (price > last): Buying pressure
@@ -86,6 +87,7 @@ class CVDCalculator:
 
         Args:
             ticks: List of tick objects with .price, .size attributes
+            bar: DEPRECATED - no longer used (Oct 28, 2025 fix)
 
         Returns:
             CVDResult with data_source='TICK'
@@ -110,6 +112,10 @@ class CVDCalculator:
         neutral_volume = 0.0
         last_price = None
 
+        # Oct 28, 2025 FIX: Track first and last tick prices for candle color
+        first_tick_price = ticks[0].price  # "Open" of the tick window
+        last_tick_price = None
+
         for tick in ticks:
             if last_price is not None:
                 # Classify tick as buy or sell based on price movement
@@ -126,6 +132,7 @@ class CVDCalculator:
                     neutral_volume += tick.size
 
             last_price = tick.price
+            last_tick_price = tick.price  # Update last tick price
             self.price_history.append(tick.price)
 
         # Store in history (for divergence detection)
@@ -156,27 +163,29 @@ class CVDCalculator:
         # Confidence: 1.0 for tick data (most accurate)
         confidence = 1.0
 
-        # PRICE VALIDATION (Oct 26, 2025 - Phase 2 Fix)
-        # Check if CVD signal aligns with candle color (Open vs Close)
+        # PRICE VALIDATION (Oct 28, 2025 - CRITICAL FIX)
+        # Use TICK DATA directly for candle color (not 5-second bars!)
+        # Compare first tick price (open) vs last tick price (close)
         price_direction = 'NEUTRAL'
         price_change_pct = 0.0
         signals_aligned = True
         validation_reason = ''
 
-        if bar is not None:
-            # Use bar's Open and Close to determine candle color
-            # This is the correct way - candle color shows who won (buyers or sellers)
-            bar_open = bar.open
-            bar_close = bar.close
-            price_change = bar_close - bar_open
-            price_change_pct = (price_change / bar_open) * 100 if bar_open > 0 else 0.0
+        if last_tick_price is not None and first_tick_price > 0:
+            # Calculate price change from first to last tick
+            price_change = last_tick_price - first_tick_price
+            price_change_pct = (price_change / first_tick_price) * 100
 
-            # Determine candle color
-            if price_change > 0:
+            # DOJI threshold: 0.02% (traditional definition)
+            DOJI_THRESHOLD = 0.02  # 0.02% = essentially no movement
+
+            # Determine candle color from TICKS
+            if abs(price_change_pct) < DOJI_THRESHOLD:
+                price_direction = 'NEUTRAL'  # DOJI - no clear winner
+            elif price_change > 0:
                 price_direction = 'UP'  # Green candle - buyers won
-            elif price_change < 0:
+            else:
                 price_direction = 'DOWN'  # Red candle - sellers won
-            # else: NEUTRAL (doji - open == close)
 
             # Check alignment with CVD trend
             # BEARISH CVD (more selling) should produce RED candle (sellers won)
@@ -198,8 +207,11 @@ class CVDCalculator:
         # Log detailed CVD breakdown (for debugging)
         logger.debug(f"CVD from ticks: buy={buy_volume:.0f}, sell={sell_volume:.0f}, "
                     f"neutral={neutral_volume:.0f}, imbalance={imbalance_pct:.1f}%, trend={trend}")
-        logger.debug(f"Price validation: direction={price_direction}, change={price_change_pct:+.2f}%, "
-                    f"aligned={signals_aligned}")
+        logger.debug(f"Price validation (from ticks): first_tick=${first_tick_price:.2f}, "
+                    f"last_tick=${last_tick_price:.2f}, change={price_change_pct:+.3f}%, "
+                    f"direction={price_direction}, aligned={signals_aligned}")
+        if not signals_aligned:
+            logger.info(f"⚠️  CVD/PRICE MISMATCH: {validation_reason}")
 
         return CVDResult(
             cvd_value=cvd,
@@ -343,15 +355,16 @@ class CVDCalculator:
         Oct 21, 2025: Removed bar approximation fallback. System must provide tick data
         or explicitly handle the failure. No silent fallbacks to inaccurate methods.
 
-        Oct 27, 2025: Added candle color validation by passing bar to calculate_from_ticks
+        Oct 28, 2025: CRITICAL BUG FIX - Use tick data directly for candle color
+                      Removed bar parameter (was using 5-second bars incorrectly)
 
         Args:
-            bars: Bar data (used for candle color validation)
-            current_idx: Current bar index
+            bars: Bar data (kept for backward compatibility, not used)
+            current_idx: Current bar index (kept for backward compatibility, not used)
             ticks: REQUIRED tick data for accurate CVD
 
         Returns:
-            CVDResult from tick data with candle color validation
+            CVDResult from tick data with candle color validation using ticks
 
         Raises:
             ValueError: If no tick data is available
@@ -360,11 +373,9 @@ class CVDCalculator:
             # Use tick data - the ONLY acceptable source
             logger.info(f"✅ CVD: Using TICK data ({len(ticks)} ticks)")
 
-            # CANDLE COLOR VALIDATION (Oct 27, 2025 - Phase 11)
-            # Pass current bar to enable candle color alignment check
-            current_bar = bars[current_idx] if bars and current_idx < len(bars) else None
-
-            return self.calculate_from_ticks(ticks, bar=current_bar)
+            # Oct 28, 2025 FIX: No longer pass bar to calculate_from_ticks
+            # Candle color is now determined from tick prices (first vs last)
+            return self.calculate_from_ticks(ticks, bar=None)
         else:
             # FAIL EXPLICITLY - no approximations allowed
             error_msg = f"❌ CVD FAILURE: No tick data available at bar {current_idx}. Cannot calculate accurate CVD."

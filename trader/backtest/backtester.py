@@ -687,6 +687,52 @@ class PS60Backtester:
             print(f"FINAL WATCHLIST: {len(gap_filtered_watchlist)} setups ({skipped_count} removed by gap filter)")
             print(f"{'='*80}")
 
+        # ═══════════════════════════════════════════════════════════════════════════
+        # DYNAMIC PIVOT UPDATES - STEP 1: Gap Detection at Initialization (Oct 28, 2025)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Check all stocks for gaps and update pivots to session high if needed
+        # This simulates starting the trader at market open and detecting gap conditions
+        #
+        # BACKTEST OPTIMIZATION: Calculate session high from cached bars instead of IBKR API
+        # ═══════════════════════════════════════════════════════════════════════════
+        pivot_updates_count = 0
+        for stock in gap_filtered_watchlist:
+            symbol = stock['symbol']
+            opening_price = opening_prices.get(symbol, stock['resistance'])  # Get opening price
+
+            # Calculate session high from cached bars (backtest optimization)
+            cached_bars = self.cvd_enriched_bars.get(symbol, {}).get('bars', [])
+            if cached_bars:
+                # Get highest price so far in the session (from enriched bar data)
+                session_high = max(bar['high'] for bar in cached_bars if 'high' in bar)
+
+                # Temporarily inject session high into stock for gap check
+                original_pivot = stock.get('resistance')
+
+                # Check gap condition manually (avoid IBKR call)
+                if opening_price > original_pivot and session_high > original_pivot:
+                    # Update pivot to session high
+                    stock['original_resistance'] = original_pivot
+                    stock['resistance'] = session_high
+                    stock['pivot_updated_for_gap'] = True
+                    stock['pivot_update_reason'] = 'GAP_AT_INIT'
+                    pivot_updates_count += 1
+
+                    self.logger.info(f"")
+                    self.logger.info(f"{'='*80}")
+                    self.logger.info(f"🔄 GAP DETECTED AT INITIALIZATION: {symbol}")
+                    self.logger.info(f"{'='*80}")
+                    self.logger.info(f"   Current price: ${opening_price:.2f}")
+                    self.logger.info(f"   Scanner pivot: ${original_pivot:.2f}")
+                    self.logger.info(f"   Session high: ${session_high:.2f}")
+                    self.logger.info(f"   Gap amount: ${opening_price - original_pivot:.2f} ({((opening_price - original_pivot) / original_pivot * 100):.1f}%)")
+                    self.logger.info(f"   📊 ACTION: Updating pivot to session high")
+                    self.logger.info(f"{'='*80}")
+
+        if pivot_updates_count > 0:
+            print(f"\n📊 Dynamic Pivots: Updated {pivot_updates_count} stocks (gap condition detected)")
+        # ═══════════════════════════════════════════════════════════════════════════
+
         # Backtest final watchlist
         for stock in gap_filtered_watchlist:
             print(f"\n[{stock['symbol']}] Testing setup...")
@@ -800,6 +846,16 @@ class PS60Backtester:
         position = None
         bar_count = 0
 
+        # ═══════════════════════════════════════════════════════════════════════════
+        # DYNAMIC PIVOT UPDATES: Track session high for failure detection (Oct 28, 2025)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Initialize session high from opening bar
+        session_high = bars[0].high
+        session_low = bars[0].low
+        stock['session_high'] = session_high
+        stock['session_low'] = session_low
+        # ═══════════════════════════════════════════════════════════════════════════
+
         # Track attempts for each pivot (MAX 2 ATTEMPTS PER PIVOT)
         long_attempts = 0
         short_attempts = 0
@@ -814,6 +870,17 @@ class PS60Backtester:
             bar_count += 1
             timestamp = bar.date
             price = bar.close
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # DYNAMIC PIVOT UPDATES: Update session high/low as we process bars (Oct 28, 2025)
+            # ═══════════════════════════════════════════════════════════════════════════
+            if bar.high > session_high:
+                session_high = bar.high
+                stock['session_high'] = session_high
+            if bar.low < session_low:
+                session_low = bar.low
+                stock['session_low'] = session_low
+            # ═══════════════════════════════════════════════════════════════════════════
 
             # Check if within entry time window using strategy module
             within_entry_window = self.strategy.is_within_entry_window(timestamp)
@@ -1136,6 +1203,16 @@ class PS60Backtester:
                     # Track exit for re-entry logic
                     last_exit_bar = bar_count
                     last_exit_side = closed_trade['side']
+
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # DYNAMIC PIVOT UPDATES - STEP 3: Failure Update (Oct 28, 2025)
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # Check if trade failed and update pivot to session high for retry
+                    # FIX: Use 'reason' key (not 'exit_reason') - matches position_manager.py:214
+                    if self.strategy.check_failure_and_update_pivot(stock, price, closed_trade['reason']):
+                        self.logger.info(f"📊 {stock['symbol']}: Pivot updated after failure, attempts reset")
+                    # ═══════════════════════════════════════════════════════════════════════════
+
                     position = None
                     # Attempts NOT reset - max 2 tries per pivot per day
 
@@ -1483,6 +1560,14 @@ class PS60Backtester:
             if self.strategy.should_move_stop_to_breakeven(pos):
                 pos['stop'] = pos['entry_price']
                 self.logger.debug(f"{pos['symbol']} Bar {bar_num} - Stop moved to breakeven @ ${pos['stop']:.2f}")
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # DYNAMIC PIVOT UPDATES - STEP 2: Target Progression (Oct 28, 2025)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Check if Target1 hit and update pivot to Target1 for Target2 run
+        if self.strategy.check_target_progression_pivot(pos, price):
+            self.logger.info(f"📊 {pos['symbol']}: Pivot updated to Target1 after hit")
+        # ═══════════════════════════════════════════════════════════════════════════
 
         # ========================================================================
         # TARGET-HIT STALL DETECTION (Oct 21, 2025 - Phase 9)

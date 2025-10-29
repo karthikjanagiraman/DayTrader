@@ -1534,6 +1534,13 @@ class PS60Trader:
                 self.logger.info(f"  💰 {symbol}: Taking {int(pct*100)}% partial - {reason}")
                 self.take_partial(position, current_price, pct, reason)
 
+                # ═══════════════════════════════════════════════════════════════════════════
+                # DYNAMIC PIVOT UPDATES - STEP 2: Target Progression (Oct 28, 2025)
+                # ═══════════════════════════════════════════════════════════════════════════
+                # Check if Target1 was hit and update pivot to Target1 for Target2 run
+                if self.strategy.check_target_progression_pivot(position, current_price):
+                    self.logger.info(f"📊 {symbol}: Pivot updated to Target1 after hit")
+
                 # Move stop to breakeven after partial (if configured)
                 if self.strategy.should_move_stop_to_breakeven(position):
                     old_stop = position['stop']
@@ -1708,6 +1715,14 @@ class PS60Trader:
         trade_record = self.pm.close_position(symbol, price, reason)
 
         self.logger.info(f"  🛑 CLOSE {symbol} @ ${price:.2f} ({reason})")
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # DYNAMIC PIVOT UPDATES - STEP 3: Failure Update (Oct 28, 2025)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Check if trade failed and update pivot to session high for retry
+        stock = next((s for s in self.watchlist if s['symbol'] == symbol), None)
+        if stock and self.strategy.check_failure_and_update_pivot(stock, price, reason):
+            self.logger.info(f"📊 {symbol}: Pivot updated after failure, attempts reset")
 
         # Check if trade_record is valid before accessing
         if trade_record:
@@ -1944,6 +1959,24 @@ class PS60Trader:
 
         # Check gap filter at market open (CRITICAL - Oct 5, 2025)
         self.check_gap_filter_at_open()
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # DYNAMIC PIVOT UPDATES - STEP 1: Gap Detection at Initialization (Oct 28, 2025)
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Check if stocks gapped above pivot and update to session high
+        # This runs when TRADER INITIALIZES (not just at 9:30 AM market open)
+        # So if you start trader at 10 AM and stock gapped, it still detects it
+        pivot_updates_count = 0
+        for stock in self.watchlist:
+            # Get current price from ticker
+            current_price = float(stock['ticker'].last) if stock['ticker'].last else stock['resistance']
+
+            # Check gap and update pivot if needed
+            if self.strategy.check_gap_and_update_pivot(stock, current_price, now_et):
+                pivot_updates_count += 1
+
+        if pivot_updates_count > 0:
+            self.logger.info(f"\n📊 Dynamic Pivots: Updated {pivot_updates_count} stocks (gap condition detected)")
 
         # Record session start
         self.analytics['session_start'] = datetime.now(pytz.UTC).astimezone(eastern)

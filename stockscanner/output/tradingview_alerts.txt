@@ -1,0 +1,304 @@
+================================================================================
+TRADINGVIEW PRICE ALERTS - PS60 Scanner
+================================================================================
+Generated: 2025-10-20 22:34:34
+Total Alerts: 18
+================================================================================
+
+
+================================================================================
+SYMBOL: AMD
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $220.48 (within 2.0% of resistance)
+   Resistance Level: $224.98
+   Current Price: $218.96
+   Distance: 2.75%
+
+   Breakout Targets:
+      T1: $229.52
+      T2: $234.06
+      T3: $239.67
+
+   📝 TradingView Alert Setup:
+      Condition: AMD price crosses above $220.48
+      Message: AMD approaching resistance $224.98 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $220.22 (within 2.0% of support)
+   Support Level: $215.90
+   Current Price: $218.96
+   Distance: 1.40%
+
+   Breakdown Targets:
+      D1: $211.36
+      D2: $206.82
+
+   📝 TradingView Alert Setup:
+      Condition: AMD price crosses below $220.22
+      Message: AMD approaching support $215.90 - prepare for breakdown
+
+================================================================================
+SYMBOL: HOOD
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $138.39 (within 2.0% of resistance)
+   Resistance Level: $141.21
+   Current Price: $135.78
+   Distance: 4.00%
+
+   Breakout Targets:
+      T1: $145.29
+      T2: $149.37
+      T3: $154.41
+
+   📝 TradingView Alert Setup:
+      Condition: HOOD price crosses above $138.39
+      Message: HOOD approaching resistance $141.21 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $135.71 (within 2.0% of support)
+   Support Level: $133.05
+   Current Price: $135.78
+   Distance: 2.01%
+
+   Breakdown Targets:
+      D1: $128.97
+      D2: $124.89
+
+   📝 TradingView Alert Setup:
+      Condition: HOOD price crosses below $135.71
+      Message: HOOD approaching support $133.05 - prepare for breakdown
+
+================================================================================
+SYMBOL: NVDA
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $181.10 (within 2.0% of resistance)
+   Resistance Level: $184.80
+   Current Price: $181.21
+   Distance: 1.98%
+
+   Breakout Targets:
+      T1: $187.35
+      T2: $189.90
+      T3: $193.05
+
+   📝 TradingView Alert Setup:
+      Condition: NVDA price crosses above $181.10
+      Message: NVDA approaching resistance $184.80 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $183.29 (within 2.0% of support)
+   Support Level: $179.70
+   Current Price: $181.21
+   Distance: 0.83%
+
+   Breakdown Targets:
+      D1: $177.15
+      D2: $174.60
+
+   📝 TradingView Alert Setup:
+      Condition: NVDA price crosses below $183.29
+      Message: NVDA approaching support $179.70 - prepare for breakdown
+
+================================================================================
+SYMBOL: PATH
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $16.57 (within 2.0% of resistance)
+   Resistance Level: $16.91
+   Current Price: $16.54
+   Distance: 2.24%
+
+   Breakout Targets:
+      T1: $17.34
+      T2: $17.77
+      T3: $18.30
+
+   📝 TradingView Alert Setup:
+      Condition: PATH price crosses above $16.57
+      Message: PATH approaching resistance $16.91 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $16.37 (within 2.0% of support)
+   Support Level: $16.05
+   Current Price: $16.54
+   Distance: 2.96%
+
+   Breakdown Targets:
+      D1: $15.62
+      D2: $15.19
+
+   📝 TradingView Alert Setup:
+      Condition: PATH price crosses below $16.37
+      Message: PATH approaching support $16.05 - prepare for breakdown
+
+================================================================================
+SYMBOL: PLTR
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $178.69 (within 2.0% of resistance)
+   Resistance Level: $182.34
+   Current Price: $179.92
+   Distance: 1.35%
+
+   Breakout Targets:
+      T1: $188.10
+      T2: $193.86
+      T3: $200.98
+
+   📝 TradingView Alert Setup:
+      Condition: PLTR price crosses above $178.69
+      Message: PLTR approaching resistance $182.34 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $174.24 (within 2.0% of support)
+   Support Level: $170.82
+   Current Price: $179.92
+   Distance: 5.06%
+
+   Breakdown Targets:
+      D1: $165.06
+      D2: $159.30
+
+   📝 TradingView Alert Setup:
+      Condition: PLTR price crosses below $174.24
+      Message: PLTR approaching support $170.82 - prepare for breakdown
+
+================================================================================
+SYMBOL: QQQ
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $590.64 (within 2.0% of resistance)
+   Resistance Level: $602.69
+   Current Price: $598.46
+   Distance: 0.71%
+
+   Breakout Targets:
+      T1: $608.97
+      T2: $615.25
+      T3: $623.01
+
+   📝 TradingView Alert Setup:
+      Condition: QQQ price crosses above $590.64
+      Message: QQQ approaching resistance $602.69 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $601.93 (within 2.0% of support)
+   Support Level: $590.13
+   Current Price: $598.46
+   Distance: 1.39%
+
+   Breakdown Targets:
+      D1: $583.85
+      D2: $577.57
+
+   📝 TradingView Alert Setup:
+      Condition: QQQ price crosses below $601.93
+      Message: QQQ approaching support $590.13 - prepare for breakdown
+
+================================================================================
+SYMBOL: SMCI
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $54.11 (within 2.0% of resistance)
+   Resistance Level: $55.21
+   Current Price: $53.77
+   Distance: 2.68%
+
+   Breakout Targets:
+      T1: $56.32
+      T2: $57.44
+      T3: $58.82
+
+   📝 TradingView Alert Setup:
+      Condition: SMCI price crosses above $54.11
+      Message: SMCI approaching resistance $55.21 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $54.04 (within 2.0% of support)
+   Support Level: $52.98
+   Current Price: $53.77
+   Distance: 1.47%
+
+   Breakdown Targets:
+      D1: $51.86
+      D2: $50.75
+
+   📝 TradingView Alert Setup:
+      Condition: SMCI price crosses below $54.04
+      Message: SMCI approaching support $52.98 - prepare for breakdown
+
+================================================================================
+SYMBOL: SOFI
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $27.78 (within 2.0% of resistance)
+   Resistance Level: $28.35
+   Current Price: $27.92
+   Distance: 1.54%
+
+   Breakout Targets:
+      T1: $29.65
+      T2: $30.95
+      T3: $32.56
+
+   📝 TradingView Alert Setup:
+      Condition: SOFI price crosses above $27.78
+      Message: SOFI approaching resistance $28.35 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $26.27 (within 2.0% of support)
+   Support Level: $25.75
+   Current Price: $27.92
+   Distance: 7.77%
+
+   Breakdown Targets:
+      D1: $24.45
+      D2: $23.15
+
+   📝 TradingView Alert Setup:
+      Condition: SOFI price crosses below $26.27
+      Message: SOFI approaching support $25.75 - prepare for breakdown
+
+================================================================================
+SYMBOL: TSLA
+================================================================================
+
+🔼 RESISTANCE ALERT:
+   Alert Trigger: $425.52 (within 2.0% of resistance)
+   Resistance Level: $434.20
+   Current Price: $428.95
+   Distance: 1.22%
+
+   Breakout Targets:
+      T1: $442.36
+      T2: $450.51
+      T3: $460.59
+
+   📝 TradingView Alert Setup:
+      Condition: TSLA price crosses above $425.52
+      Message: TSLA approaching resistance $434.20 - prepare for breakout
+
+🔽 SUPPORT ALERT:
+   Alert Trigger: $426.25 (within 2.0% of support)
+   Support Level: $417.89
+   Current Price: $428.95
+   Distance: 2.58%
+
+   Breakdown Targets:
+      D1: $409.74
+      D2: $401.58
+
+   📝 TradingView Alert Setup:
+      Condition: TSLA price crosses below $426.25
+      Message: TSLA approaching support $417.89 - prepare for breakdown

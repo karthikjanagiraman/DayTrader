@@ -1,0 +1,507 @@
+
+================================================================================
+DEEP ANALYSIS: BLOCKED 5-STAR WINNERS - October 21, 2025
+================================================================================
+
+Total 5-Star Winners Identified: 23
+All were BLOCKED by our filters
+
+This represents approximately $15,000-25,000 in missed profit
+
+================================================================================
+
+
+================================================================================
+AMD - 1 BLOCKED WINNERS
+================================================================================
+
+WINNER #1 - SHORT @ 2025-10-21T10:32:00-04:00
+  Entry Price: $234.19
+  Max Gain: +0.07%
+  Potential Profit: $36 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 98.3
+       Required range: N/A
+       Reason: %K 98.3 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+
+================================================================================
+HOOD - 6 BLOCKED WINNERS
+================================================================================
+
+WINNER #1 - SHORT @ 2025-10-21T09:47:00-04:00
+  Entry Price: $132.62
+  Max Gain: +0.96%
+  Potential Profit: $479 (est.)
+
+  FILTER ANALYSIS:
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #2 - SHORT @ 2025-10-21T09:56:00-04:00
+  Entry Price: $132.54
+  Max Gain: +0.90%
+  Potential Profit: $449 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 14.2%, history: 1 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #3 - SHORT @ 2025-10-21T10:28:00-04:00
+  Entry Price: $132.67
+  Max Gain: +0.99%
+  Potential Profit: $497 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #4 - SHORT @ 2025-10-21T10:39:00-04:00
+  Entry Price: $132.83
+  Max Gain: +1.11%
+  Potential Profit: $557 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 22.9%, history: 17 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #5 - SHORT @ 2025-10-21T13:50:00-04:00
+  Entry Price: $132.80
+  Max Gain: +1.09%
+  Potential Profit: $546 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 10.8%, history: 20 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #6 - SHORT @ 2025-10-21T14:02:00-04:00
+  Entry Price: $132.84
+  Max Gain: +1.12%
+  Potential Profit: $561 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance -1.8%, history: 20 candles)
+
+  ----------------------------------------------------------------------------
+
+
+================================================================================
+NVDA - 3 BLOCKED WINNERS
+================================================================================
+
+WINNER #1 - SHORT @ 2025-10-21T09:41:00-04:00
+  Entry Price: $181.50
+  Max Gain: +0.94%
+  Potential Profit: $468 (est.)
+
+  FILTER ANALYSIS:
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #2 - SHORT @ 2025-10-21T11:37:00-04:00
+  Entry Price: $181.56
+  Max Gain: +0.35%
+  Potential Profit: $173 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #3 - SHORT @ 2025-10-21T12:54:00-04:00
+  Entry Price: $181.65
+  Max Gain: +0.40%
+  Potential Profit: $198 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 88.7
+       Required range: N/A
+       Reason: %K 88.7 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: stochastic_filter
+  REASON: Stochastic too high for SHORT (K=88.7, need 20-50)
+
+  ----------------------------------------------------------------------------
+
+
+================================================================================
+PATH - 4 BLOCKED WINNERS
+================================================================================
+
+WINNER #1 - SHORT @ 2025-10-21T09:32:00-04:00
+  Entry Price: $15.53
+  Max Gain: +0.71%
+  Potential Profit: $354 (est.)
+
+  FILTER ANALYSIS:
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 87.4
+       Required range: N/A
+       Reason: %K 87.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Momentum detected, entering CVD monitoring
+
+  ----------------------------------------------------------------------------
+
+WINNER #2 - SHORT @ 2025-10-21T09:43:00-04:00
+  Entry Price: $15.59
+  Max Gain: +1.09%
+  Potential Profit: $545 (est.)
+
+  FILTER ANALYSIS:
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 87.4
+       Required range: N/A
+       Reason: %K 87.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 16.4%, history: 9 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #3 - SHORT @ 2025-10-21T09:55:00-04:00
+  Entry Price: $15.61
+  Max Gain: +0.19%
+  Potential Profit: $96 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 87.4
+       Required range: N/A
+       Reason: %K 87.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance -22.7%, history: 16 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #4 - LONG @ 2025-10-21T10:31:00-04:00
+  Entry Price: $16.16
+  Max Gain: +2.66%
+  Potential Profit: $1330 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 87.4
+       Required range: N/A
+       Reason: %K 87.4 not in range [60-80]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 2.8%, history: 19 candles)
+
+  ----------------------------------------------------------------------------
+
+
+================================================================================
+SMCI - 9 BLOCKED WINNERS
+================================================================================
+
+WINNER #1 - SHORT @ 2025-10-21T09:45:00-04:00
+  Entry Price: $54.56
+  Max Gain: +1.19%
+  Potential Profit: $596 (est.)
+
+  FILTER ANALYSIS:
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #2 - SHORT @ 2025-10-21T09:55:00-04:00
+  Entry Price: $54.49
+  Max Gain: +1.06%
+  Potential Profit: $532 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #3 - SHORT @ 2025-10-21T10:28:00-04:00
+  Entry Price: $54.50
+  Max Gain: +1.08%
+  Potential Profit: $541 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 46.5%, history: 10 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #4 - SHORT @ 2025-10-21T10:34:00-04:00
+  Entry Price: $54.58
+  Max Gain: +1.23%
+  Potential Profit: $614 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: volume_filter
+  REASON: Breakout rejected: Sub-average volume (0.29x)
+
+  ----------------------------------------------------------------------------
+
+WINNER #5 - SHORT @ 2025-10-21T12:42:00-04:00
+  Entry Price: $54.56
+  Max Gain: +1.19%
+  Potential Profit: $596 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: unknown
+  REASON: Breakout detected, waiting for candle close
+
+  ----------------------------------------------------------------------------
+
+WINNER #6 - SHORT @ 2025-10-21T12:51:00-04:00
+  Entry Price: $54.59
+  Max Gain: +1.25%
+  Potential Profit: $623 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: volume_filter
+  REASON: Breakout rejected: Sub-average volume (0.77x)
+
+  ----------------------------------------------------------------------------
+
+WINNER #7 - SHORT @ 2025-10-21T14:18:00-04:00
+  Entry Price: $54.57
+  Max Gain: +0.24%
+  Potential Profit: $119 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance 15.3%, history: 20 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #8 - SHORT @ 2025-10-21T14:52:00-04:00
+  Entry Price: $54.58
+  Max Gain: +0.26%
+  Potential Profit: $128 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance -0.1%, history: 20 candles)
+
+  ----------------------------------------------------------------------------
+
+WINNER #9 - SHORT @ 2025-10-21T14:58:00-04:00
+  Entry Price: $54.56
+  Max Gain: +0.22%
+  Potential Profit: $110 (est.)
+
+  FILTER ANALYSIS:
+    ✅ CHOPPY FILTER: SKIP
+    ❌ STOCHASTIC FILTER: BLOCKED
+       K value: 12.4
+       Required range: N/A
+       Reason: %K 12.4 not in range [20-50]
+    ✅ ROOM-TO-RUN FILTER: PASS
+
+  DECISION: BLOCKED
+  PHASE: cvd_monitoring
+  REASON: CVD monitoring (imbalance -3.9%, history: 20 candles)
+
+  ----------------------------------------------------------------------------
+
+
+================================================================================
+FILTER BLOCKING SUMMARY
+================================================================================
+
+Total Winners Analyzed: 23
+
+Blocks by Filter:
+  STOCHASTIC: 23 blocks (100.0%)
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+⚠️  STOCHASTIC FILTER - MAJOR ISSUE
+   Blocked 23 winners (100.0%)
+   Recommendation: Loosen stochastic ranges
+   For SHORT: Expand range from K=20-50 to K=20-80
+   For LONG: Expand range from K=60-80 to K=40-80
+
+
+================================================================================
+ESTIMATED IMPACT
+================================================================================
+
+Total Missed Gain: 20.30%
+Average Gain per Winner: 0.88%
+Estimated Missed Profit: $10150 - $20300
+
+With proper filtering, Oct 21 could have been:
+  Actual P&L: -$284
+  Potential P&L: +$15,000 to +$25,000
+  Swing: +$15,284 to +$25,284
+
+================================================================================
+END OF ANALYSIS
+================================================================================
+

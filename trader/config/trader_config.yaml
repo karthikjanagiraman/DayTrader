@@ -113,6 +113,27 @@ trading:
     stall_duration_seconds: 300        # 5 minutes of stall = trigger
     tighten_trail_to_pct: 0.001        # Tighten trail from 0.5% → 0.1%
 
+  # ===== DYNAMIC PIVOT UPDATES (Oct 28, 2025) =====
+  # Ultra-simple 3-step logic for updating pivots based on market structure:
+  # 1. GAP CHECK: If stock gaps above pivot when trader starts → use session high as new pivot
+  # 2. TARGET PROGRESSION: When Target1 hit → Target1 becomes pivot, aim for Target2
+  # 3. FAILURE UPDATE: When trade fails → update pivot to session high for retry
+  # Uses IBKR's reqMktData to get real-time session high (easiest & most reliable)
+  dynamic_pivot_updates:
+    enabled: true                      # Enable dynamic pivot updates
+
+    # Step 1: Gap detection at trader initialization (whenever trader starts)
+    gap_check_enabled: true            # Check for gaps above pivot at initialization
+    gap_check_window_seconds: 300      # (Legacy - not used, checks at init time)
+
+    # Step 2: Target progression
+    target_progression_enabled: true   # Update pivot when Target1 hit
+    min_room_to_target2_pct: 1.5       # Need 1.5% room to Target2 to update pivot
+
+    # Step 3: Failure detection
+    failure_update_enabled: true       # Update pivot after trade failures
+    min_pivot_move_pct: 1.0            # Pivot must move >= 1% to reset attempts
+
   risk:
     breakeven_after_partial: true   # Move stop to breakeven after taking partial
     close_all_by_eod: true         # Flat by end of day

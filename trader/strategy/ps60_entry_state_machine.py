@@ -1290,18 +1290,22 @@ def check_entry_state_machine(strategy, symbol, bars, current_idx, pivot_price, 
                     hourly_sma_levels[f'sma{period}'] = sma_value
 
         # Calculate momentum parameters (volume, candle size)
-        current_bar = bars[current_idx]
-        current_volume = current_bar.volume if hasattr(current_bar, 'volume') else None
+        # Oct 28, 2025 - Issue #2 & #3 Fix: Use helper functions for proper candle aggregation
+        # Live: Aggregates 5-second bars to 1-minute candles
+        # Backtest: Uses 1-minute bars directly
+        candle_metrics = strategy.get_current_candle_metrics(bars, current_idx)
 
-        # Calculate average volume (last 20 bars of 5-second data)
-        avg_volume = None
-        if current_idx >= 20:
-            avg_volume = sum(bars[i].volume for i in range(current_idx-19, current_idx+1)) / 20
-        elif current_idx > 0:
-            avg_volume = sum(bars[i].volume for i in range(current_idx+1)) / (current_idx + 1)
+        if candle_metrics is None:
+            # Can't calculate metrics, insufficient bars
+            return False, "Insufficient bars for candle metrics", state.to_dict()
 
-        # Calculate current candle size
-        candle_size_pct = abs(current_bar.close - current_bar.open) / current_bar.open if current_bar.open != 0 else 0
+        current_volume = candle_metrics['volume']
+        candle_size_pct = candle_metrics['size_pct']
+
+        # Calculate average volume over last 20 1-minute candles (not 20 bars!)
+        # Live: 20 candles = 240 bars (20 minutes)
+        # Backtest: 20 candles = 20 bars (20 minutes)
+        avg_volume = strategy.get_average_candle_volume(bars, current_idx, lookback_candles=20)
 
         if tracker.check_sustained_hold(
             symbol=symbol,
