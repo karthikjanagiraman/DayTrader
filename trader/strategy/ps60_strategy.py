@@ -2708,11 +2708,13 @@ class PS60Strategy:
     def calculate_candle_based_stop(self, bars, entry_bar_idx, side, pivot_price=None):
         """
         Calculate stop price based on last opposing candle (Oct 23, 2025)
+        Updated Oct 29, 2025: Added configurable buffer for breathing room
 
         Logic:
         - LONG: Find last RED candle before entry, use its LOW as stop
         - SHORT: Find last GREEN candle before entry, use its HIGH as stop
         - Fallback: Use pivot price if no opposing candle found
+        - Buffer: Add % buffer AWAY from entry for breathing room
 
         Args:
             bars: List of Bar objects (with open, high, low, close)
@@ -2721,15 +2723,18 @@ class PS60Strategy:
             pivot_price: Fallback pivot price (resistance for LONG, support for SHORT)
 
         Returns:
-            float: Stop price
+            float: Stop price (with buffer applied)
         """
         # Configuration
         lookback = self.config['trading']['risk'].get('candle_stop_lookback', 20)
         fallback_to_pivot = self.config['trading']['risk'].get('candle_stop_fallback_to_pivot', True)
+        buffer_pct = self.config['trading']['risk'].get('candle_stop_buffer_pct', 0.0)  # Default: no buffer
 
         # Search backwards from entry candle (skip entry candle itself)
         start_idx = entry_bar_idx - 1
         end_idx = max(0, entry_bar_idx - lookback)
+
+        base_stop = None
 
         for i in range(start_idx, end_idx - 1, -1):
             if i < 0:
@@ -2742,36 +2747,50 @@ class PS60Strategy:
             if side == 'LONG':
                 # Looking for last RED candle (selling pressure)
                 if is_red:
-                    stop = bar.low  # Use LOW of red candle
+                    base_stop = bar.low  # Use LOW of red candle
                     if hasattr(self, 'logger'):
                         self.logger.debug(f"  Candle-based stop (LONG): Found red candle at idx {i}")
                         self.logger.debug(f"    Candle: O=${bar.open:.2f} H=${bar.high:.2f} L=${bar.low:.2f} C=${bar.close:.2f}")
-                        self.logger.debug(f"    Stop: ${stop:.2f} (LOW of red candle)")
-                    return stop
+                        self.logger.debug(f"    Base stop: ${base_stop:.2f} (LOW of red candle)")
+                    break
 
             elif side == 'SHORT':
                 # Looking for last GREEN candle (buying pressure)
                 if is_green:
-                    stop = bar.high  # Use HIGH of green candle
+                    base_stop = bar.high  # Use HIGH of green candle
                     if hasattr(self, 'logger'):
                         self.logger.debug(f"  Candle-based stop (SHORT): Found green candle at idx {i}")
                         self.logger.debug(f"    Candle: O=${bar.open:.2f} H=${bar.high:.2f} L=${bar.low:.2f} C=${bar.close:.2f}")
-                        self.logger.debug(f"    Stop: ${stop:.2f} (HIGH of green candle)")
-                    return stop
+                        self.logger.debug(f"    Base stop: ${base_stop:.2f} (HIGH of green candle)")
+                    break
 
         # No opposing candle found - fallback to pivot
-        if fallback_to_pivot and pivot_price:
-            if hasattr(self, 'logger'):
-                self.logger.debug(f"  Candle-based stop ({side}): No opposing candle found in {lookback} bars")
-                self.logger.debug(f"    Falling back to pivot: ${pivot_price:.2f}")
-            return pivot_price
+        if base_stop is None:
+            if fallback_to_pivot and pivot_price:
+                base_stop = pivot_price
+                if hasattr(self, 'logger'):
+                    self.logger.debug(f"  Candle-based stop ({side}): No opposing candle found in {lookback} bars")
+                    self.logger.debug(f"    Falling back to pivot: ${base_stop:.2f}")
+            else:
+                # Last resort: Use entry price (tight stop)
+                base_stop = bars[entry_bar_idx].close
+                if hasattr(self, 'logger'):
+                    self.logger.warning(f"  Candle-based stop ({side}): No opposing candle AND no pivot!")
+                    self.logger.warning(f"    Using entry price as stop: ${base_stop:.2f}")
 
-        # Last resort: Use entry price (tight stop)
-        entry_price = bars[entry_bar_idx].close
-        if hasattr(self, 'logger'):
-            self.logger.warning(f"  Candle-based stop ({side}): No opposing candle AND no pivot!")
-            self.logger.warning(f"    Using entry price as stop: ${entry_price:.2f}")
-        return entry_price
+        # Apply buffer (Oct 29, 2025)
+        # LONG: Stop moves LOWER (more room), SHORT: Stop moves HIGHER (more room)
+        if buffer_pct > 0:
+            if side == 'LONG':
+                final_stop = base_stop * (1 - buffer_pct)  # Lower stop = more breathing room
+            else:  # SHORT
+                final_stop = base_stop * (1 + buffer_pct)  # Higher stop = more breathing room
+
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"    Buffer applied: {buffer_pct*100:.1f}% → Final stop: ${final_stop:.2f}")
+            return final_stop
+        else:
+            return base_stop
 
     def calculate_stop_price(self, position, current_price=None, stock_data=None, bars=None, entry_bar_idx=None):
         """

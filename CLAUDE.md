@@ -40,6 +40,355 @@ DayTrader/
 
 **Full structure**: See `trader/PROGRESS_LOG.md`
 
+## 📊 Historical Data Infrastructure (November 2025)
+
+**Status**: ✅ COMPLETE - October 2025 dataset with full market context
+
+### Data Coverage
+
+**Quick Scan Stocks** (9 symbols): QQQ, TSLA, NVDA, AMD, PLTR, SOFI, HOOD, SMCI, PATH
+**Time Period**: October 2025 (22 trading days)
+**Total Files**: 574 1-min bars + 198 context indicators + 25 CVD bars
+**Storage Location**: `/Users/karthik/projects/DayTrader/trader/backtest/data/`
+**Total Size**: ~1.5 GB
+
+**Complete Coverage per Stock**:
+- ✅ QQQ: 22/22 days (1-min bars + context)
+- ✅ TSLA: 22/22 days (1-min bars + context)
+- ✅ NVDA: 22/22 days (1-min bars + context)
+- ✅ AMD: 22/22 days (1-min bars + context)
+- ✅ PLTR: 22/22 days (1-min bars + context)
+- ✅ SOFI: 22/22 days (1-min bars + context)
+- ✅ HOOD: 22/22 days (1-min bars + context)
+- ✅ SMCI: 22/22 days (1-min bars + context)
+- ✅ PATH: 22/22 days (1-min bars + context)
+
+### File Types and Structure
+
+#### 1. 1-Minute OHLCV Bars (`SYMBOL_YYYYMMDD_1min.json`)
+
+**Purpose**: Price action data for backtesting
+**Source**: IBKR historical data API
+**Resolution**: 390 bars per day (09:30-16:00 ET)
+**File Size**: ~72-75 KB per file
+
+**Format**:
+```json
+[
+  {
+    "date": "2025-10-31T09:30:00-04:00",
+    "open": 259.5,
+    "high": 259.72,
+    "low": 258.69,
+    "close": 258.84,
+    "volume": 324024.0,
+    "average": 259.491,
+    "barCount": 848
+  },
+  // ... 389 more bars
+]
+```
+
+**Key Fields**:
+- `date`: ISO 8601 timestamp with timezone (MUST be 'date' not 'timestamp' for backtester compatibility)
+- `open/high/low/close`: OHLC prices
+- `volume`: Share volume
+- `average`: VWAP for the bar
+- `barCount`: Number of ticks aggregated into this bar
+
+#### 2. Context Indicators (`context/SYMBOL_YYYYMMDD_context.json`)
+
+**Purpose**: Technical indicators for filter logic and strategy decisions
+**Source**: Calculated from IBKR historical daily bars (250-day lookback) + 1-min bars
+**File Size**: ~3-4 KB per file
+
+**Format**:
+```json
+{
+  "symbol": "AMD",
+  "date": "2025-10-31",
+  "daily": {
+    "sma_5": 258.594,
+    "sma_10": 248.97,
+    "sma_20": 236.451,
+    "sma_50": 191.269,
+    "sma_100": 172.607,
+    "sma_200": 139.414,
+    "ema_9": 250.253,
+    "ema_20": 233.387,
+    "ema_50": 203.738,
+    "rsi_14": 71.185,
+    "atr_14": 11.021,
+    "bb_upper": 271.296,
+    "bb_middle": 236.451,
+    "bb_lower": 201.606,
+    "prev_close": 254.84,
+    "prev_high": 263.88,
+    "prev_low": 252.31
+  },
+  "hourly": {
+    "09:00": { "sma_5": null, "ema_9": null, "rsi_14": null, /* ... all null early hours */ },
+    "10:00": { /* ... */ },
+    "13:00": { "sma_5": 257.938, /* ... populated values */ },
+    // Hours 09:00-15:00, null if insufficient history
+  },
+  "intraday": {
+    "vwap": 258.144,
+    "opening_range_high": 261.21,
+    "opening_range_low": 257.55,
+    "volume_first_hour": 6361226
+  },
+  "metadata": {
+    "bars_1min": 390,
+    "bars_hourly": 7,
+    "bars_daily": 250,
+    "processed_at": "2025-11-01T13:23:10.892456"
+  }
+}
+```
+
+**Daily Indicators** (200-250 day lookback from IBKR):
+- SMAs: 5, 10, 20, 50, 100, 200-period
+- EMAs: 9, 20, 50-period
+- RSI(14): Relative Strength Index
+- ATR(14): Average True Range
+- Bollinger Bands: Upper, middle (SMA-20), lower
+- Previous day: Close, high, low
+
+**Hourly Indicators** (calculated from 1-min bars):
+- SMAs: 5, 10, 20, 50-period hourly bars
+- EMAs: 9, 20-period
+- RSI(14), Stochastic(14,3,3), MACD(12,26,9)
+- ATR(14), Bollinger Bands
+- Note: Early hours may have null values (insufficient history)
+
+**Intraday Indicators** (calculated from 1-min bars):
+- VWAP: Volume Weighted Average Price (full day)
+- Opening Range: First 30 minutes high/low
+- First Hour Volume: Total volume 09:30-10:30
+
+#### 3. CVD Bars (`cvd_bars/SYMBOL_YYYYMMDD_cvd.json`)
+
+**Purpose**: Cumulative Volume Delta (buy/sell pressure) - Used for CVD_MONITORING filter
+**Coverage**: Partial (25 files, not all stocks/dates)
+**Note**: CVD filter currently disabled in backtester configuration
+
+### Data Download and Processing
+
+#### Download Tool: `trader/data-downloader/download_october_data.py`
+
+**Features**:
+- Downloads 1-minute bars from IBKR for specified date range
+- Automatic resume capability (tracks progress in `download_progress.json`)
+- Rate limiting: 50 requests per 10 minutes, 1-second pacing
+- Client ID: 4000 (avoid conflicts with backtester/trader)
+
+**Usage**:
+```bash
+cd trader/data-downloader
+python3 download_october_data.py --port 7497
+
+# Downloads:
+# - Quick scan stocks: QQQ, TSLA, NVDA, AMD, PLTR, SOFI, HOOD, SMCI, PATH
+# - October 2025 trading days: 22 days
+# - Total: 9 stocks × 22 days = 198 files
+```
+
+**Configuration** (lines 306-332):
+- Hardcoded quick scan stock list (not reading from scanner files)
+- Hardcoded October 2025 trading days
+- Guarantees complete coverage regardless of scanner variations
+
+#### Context Processing Tool: `trader/data-downloader/process_context_indicators.py`
+
+**Features**:
+- Fetches 250 days of daily bars from IBKR for SMA-200 calculation
+- Calculates daily, hourly, and intraday indicators
+- Caching: Fetches daily bars once per symbol, reuses for all 22 days
+- Rate limiting: 1-second pacing between IBKR requests
+- Client ID: 5000 (avoid conflicts)
+
+**Usage**:
+```bash
+cd trader/data-downloader
+
+# Process all quick scan stocks for October 2025
+python3 process_context_indicators.py \
+  --quick-scan \
+  --start-date 2025-10-01 \
+  --end-date 2025-10-31 \
+  --use-ibkr
+
+# Output: 198 context files in trader/backtest/data/context/
+```
+
+**Processing Flow**:
+1. Load 1-min bars for the day
+2. Fetch 250 days of daily bars from IBKR (cached per symbol)
+3. Calculate daily indicators (SMAs, EMAs, RSI, ATR, BB)
+4. Resample 1-min bars to hourly bars
+5. Calculate hourly indicators (SMAs, EMAs, RSI, Stochastic, MACD)
+6. Calculate intraday indicators (VWAP, opening range, first hour volume)
+7. Save to JSON file
+
+### How Backtester Uses This Data
+
+**File**: `trader/backtest/backtester.py`
+
+**Data Loading Flow**:
+1. **Load scanner results** - Get pivot levels for the day
+2. **Load 1-min bars** - Read `SYMBOL_YYYYMMDD_1min.json`
+3. **Load context indicators** - Read `context/SYMBOL_YYYYMMDD_context.json`
+4. **Simulate tick-by-tick** - Process bars sequentially, detect pivot breaks
+5. **Apply filters** - Use context indicators for choppy filter, room-to-run, etc.
+
+**Example** (backtester.py):
+```python
+# Load 1-min bars
+bars_file = f"data/{symbol}_{date_str}_1min.json"
+with open(bars_file, 'r') as f:
+    bars = json.load(f)
+
+# Load context indicators
+context_file = f"data/context/{symbol}_{date_str}_context.json"
+with open(context_file, 'r') as f:
+    context = json.load(f)
+
+# Use in strategy
+daily_atr = context['daily']['atr_14']
+daily_sma200 = context['daily']['sma_200']
+vwap = context['intraday']['vwap']
+
+# Apply choppy filter
+five_min_range = calculate_5min_range(bars)
+if five_min_range < 0.5 * daily_atr:
+    # Skip choppy stock
+```
+
+**Key Filters Using Context Data**:
+- **Choppy Filter**: 5-min range vs daily ATR(14)
+- **Room-to-Run**: Distance to highest available target
+- **Dynamic Resistance Exits**: Price vs hourly SMAs, Bollinger Bands
+- **VWAP Reference**: Intraday equilibrium level
+
+**Running a Backtest**:
+```bash
+cd trader/backtest
+
+# Single day backtest
+python3 backtester.py \
+  --scanner ../../stockscanner/output/scanner_results_20251031.json \
+  --date 2025-10-31 \
+  --account-size 50000
+
+# Output:
+# - Loads AMD_20251031_1min.json
+# - Loads context/AMD_20251031_context.json
+# - Applies PS60 strategy with all filters
+# - Generates trade log and P&L summary
+```
+
+### How Live Trader Uses This Data
+
+**File**: `trader/trader.py`
+
+**Live Trader DOES NOT use historical 1-min files** - it subscribes to **real-time tick data** from IBKR.
+
+**However, context indicators CAN be used** (optional enhancement):
+1. **Pre-market**: Run `process_context_indicators.py` to generate today's context
+2. **At startup**: Load `context/SYMBOL_YYYYMMDD_context.json` for today
+3. **During trading**: Use daily ATR, SMA-200, VWAP for filters
+4. **Real-time bars**: Build 1-min bars from live ticks using BarBuffer
+
+**Current Status**: Live trader does NOT load context files (uses real-time data only)
+
+**Future Enhancement**: Load today's context at startup for filter consistency with backtest
+
+**Example** (future implementation):
+```python
+# At trader startup
+today = datetime.now().strftime('%Y-%m-%d')
+context_file = f"backtest/data/context/{symbol}_{today}_context.json"
+
+if os.path.exists(context_file):
+    with open(context_file, 'r') as f:
+        context = json.load(f)
+    daily_atr = context['daily']['atr_14']
+    daily_sma200 = context['daily']['sma_200']
+else:
+    # Fall back to calculating from real-time data
+    daily_atr = calculate_atr_from_live_bars()
+```
+
+### Data Validation and Quality
+
+**Verification Commands**:
+```bash
+cd /Users/karthik/projects/DayTrader/trader/backtest/data
+
+# Count files
+ls -1 *.json | wc -l          # Should be 574 1-min bar files
+ls -1 context/*.json | wc -l  # Should be 198 context files
+
+# Check quick scan coverage (should be 22 files each)
+for stock in QQQ TSLA NVDA AMD PLTR SOFI HOOD SMCI PATH; do
+  echo "$stock: $(ls -1 ${stock}_2025*_1min.json | wc -l)"
+done
+
+# Verify context file structure
+cat context/AMD_20251031_context.json | python3 -m json.tool | head -50
+
+# Check data quality
+python3 -c "
+import json
+with open('AMD_20251031_1min.json', 'r') as f:
+    bars = json.load(f)
+print(f'Bars: {len(bars)}')  # Should be 390
+print(f'First: {bars[0][\"date\"]}')  # Should be 09:30
+print(f'Last: {bars[-1][\"date\"]}')  # Should be 16:00
+"
+```
+
+**Quality Checks**:
+- ✅ All 198 files created (9 stocks × 22 days)
+- ✅ Each 1-min file has exactly 390 bars
+- ✅ Field name is 'date' (not 'timestamp') - backtester compatible
+- ✅ All context files have daily SMA-200 populated (250-day history)
+- ✅ VWAP and opening range calculated correctly
+- ✅ No missing data or gaps
+
+### Data Expansion
+
+**To add more dates or symbols**:
+
+1. **Edit download_october_data.py** (lines 306-332):
+```python
+def scan_october_files(self, scanner_dir):
+    quick_scan_stocks = ['QQQ', 'TSLA', 'NVDA', 'AMD', 'PLTR', 'SOFI', 'HOOD', 'SMCI', 'PATH']
+
+    # Add more dates
+    october_trading_days = [
+        '2025-10-01', '2025-10-02', # ... existing dates
+        '2025-11-01', '2025-11-02', # Add November days
+    ]
+```
+
+2. **Run download**:
+```bash
+cd trader/data-downloader
+python3 download_october_data.py
+```
+
+3. **Process context indicators**:
+```bash
+python3 process_context_indicators.py \
+  --quick-scan \
+  --start-date 2025-10-01 \
+  --end-date 2025-11-30 \
+  --use-ibkr
+```
+
+**IMPORTANT**: Always update BOTH 1-min bars AND context files together to maintain consistency.
 
 ## 📋 Requirements Specification
 
@@ -168,45 +517,9 @@ The strategy implements a three-tier gap filter:
    - Risk/reward no longer favorable
    - **This is the most common reason to skip a scanner setup**
 
-**Implementation** (ps60_strategy.py:180-250):
-
-```python
-def _check_gap_filter(self, stock_data, current_price, side='LONG'):
-    """Check if trade should be skipped due to gap through pivot"""
-
-    previous_close = stock_data.get('close')
-
-    if side == 'LONG':
-        pivot = stock_data['resistance']
-        target = stock_data.get('target1')
-
-        # Check if gapped through pivot
-        if previous_close < pivot and current_price > pivot:
-            gap_pct = ((current_price - pivot) / pivot) * 100
-
-            # Small gap (<1%) - OK to enter
-            if gap_pct <= 1.0:
-                return False, None
-
-            # Large gap - check room to target
-            room_to_target = ((target - current_price) / current_price) * 100
-
-            # Plenty of room (>3%) - OK to enter
-            if room_to_target >= 3.0:
-                return False, None
-
-            # Gap ate up the move - SKIP
-            return True, f"Gap {gap_pct:.1f}% through pivot, only {room_to_target:.1f}% to target"
-```
-
-**Configuration** (trader_config.yaml):
-
-```yaml
-filters:
-  enable_gap_filter: true           # Enable gap detection
-  max_gap_through_pivot: 1.0        # 1% threshold for "small gap"
-  min_room_to_target: 3.0           # 3% minimum room to target after gap
-```
+**Implementation**: `trader/strategy/ps60_strategy.py:180-250`
+- Three-tier logic: small gaps (<1%), large gaps with room (>3% to target), large gaps without room (skip)
+- Configuration: `trader_config.yaml` (enable_gap_filter, max_gap_through_pivot: 1.0%, min_room_to_target: 3.0%)
 
 **Real-World Impact**:
 
@@ -398,163 +711,6 @@ python scanner.py --category indices
 }
 ```
 
-## Trader Module (to be built)
-
-### Architecture Requirements
-
-The trader module must:
-
-1. **Read Scanner Output**
-   - Parse daily scanner results (JSON/CSV) from `stockscanner/output/`
-   - Filter setups by score, R/R ratio, distance to resistance
-   - Prioritize high-scoring setups with good R/R (>1.5:1)
-   - Extract pre-defined pivots: `resistance` (long) and `support` (short)
-
-2. **Monitor Real-Time Price (Tick-by-Tick)**
-   - Subscribe to real-time price data for all scanner symbols
-   - Monitor continuously from market open (9:30 AM)
-   - Check current price against scanner-identified pivots
-   - Enter immediately when pivot breaks (no waiting for candle close)
-
-3. **Execute Trades per PS60 Rules**
-   - **Entry**: Market order when scanner pivot breaks
-   - **Initial Stop**: Place stop at pivot level (resistance for longs, support for shorts)
-   - **Partial Exits**: Automated scaling (sell 50% on first move of 0.25-0.75)
-   - **Stop Management**: Move to breakeven after partial
-   - **Final Exit**: Trail stop on remainder or close by EOD
-
-4. **Risk Management**
-   - Position sizing based on account size and distance to stop
-   - Max risk per trade (1-2% of account)
-   - Daily loss limits
-   - Max concurrent positions (5-7 max)
-
-5. **5-7 Minute Rule Implementation**
-   - Start timer upon entry
-   - Monitor price movement progress
-   - Auto-exit if no favorable movement within 5-7 minutes
-   - Indicates "reload seller/buyer" blocking the move
-
-### Trading Workflow (Scanner-Driven)
-
-```
-Daily Workflow:
-1. 8:00 AM (or prior evening) - Scanner runs, generates watchlist
-2. 8:00-9:30 AM - Trader loads watchlist, prepares monitoring
-3. 9:30 AM - Market opens, begin tick-by-tick monitoring
-4. 9:30 AM - 4:00 PM - Monitor scanner pivots continuously
-5. 3:55 PM - Close all remaining positions (flat by EOD)
-
-Per-Trade Workflow (Scanner Pivot):
-1. Load scanner output with pre-defined pivots
-   - TSLA: resistance=$444.77, support=$432.63
-2. Monitor real-time price from market open
-3. Price breaks resistance ($445.00) → ENTER LONG immediately
-4. Set initial stop at $444.77 (the pivot)
-5. Take 50% profit on first move (e.g., $445.50-$446.00)
-6. Move stop to breakeven ($445.00)
-7. Take 25% at target1 ($450.84 from scanner)
-8. Hold 25% as runner with trailing stop
-9. Exit by 3:55 PM or if stop hits
-
-Example Timeline:
-9:30 AM - Market opens, TSLA = $442.00
-9:47 AM - TSLA breaks $444.77 → Enter long at $444.85
-9:52 AM - TSLA hits $445.75 → Sell 50% (+$0.90)
-9:52 AM - Move stop to $444.85 (breakeven)
-10:15 AM - TSLA hits $447.50 → Sell 25% at target (+$2.65)
-11:30 AM - TSLA pulls back to $444.85 → Stop hits, exit 25% (scratch)
-Result: +$0.45 avg on 50%, +$2.65 on 25%, $0 on 25% = +$1.11/share avg
-```
-
-### IBKR Integration
-
-**Connection**:
-- Use `ib_insync` library (same as scanner)
-- Port 7497 (paper) or 7496 (live)
-- Separate client ID from scanner (e.g., 2000+)
-
-**Order Types**:
-- Market orders for entries (fast execution when pivot breaks)
-- Stop-loss orders for risk management (at pivot level)
-- Limit orders for partial profit-taking (optional)
-- Bracket orders to combine entry/stop/target (optional)
-
-**Real-time Data Requirements**:
-- Subscribe to **real-time tick data** (not bar data) for watchlist symbols
-- Use `reqMktData()` for continuous price updates
-- Monitor bid/ask/last price
-- No need for 60-minute bar subscriptions (pivots pre-defined by scanner)
-
-### Position Management
-
-**Sizing Algorithm** (Risk-Based, October 4, 2025):
-```python
-# Calculate 1% risk per trade
-risk_amount = account_value * 0.01  # $1,000 on $100k account
-
-# Calculate stop distance
-stop_distance = abs(entry_price - stop_price)
-
-# Calculate shares to risk exactly $1,000
-shares = int(risk_amount / stop_distance)
-
-# Apply constraints
-shares = max(10, min(shares, 1000))  # Between 10-1000 shares
-
-# Examples:
-# TSLA: Entry $435.29, Stop $435.67, Distance $0.38 → 2,632 shares → 1000 (capped)
-# AVGO: Entry $337.55, Stop $334.79, Distance $2.76 → 362 shares ✅
-# BA:   Entry $217.09, Stop $215.32, Distance $1.77 → 565 shares ✅
-# MS:   Entry $156.02, Stop $154.77, Distance $1.25 → 800 shares ✅
-```
-
-**Scaling Out** (1R-Based Partials):
-- Sell 50% at 1R (profit = risk distance)
-- Sell 25% at target1 (2R or scanner target)
-- Hold 25% as runner with trailing stop
-
-### Configuration
-
-**trader_config.yaml** should include:
-```yaml
-trading:
-  account_size: 100000
-  risk_per_trade: 0.01  # 1%
-  max_positions: 5
-  max_daily_loss: 0.03  # 3%
-
-  position_sizing:
-    min_shares: 10
-    max_shares: 1000
-
-  entry:
-    use_market_orders: true
-    slippage_tolerance: 0.02  # 2%
-
-  exits:
-    partial_1_pct: 0.50  # Sell 50% first
-    partial_2_pct: 0.25  # Sell 25% second
-    runner_pct: 0.25     # Hold 25%
-
-  risk:
-    five_minute_rule: true
-    breakeven_after_partial: true
-    close_all_by_eod: true
-    eod_close_time: "15:55"
-
-  filters:
-    min_score: 50
-    min_risk_reward: 1.5
-    max_dist_to_pivot: 2.0  # Max 2% from pivot
-
-backtest:
-  use_1min_bars: true        # Use 1-min bars (not tick data)
-  start_date: "2025-09-01"
-  end_date: "2025-09-30"
-  scanner_output_dir: "../stockscanner/output/"
-```
-
 ## Scanner Validation System (October 6, 2025)
 
 ### Overview
@@ -606,32 +762,7 @@ python3 enhanced_scoring.py scanner_results_20251007.csv rescored_20251007.csv
 
 ### Key Insights from Oct 6, 2025 Validation
 
-**Scanner Performance**:
-- 57 stocks scanned, 12 winners identified (21%)
-- LONG success rate: 40%
-- SHORT success rate: 25%
-- Overall success rate: 33.3%
-
-**Critical Pattern Discovered**:
-```
-Pivot Width = (Resistance - Support) / Support × 100
-
-Winners:         2.70% average (2.51% median)
-False Breakouts: 7.67% average (4.92% median)
-
-TIGHT PIVOTS = SUCCESS
-WIDE PIVOTS = FALSE BREAKOUT
-```
-
-**Top-Ranked Accuracy**:
-- Top 5: 60% success rate
-- Top 10: **70% success rate** ⭐
-- Top 15: 66.7% success rate
-
-**Problem Areas Identified**:
-- Index ETFs (SPY, QQQ, DIA, IWM): 100% false breakout rate
-- High-vol stocks (TSLA, COIN, HOOD): 75% false breakout rate
-- SHORT setups: Only 25% success rate
+**Critical Discovery**: Pivot width predicts success - tight pivots (2.51% median) succeed, wide pivots (4.92% median) fail. Top 10 ranked setups achieve 70% accuracy vs 33% baseline. LONG setups (40% success) outperform SHORTs (25%). Index ETFs and high-vol stocks underperform.
 
 ### Integration with Trading
 
@@ -1349,23 +1480,6 @@ When implementing features that need existing functionality (scanner, strategy, 
 3. **Backtest validation**: Compare against historical scanner results
 4. **Manual verification**: Watch first trades execute and verify PS60 compliance
 
-## PS60 Principles Summary
-
-**The Core Philosophy**:
-- Wait patiently for clear pivot breaks (don't predict)
-- Enter only with confirmation and room to run
-- Take quick partial profits (cash flow first)
-- Keep losses small with tight stops at pivot
-- Let runners capture trend moves
-- Stay disciplined - no exceptions to rules
-
-**Psychological Edge**:
-- Pre-defined levels eliminate guesswork
-- Partial profits reduce fear of giving back gains
-- Breakeven stops remove stress on runners
-- 5-minute rule prevents hope-based holding
-- Structure removes emotional decision-making
-
 ## Documentation Files
 
 ### Core Documentation
@@ -1445,51 +1559,6 @@ When implementing features that need existing functionality (scanner, strategy, 
 - Max drawdown <5% monthly
 - Consistency over home runs
 - Respect all PS60 rules (audit compliance)
-
-## Development Priority (Scanner-Driven Approach)
-
-**Phase 1: Core Infrastructure**
-1. Scanner output parser (read JSON/CSV from `stockscanner/output/`)
-2. Watchlist filter (by score, R/R, distance to pivot)
-3. Position manager (calculate position sizes based on risk)
-4. IBKR connection manager (separate client ID from scanner)
-
-**Phase 2: Real-Time Monitoring**
-5. Real-time tick data subscription for watchlist symbols
-6. Pivot break detection (monitor price vs. scanner resistance/support)
-7. Entry signal generation (when pivot breaks)
-
-**Phase 3: Order Execution**
-8. Market order execution (enter on pivot break)
-9. Stop-loss order placement (at pivot level)
-10. Order status tracking and confirmations
-
-**Phase 4: Exit Management**
-11. Partial profit-taking logic (sell 50% on first move)
-12. Breakeven stop adjustment (after partial)
-13. Target-based exits (at scanner target1, target2)
-14. Trailing stop for runners
-
-**Phase 5: Risk Management**
-15. 5-7 minute rule implementation (timer-based exit)
-16. Position size calculator (based on stop distance)
-17. Daily loss limits and position count limits
-18. End-of-day liquidation (close all by 3:55 PM)
-
-**Phase 6: Testing & Validation**
-19. Paper trading mode (real market, simulated orders)
-20. Trade logging and performance tracking
-21. Backtest framework (replay historical scanner results)
-22. Live paper trading validation (2-4 weeks minimum)
-
-**Phase 7: Production**
-23. Live trading mode (after validation)
-24. Monitoring dashboard
-25. Alert system for critical events
-
-**Note**: Phases 3-7 from original plan (intraday pivots, gap plays) are **deferred** since we're focusing on scanner-identified pivots only.
-
-Each phase must be tested thoroughly before proceeding to the next.
 
 ## Recent Enhancements (October 2025)
 

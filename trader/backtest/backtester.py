@@ -1535,16 +1535,35 @@ class PS60Backtester:
         - Partial profit-taking at 1R and targets
         """
         # 7-MINUTE RULE (PS60 Core Rule - configurable threshold, default 7 min)
+        # NEW (Oct 31, 2025): Tighten stop instead of exiting
         # Use strategy module's check_fifteen_minute_rule method
         should_exit, reason = self.strategy.check_fifteen_minute_rule(pos, price, timestamp)
         self.logger.debug(f"{pos['symbol']} Bar {bar_num} - {self.strategy.fifteen_minute_threshold}-min rule check: should_exit={should_exit}, reason='{reason}'")
         if should_exit:
-            exit_price = price  # No additional slippage, market exit
-            print(f"     ⏱️  {reason} @ ${exit_price:.2f} ({timestamp.strftime('%H:%M')})")
-            # Use actual threshold from strategy config (7 minutes, not 15)
-            rule_name = f"{self.strategy.fifteen_minute_threshold}MIN_RULE"
-            self.logger.info(f"{pos['symbol']} Bar {bar_num} - EXIT ({rule_name}) @ ${exit_price:.2f}, P&L=${(exit_price-pos['entry_price'])*pos['shares']*(1 if pos['side']=='SHORT' else -1):.2f}")
-            return None, self.close_position(pos, exit_price, timestamp, rule_name, bar_num)
+            # Instead of exiting, tighten stop to 2 ticks above entry (LONG) or below (SHORT)
+            # This gives position more time while protecting against reversals
+            if not pos.get('seven_min_stop_tightened', False):
+                tick_size = 0.01  # Standard US stock tick
+                ticks_buffer = 2
+
+                if pos['side'] == 'LONG':
+                    # Move stop 2 ticks above entry (near breakeven)
+                    new_stop = pos['entry_price'] + (tick_size * ticks_buffer)
+                else:  # SHORT
+                    # Move stop 2 ticks below entry (near breakeven)
+                    new_stop = pos['entry_price'] - (tick_size * ticks_buffer)
+
+                old_stop = pos['stop']
+                pos['stop'] = new_stop
+                pos['seven_min_stop_tightened'] = True  # Mark as triggered
+
+                print(f"     ⏱️  {reason} @ ${price:.2f} ({timestamp.strftime('%H:%M')})")
+                print(f"     ⏱️  TIGHTENED STOP ${old_stop:.2f} → ${new_stop:.2f} ({ticks_buffer} ticks from entry)")
+
+                rule_name = f"{self.strategy.fifteen_minute_threshold}MIN_RULE_TIGHTENED"
+                self.logger.info(f"{pos['symbol']} Bar {bar_num} - {rule_name}: stop ${old_stop:.2f} → ${new_stop:.2f}")
+                # Continue with position (don't exit)
+            # If stop was already tightened and still no progress, let normal stop logic handle it
 
         # Check for partial profit using strategy module (now uses 1R-based logic)
         # Pass bars for SMA calculation in progressive partial system

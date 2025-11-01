@@ -120,7 +120,7 @@ trading:
   # 3. FAILURE UPDATE: When trade fails → update pivot to session high for retry
   # Uses IBKR's reqMktData to get real-time session high (easiest & most reliable)
   dynamic_pivot_updates:
-    enabled: true                      # Enable dynamic pivot updates
+    enabled: false                     # ❌ DISABLED (Oct 29, 2025) - No pivot updates during session
 
     # Step 1: Gap detection at trader initialization (whenever trader starts)
     gap_check_enabled: true            # Check for gaps above pivot at initialization
@@ -156,6 +156,7 @@ trading:
     # Fallback: Uses pivot if no opposing candle found
     candle_stop_lookback: 20       # Max candles to search backwards
     candle_stop_fallback_to_pivot: true  # Use pivot if no opposing candle found
+    candle_stop_buffer_pct: 0.005  # ⭐ NEW (Oct 29, 2025): Add 0.5% buffer beyond candle stop for breathing room
 
     # 7-Minute Rule (PS60) - Exit if no progress after 7 minutes
     # Changed from 15 to 7 minutes per PS60 methodology (Oct 11, 2025)
@@ -422,8 +423,8 @@ confirmation:
     check_every_candle: true                 # Check on EVERY 1-min candle close
 
     # PATH 2: Sustained CVD (consecutive candles) - PATIENT ENTRY
-    min_consecutive_bullish: 3               # ⭐ INCREASED: 3 consecutive bullish candles for LONG (Oct 21, 2025)
-    min_consecutive_bearish: 3               # ⭐ INCREASED: 3 consecutive bearish candles for SHORT (Oct 21, 2025)
+    min_consecutive_bullish: 1               # ⭐ INCREASED: 3 consecutive bullish candles for LONG (Oct 21, 2025)
+    min_consecutive_bearish: 1               # ⭐ INCREASED: 3 consecutive bearish candles for SHORT (Oct 21, 2025)
 
     # ===== PHASE 1 FIX (Oct 22, 2025): PERCENTAGE-BASED IMBALANCE =====
     # NEW: Use percentage imbalance instead of absolute slope thresholds
@@ -453,7 +454,7 @@ confirmation:
     reset_on_neutral: false                  # Don't reset on neutral (allows brief pauses)
 
     # Calculation settings
-    slope_lookback: 5                        # Number of bars for slope calculation
+    slope_lookback: 2                        # Number of bars for slope calculation
                                              # 5 bars = ~5 minutes of data for trend detection
 
     # Volume Filter for CVD_MONITORING (Phase 11 - Oct 26, 2025)

@@ -69,3 +69,10 @@ TWS API/
 # Claude
 .claude/
 results/
+
+# Historical tick data (1.4GB - too large for Git)
+trader/backtest/data/ticks/*.json
+
+# Data downloader logs
+trader/data-downloader/*.log
+trader/data-downloader/download_progress.json

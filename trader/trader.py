@@ -1517,12 +1517,35 @@ class PS60Trader:
             )
             self.logger.debug(f"  {symbol}: 15-min rule result: {should_exit}, reason: {reason}")
             if should_exit:
-                self.logger.info(f"\n⏱️  15-MINUTE RULE: {symbol}")
-                self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
-                self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
-                self.logger.info(f"   Reason: {reason}")
-                self.close_position(position, current_price, '15MIN_RULE')
-                continue
+                # NEW (Oct 31, 2025): Instead of exiting, tighten stop to 2 ticks above entry
+                # This gives position more time while protecting against reversals
+                if not position.get('seven_min_stop_tightened', False):
+                    tick_size = 0.01  # Standard US stock tick
+                    ticks_buffer = 2
+
+                    if position['side'] == 'LONG':
+                        # Move stop 2 ticks above entry (near breakeven)
+                        new_stop = position['entry_price'] + (tick_size * ticks_buffer)
+                    else:  # SHORT
+                        # Move stop 2 ticks below entry (near breakeven)
+                        new_stop = position['entry_price'] - (tick_size * ticks_buffer)
+
+                    old_stop = position['stop']
+                    position['stop'] = new_stop
+                    position['seven_min_stop_tightened'] = True  # Mark as triggered
+
+                    self.logger.info(f"\n⏱️  7-MINUTE RULE TRIGGERED: {symbol}")
+                    self.logger.info(f"   Entry: ${position['entry_price']:.2f} @ {position['entry_time'].strftime('%I:%M:%S %p')} ET")
+                    self.logger.info(f"   Current: ${current_price:.2f} ({gain_pct:+.2f}%) after {int(time_in_trade)} minutes")
+                    self.logger.info(f"   Reason: {reason}")
+                    self.logger.info(f"   Action: TIGHTENED STOP ${old_stop:.2f} → ${new_stop:.2f} ({ticks_buffer} ticks from entry)")
+
+                    # Update IBKR stop order (if live trading)
+                    if hasattr(self, 'ib') and self.ib.isConnected():
+                        self.cancel_and_replace_stop_order(position)
+
+                    continue
+                # If stop was already tightened and still no progress, let normal stop logic handle it
 
             # Check for partial profit
             self.logger.debug(f"  {symbol}: Checking for partial profit...")
