@@ -76,3 +76,5 @@ trader/backtest/data/ticks/*.json
 # Data downloader logs
 trader/data-downloader/*.log
 trader/data-downloader/download_progress.json
+# CVD data files (generated from tick data)
+trader/backtest/data/cvd_bars/*.json

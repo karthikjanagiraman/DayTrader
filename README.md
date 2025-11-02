@@ -346,12 +346,26 @@ cat validation/reports/validation_results_20251015.json
 ```bash
 cd trader/data-downloader
 
-# Download 1-minute bars for October 2025
+# Download complete dataset (1-min bars + tick data + CVD bars)
 python3 download_october_data.py
+
+# Download specific date range
+python3 download_october_data.py \
+  --start-date 2025-10-15 \
+  --end-date 2025-10-31
+
+# Download without CVD (faster, bars + ticks only)
+python3 download_october_data.py --no-cvd
 
 # Process context indicators (SMAs, EMAs, RSI, etc.)
 python3 process_context_indicators.py
 ```
+
+**Enhanced 3-Stage Pipeline** (November 1, 2025):
+- Stage 1: Downloads 1-minute OHLCV bars (~10 minutes)
+- Stage 2: Downloads tick data for CVD calculation (~10-16 hours)
+- Stage 3: Builds CVD-enriched bars from ticks (~10 minutes)
+- Resilient: Resume capability, auto-reconnect, progress tracking
 
 ## 🔧 Advanced Configuration
 
