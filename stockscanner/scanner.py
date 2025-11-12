@@ -17,18 +17,34 @@ import pytz
 class PS60Scanner:
     """Main scanner for PS60 trading setups"""
 
-    def __init__(self):
+    def __init__(self, port=7497, client_id=None, scan_timestamp=None):
+        """
+        Initialize scanner
+
+        Args:
+            port: IBKR port (7497 for paper, 7496 for live)
+            client_id: IBKR client ID (auto-assigned if None)
+            scan_timestamp: Datetime object for historical scans (uses 8 AM ET if only date provided)
+        """
         self.ib = None
         self.results = []
         self.failed = []
-        self.scan_date = None  # Track the date being scanned
+        self.port = port
+        self.client_id = client_id
+        self.scan_timestamp = scan_timestamp
+        self.scan_date = None  # Track the date being scanned (for backward compatibility)
 
-    def connect(self, client_id=1001):
+    def connect(self, client_id=None):
         """Connect to IBKR TWS"""
         self.ib = IB()
+
+        # Use provided client_id, or self.client_id, or default
+        if client_id is None:
+            client_id = self.client_id if self.client_id is not None else 1001
+
         try:
-            self.ib.connect('127.0.0.1', 7497, clientId=client_id)
-            print(f"✓ Connected to IBKR (Client ID: {client_id})")
+            self.ib.connect('127.0.0.1', self.port, clientId=client_id)
+            print(f"✓ Connected to IBKR (Port: {self.port}, Client ID: {client_id})")
             return True
         except Exception as e:
             print(f"✗ Connection failed: {e}")
@@ -57,7 +73,7 @@ class PS60Scanner:
 
         if category == 'quick':
             # Top movers for quick scan
-            return ['QQQ', 'TSLA', 'NVDA', 'AMD', 'PLTR', 'SOFI', 'HOOD', 'SMCI', 'PATH']
+            return ['QQQ', 'TSLA', 'NVDA', 'AMD', 'PLTR', 'SOFI', 'HOOD', 'SMCI', 'PATH', 'SNOW', 'CELH', 'AMZN', 'ELF', 'QCOM', 'TEAM', 'TTD', 'CAVA', 'HIMS', 'JOBY', 'ACHR']
         elif category == 'all':
             # All symbols
             all_symbols = []
@@ -67,10 +83,121 @@ class PS60Scanner:
         else:
             return core_symbols.get(category, [])
 
+    def _is_bounce_high(self, df_hourly, todays_high, today):
+        """
+        Detect if today's high is a bounce high (recovery after pullback)
+        vs. a tested resistance level.
+
+        Returns:
+            dict: {
+                'is_bounce': bool,
+                'penalty': float (weight penalty to apply),
+                'bounce_pct': float (how far bounced from recent lows)
+            }
+        """
+        try:
+            # Get last 3 days of data
+            df_hourly = df_hourly.copy()
+            df_hourly['date'] = pd.to_datetime(df_hourly['date']).dt.date
+            dates = df_hourly['date'].unique()
+
+            if len(dates) < 3:
+                return {'is_bounce': False, 'penalty': 0.0, 'bounce_pct': 0.0}
+
+            # Get bars from 1-3 days ago
+            recent_dates = [d for d in dates if d < today][-3:]
+            recent_bars = df_hourly[df_hourly['date'].isin(recent_dates)]
+
+            if len(recent_bars) == 0:
+                return {'is_bounce': False, 'penalty': 0.0, 'bounce_pct': 0.0}
+
+            # Find lowest low in recent 1-3 days
+            recent_low = recent_bars['low'].min()
+
+            # Calculate bounce percentage
+            bounce_pct = ((todays_high - recent_low) / recent_low) * 100
+
+            # Classify as bounce if today's high is >2% above recent lows
+            if bounce_pct >= 2.0:
+                # Apply graduated penalty based on bounce size
+                if bounce_pct >= 5.0:
+                    penalty = 1.5  # Large bounce, strong penalty
+                elif bounce_pct >= 3.5:
+                    penalty = 1.0  # Medium bounce
+                else:
+                    penalty = 0.5  # Small bounce
+
+                return {
+                    'is_bounce': True,
+                    'penalty': penalty,
+                    'bounce_pct': bounce_pct,
+                    'recent_low': recent_low
+                }
+
+            return {'is_bounce': False, 'penalty': 0.0, 'bounce_pct': bounce_pct}
+
+        except Exception as e:
+            return {'is_bounce': False, 'penalty': 0.0, 'bounce_pct': 0.0}
+
+    def _check_higher_resistance_nearby(self, all_resistances, current_resistance, proximity_pct=1.5):
+        """
+        Check if there's a higher resistance level within proximity_pct (default 1.5%)
+        If found and it has decent weight, use that instead.
+
+        Args:
+            all_resistances: list of dicts with 'level', 'weight', 'test_count'
+            current_resistance: float - currently selected resistance
+            proximity_pct: float - max distance to consider (default 1.5%)
+
+        Returns:
+            dict: {
+                'use_higher': bool,
+                'higher_level': float or None,
+                'reason': str
+            }
+        """
+        try:
+            # Find all resistances higher than current
+            higher_resistances = [
+                r for r in all_resistances
+                if r['level'] > current_resistance
+            ]
+
+            if not higher_resistances:
+                return {'use_higher': False, 'higher_level': None, 'reason': 'No higher resistance found'}
+
+            # Sort by level (ascending)
+            higher_resistances = sorted(higher_resistances, key=lambda x: x['level'])
+
+            # Check closest higher resistance
+            closest_higher = higher_resistances[0]
+            distance_pct = ((closest_higher['level'] - current_resistance) / current_resistance) * 100
+
+            # If within proximity threshold
+            if distance_pct <= proximity_pct:
+                # Use higher level if it has decent weight (>= 2.0) OR multiple tests (>= 2)
+                if closest_higher['weight'] >= 2.0 or closest_higher['test_count'] >= 2:
+                    return {
+                        'use_higher': True,
+                        'higher_level': closest_higher['level'],
+                        'reason': f'Higher resistance ${closest_higher["level"]:.2f} only {distance_pct:.1f}% away (weight={closest_higher["weight"]:.1f}, tests={closest_higher["test_count"]})',
+                        'distance_pct': distance_pct
+                    }
+
+            return {
+                'use_higher': False,
+                'higher_level': None,
+                'reason': f'Higher resistance too far ({distance_pct:.1f}%) or weak weight'
+            }
+
+        except Exception as e:
+            return {'use_higher': False, 'higher_level': None, 'reason': f'Error: {str(e)}'}
+
     def _detect_recency_weighted_resistance(self, df_hourly, current_price):
         """
         Detect resistance using recency-weighted pattern detection
         Prioritizes what price is testing NOW (last 1-2 days)
+        ENHANCED with bounce high detection and proximity check
         """
         try:
             # Step 1: Identify TODAY's high and recent pattern
@@ -87,29 +214,32 @@ class PS60Scanner:
             if todays_high is None:
                 return {'activated': False}
 
-            # Step 2: Check last 5 days pattern - NEW RANGE or RECOVERY?
-            last_5days = df_hourly.iloc[-20:] if len(df_hourly) >= 20 else df_hourly
-            last_5days_dates = last_5days['date'].unique()
+            # NEW: Check if today's high is a bounce high
+            bounce_info = self._is_bounce_high(df_hourly, todays_high, today)
 
-            # Get daily highs for last 5 days
-            daily_highs_5d = []
-            for date in last_5days_dates[-5:]:
-                date_bars = last_5days[last_5days['date'] == date]
+            # Step 2: Check last 7 days pattern - NEW RANGE or RECOVERY?
+            last_7days = df_hourly.iloc[-28:] if len(df_hourly) >= 28 else df_hourly
+            last_7days_dates = last_7days['date'].unique()
+
+            # Get daily highs for last 7 days
+            daily_highs_7d = []
+            for date in last_7days_dates[-7:]:
+                date_bars = last_7days[last_7days['date'] == date]
                 if len(date_bars) > 0:
-                    daily_highs_5d.append({
+                    daily_highs_7d.append({
                         'date': date,
                         'high': date_bars['high'].max(),
-                        'days_ago': len(last_5days_dates) - list(last_5days_dates).index(date) - 1
+                        'days_ago': len(last_7days_dates) - list(last_7days_dates).index(date) - 1
                     })
 
             # Step 3: Determine pattern type and resistance level
             pattern_type = "CURRENT_TEST"
             resistance_level = todays_high  # Default: use today's high
 
-            if len(daily_highs_5d) >= 3:
+            if len(daily_highs_7d) >= 3:
                 # Check if recent 3+ days forming NEW RANGE below old highs
-                recent_3_highs = [h['high'] for h in daily_highs_5d if h['days_ago'] <= 2]
-                old_highs = [h['high'] for h in daily_highs_5d if h['days_ago'] >= 3]
+                recent_3_highs = [h['high'] for h in daily_highs_7d if h['days_ago'] <= 2]
+                old_highs = [h['high'] for h in daily_highs_7d if h['days_ago'] >= 3]
 
                 if len(recent_3_highs) >= 3 and len(old_highs) > 0:
                     recent_max = max(recent_3_highs)
@@ -124,6 +254,25 @@ class PS60Scanner:
                         # Use highest level being tested now
                         resistance_level = max(todays_high, old_max if old_max < todays_high * 1.05 else todays_high)
 
+            # NEW: Collect ALL potential resistance levels (not just one)
+            all_resistance_candidates = []
+
+            # Candidate 1: TODAY's high
+            all_resistance_candidates.append({
+                'level': todays_high,
+                'source': 'today_high',
+                'days_ago': 0
+            })
+
+            # Candidate 2-N: Daily highs from last 7 days
+            for dh in daily_highs_7d:
+                if dh['high'] >= current_price:  # Only above current price
+                    all_resistance_candidates.append({
+                        'level': dh['high'],
+                        'source': f'daily_high_{dh["days_ago"]}d_ago',
+                        'days_ago': dh['days_ago']
+                    })
+
             # Step 4: Find all tests of the resistance level (±1% tolerance)
             zone_tolerance = resistance_level * 0.01
             tests = []
@@ -131,8 +280,8 @@ class PS60Scanner:
             for idx, bar in df_hourly.iterrows():
                 if abs(bar['high'] - resistance_level) <= zone_tolerance:
                     # Determine days ago
-                    if bar['date'] in list(last_5days_dates):
-                        days_ago = len(last_5days_dates) - list(last_5days_dates).index(bar['date']) - 1
+                    if bar['date'] in list(last_7days_dates):
+                        days_ago = len(last_7days_dates) - list(last_7days_dates).index(bar['date']) - 1
                     else:
                         days_ago = len(df_hourly) - idx // 4
 
@@ -161,16 +310,75 @@ class PS60Scanner:
 
             total_weight = sum(t['weight'] for t in weighted_tests)
 
+            # NEW: Apply bounce high penalty
+            if bounce_info['is_bounce'] and resistance_level == todays_high:
+                total_weight -= bounce_info['penalty']
+                pattern_type += "_BOUNCE"
+
+            # NEW: Calculate weights for ALL resistance candidates
+            all_resistance_weights = []
+            for candidate in all_resistance_candidates:
+                # Find tests for this level
+                level_zone = candidate['level'] * 0.01
+                level_tests = [
+                    t for t in weighted_tests
+                    if abs(t['test']['high'] - candidate['level']) <= level_zone
+                ]
+
+                if level_tests:
+                    level_weight = sum(t['weight'] for t in level_tests)
+                    all_resistance_weights.append({
+                        'level': candidate['level'],
+                        'weight': level_weight,
+                        'test_count': len(level_tests),
+                        'days_ago': candidate['days_ago']
+                    })
+
+            # NEW: Check for higher resistance nearby (Enhancement #3)
+            proximity_check = self._check_higher_resistance_nearby(
+                all_resistance_weights,
+                resistance_level,
+                proximity_pct=1.5  # 1.5% threshold
+            )
+
+            if proximity_check['use_higher']:
+                # Override with higher resistance
+                resistance_level = proximity_check['higher_level']
+
+                # Recalculate tests for this level
+                zone_tolerance = resistance_level * 0.01
+                tests = [
+                    t['test'] for t in weighted_tests
+                    if abs(t['test']['high'] - resistance_level) <= zone_tolerance
+                ]
+                total_weight = sum(
+                    t['weight'] for t in weighted_tests
+                    if abs(t['test']['high'] - resistance_level) <= zone_tolerance
+                )
+                pattern_type = "PROXIMITY_ADJUSTED"
+
             # Activate if weighted count >= 3.0
             if total_weight >= 3.0:
                 num_tests = len(tests)
 
+                reason_parts = [f'Tested {num_tests}x']
+                if bounce_info['is_bounce'] and todays_high in [t['test']['high'] for t in weighted_tests[:5]]:
+                    reason_parts.append(f'bounce from ${bounce_info["recent_low"]:.2f}')
+                if proximity_check['use_higher']:
+                    reason_parts.append(f'adjusted to higher level')
+
+                reason = ' | '.join(reason_parts)
+
                 return {
                     'activated': True,
                     'level': resistance_level,
-                    'reason': f'Tested {num_tests}x at ${resistance_level:.2f} ({pattern_type.lower()} pattern)',
+                    'reason': reason,
                     'confidence': 'HIGH' if total_weight >= 5.0 else 'MEDIUM',
-                    'touches': num_tests
+                    'touches': num_tests,
+                    'test_count': num_tests,  # For Phase 1 output
+                    'pattern_type': pattern_type,  # For Phase 2 output
+                    'bounce_detected': bounce_info['is_bounce'],
+                    'proximity_adjusted': proximity_check['use_higher']
                 }
 
             return {'activated': False}
@@ -178,10 +386,121 @@ class PS60Scanner:
         except Exception as e:
             return {'activated': False}
 
+    def _is_bounce_low(self, df_hourly, todays_low, today):
+        """
+        Detect if today's low is a selloff low (decline from recent highs)
+        vs. a tested support level.
+
+        Returns:
+            dict: {
+                'is_selloff': bool,
+                'penalty': float (weight penalty to apply),
+                'selloff_pct': float (how far declined from recent highs)
+            }
+        """
+        try:
+            # Get last 3 days of data
+            df_hourly = df_hourly.copy()
+            df_hourly['date'] = pd.to_datetime(df_hourly['date']).dt.date
+            dates = df_hourly['date'].unique()
+
+            if len(dates) < 3:
+                return {'is_selloff': False, 'penalty': 0.0, 'selloff_pct': 0.0}
+
+            # Get bars from 1-3 days ago
+            recent_dates = [d for d in dates if d < today][-3:]
+            recent_bars = df_hourly[df_hourly['date'].isin(recent_dates)]
+
+            if len(recent_bars) == 0:
+                return {'is_selloff': False, 'penalty': 0.0, 'selloff_pct': 0.0}
+
+            # Find highest high in recent 1-3 days
+            recent_high = recent_bars['high'].max()
+
+            # Calculate selloff percentage
+            selloff_pct = ((recent_high - todays_low) / recent_high) * 100
+
+            # Classify as selloff if today's low is >2% below recent highs
+            if selloff_pct >= 2.0:
+                # Apply graduated penalty based on selloff size
+                if selloff_pct >= 5.0:
+                    penalty = 1.5  # Large selloff, strong penalty
+                elif selloff_pct >= 3.5:
+                    penalty = 1.0  # Medium selloff
+                else:
+                    penalty = 0.5  # Small selloff
+
+                return {
+                    'is_selloff': True,
+                    'penalty': penalty,
+                    'selloff_pct': selloff_pct,
+                    'recent_high': recent_high
+                }
+
+            return {'is_selloff': False, 'penalty': 0.0, 'selloff_pct': selloff_pct}
+
+        except Exception as e:
+            return {'is_selloff': False, 'penalty': 0.0, 'selloff_pct': 0.0}
+
+    def _check_lower_support_nearby(self, all_supports, current_support, proximity_pct=1.5):
+        """
+        Check if there's a lower support level within proximity_pct (default 1.5%)
+        If found and it has decent weight, use that instead.
+
+        Args:
+            all_supports: list of dicts with 'level', 'weight', 'test_count'
+            current_support: float - currently selected support
+            proximity_pct: float - max distance to consider (default 1.5%)
+
+        Returns:
+            dict: {
+                'use_lower': bool,
+                'lower_level': float or None,
+                'reason': str
+            }
+        """
+        try:
+            # Find all supports lower than current
+            lower_supports = [
+                s for s in all_supports
+                if s['level'] < current_support
+            ]
+
+            if not lower_supports:
+                return {'use_lower': False, 'lower_level': None, 'reason': 'No lower support found'}
+
+            # Sort by level (descending - highest of the lower levels)
+            lower_supports = sorted(lower_supports, key=lambda x: x['level'], reverse=True)
+
+            # Check closest lower support
+            closest_lower = lower_supports[0]
+            distance_pct = ((current_support - closest_lower['level']) / current_support) * 100
+
+            # If within proximity threshold
+            if distance_pct <= proximity_pct:
+                # Use lower level if it has decent weight (>= 2.0) OR multiple tests (>= 2)
+                if closest_lower['weight'] >= 2.0 or closest_lower['test_count'] >= 2:
+                    return {
+                        'use_lower': True,
+                        'lower_level': closest_lower['level'],
+                        'reason': f'Lower support ${closest_lower["level"]:.2f} only {distance_pct:.1f}% away (weight={closest_lower["weight"]:.1f}, tests={closest_lower["test_count"]})',
+                        'distance_pct': distance_pct
+                    }
+
+            return {
+                'use_lower': False,
+                'lower_level': None,
+                'reason': f'Lower support too far ({distance_pct:.1f}%) or weak weight'
+            }
+
+        except Exception as e:
+            return {'use_lower': False, 'lower_level': None, 'reason': f'Error: {str(e)}'}
+
     def _detect_recency_weighted_support(self, df_hourly, current_price):
         """
         Detect support using recency-weighted pattern detection
         Prioritizes what price is testing NOW (last 1-2 days)
+        ENHANCED with bounce low detection and proximity check
         """
         try:
             # Step 1: Identify TODAY's low and recent pattern
@@ -198,29 +517,32 @@ class PS60Scanner:
             if todays_low is None:
                 return {'activated': False}
 
-            # Step 2: Check last 5 days pattern - NEW RANGE or RECOVERY?
-            last_5days = df_hourly.iloc[-20:] if len(df_hourly) >= 20 else df_hourly
-            last_5days_dates = last_5days['date'].unique()
+            # NEW: Check if today's low is a selloff low
+            selloff_info = self._is_bounce_low(df_hourly, todays_low, today)
 
-            # Get daily lows for last 5 days
-            daily_lows_5d = []
-            for date in last_5days_dates[-5:]:
-                date_bars = last_5days[last_5days['date'] == date]
+            # Step 2: Check last 7 days pattern - NEW RANGE or RECOVERY?
+            last_7days = df_hourly.iloc[-28:] if len(df_hourly) >= 28 else df_hourly
+            last_7days_dates = last_7days['date'].unique()
+
+            # Get daily lows for last 7 days
+            daily_lows_7d = []
+            for date in last_7days_dates[-7:]:
+                date_bars = last_7days[last_7days['date'] == date]
                 if len(date_bars) > 0:
-                    daily_lows_5d.append({
+                    daily_lows_7d.append({
                         'date': date,
                         'low': date_bars['low'].min(),
-                        'days_ago': len(last_5days_dates) - list(last_5days_dates).index(date) - 1
+                        'days_ago': len(last_7days_dates) - list(last_7days_dates).index(date) - 1
                     })
 
             # Step 3: Determine pattern type and support level
             pattern_type = "CURRENT_TEST"
             support_level = todays_low  # Default: use today's low
 
-            if len(daily_lows_5d) >= 3:
+            if len(daily_lows_7d) >= 3:
                 # Check if recent 3+ days forming NEW RANGE above old lows
-                recent_3_lows = [h['low'] for h in daily_lows_5d if h['days_ago'] <= 2]
-                old_lows = [h['low'] for h in daily_lows_5d if h['days_ago'] >= 3]
+                recent_3_lows = [h['low'] for h in daily_lows_7d if h['days_ago'] <= 2]
+                old_lows = [h['low'] for h in daily_lows_7d if h['days_ago'] >= 3]
 
                 if len(recent_3_lows) >= 3 and len(old_lows) > 0:
                     recent_min = min(recent_3_lows)
@@ -235,6 +557,25 @@ class PS60Scanner:
                         # Use lowest level being tested now
                         support_level = min(todays_low, old_min if old_min > todays_low * 0.95 else todays_low)
 
+            # NEW: Collect ALL potential support levels (not just one)
+            all_support_candidates = []
+
+            # Candidate 1: TODAY's low
+            all_support_candidates.append({
+                'level': todays_low,
+                'source': 'today_low',
+                'days_ago': 0
+            })
+
+            # Candidate 2-N: Daily lows from last 7 days
+            for dl in daily_lows_7d:
+                if dl['low'] <= current_price:  # Only below current price
+                    all_support_candidates.append({
+                        'level': dl['low'],
+                        'source': f'daily_low_{dl["days_ago"]}d_ago',
+                        'days_ago': dl['days_ago']
+                    })
+
             # Step 4: Find all tests of the support level (±1% tolerance)
             zone_tolerance = support_level * 0.01
             tests = []
@@ -242,8 +583,8 @@ class PS60Scanner:
             for idx, bar in df_hourly.iterrows():
                 if abs(bar['low'] - support_level) <= zone_tolerance:
                     # Determine days ago
-                    if bar['date'] in list(last_5days_dates):
-                        days_ago = len(last_5days_dates) - list(last_5days_dates).index(bar['date']) - 1
+                    if bar['date'] in list(last_7days_dates):  # FIXED: was last_5days_dates
+                        days_ago = len(last_7days_dates) - list(last_7days_dates).index(bar['date']) - 1
                     else:
                         days_ago = len(df_hourly) - idx // 4
 
@@ -272,16 +613,75 @@ class PS60Scanner:
 
             total_weight = sum(t['weight'] for t in weighted_tests)
 
+            # NEW: Apply selloff low penalty
+            if selloff_info['is_selloff'] and support_level == todays_low:
+                total_weight -= selloff_info['penalty']
+                pattern_type += "_SELLOFF"
+
+            # NEW: Calculate weights for ALL support candidates
+            all_support_weights = []
+            for candidate in all_support_candidates:
+                # Find tests for this level
+                level_zone = candidate['level'] * 0.01
+                level_tests = [
+                    t for t in weighted_tests
+                    if abs(t['test']['low'] - candidate['level']) <= level_zone
+                ]
+
+                if level_tests:
+                    level_weight = sum(t['weight'] for t in level_tests)
+                    all_support_weights.append({
+                        'level': candidate['level'],
+                        'weight': level_weight,
+                        'test_count': len(level_tests),
+                        'days_ago': candidate['days_ago']
+                    })
+
+            # NEW: Check for lower support nearby (Enhancement #4)
+            proximity_check = self._check_lower_support_nearby(
+                all_support_weights,
+                support_level,
+                proximity_pct=1.5  # 1.5% threshold
+            )
+
+            if proximity_check['use_lower']:
+                # Override with lower support
+                support_level = proximity_check['lower_level']
+
+                # Recalculate tests for this level
+                zone_tolerance = support_level * 0.01
+                tests = [
+                    t['test'] for t in weighted_tests
+                    if abs(t['test']['low'] - support_level) <= zone_tolerance
+                ]
+                total_weight = sum(
+                    t['weight'] for t in weighted_tests
+                    if abs(t['test']['low'] - support_level) <= zone_tolerance
+                )
+                pattern_type = "PROXIMITY_ADJUSTED"
+
             # Activate if weighted count >= 3.0
             if total_weight >= 3.0:
                 num_tests = len(tests)
 
+                reason_parts = [f'Tested {num_tests}x']
+                if selloff_info['is_selloff'] and todays_low in [t['test']['low'] for t in weighted_tests[:5]]:
+                    reason_parts.append(f'selloff from ${selloff_info["recent_high"]:.2f}')
+                if proximity_check['use_lower']:
+                    reason_parts.append(f'adjusted to lower level')
+
+                reason = ' | '.join(reason_parts)
+
                 return {
                     'activated': True,
                     'level': support_level,
-                    'reason': f'Tested {num_tests}x at ${support_level:.2f} ({pattern_type.lower()} pattern)',
+                    'reason': reason,
                     'confidence': 'HIGH' if total_weight >= 5.0 else 'MEDIUM',
-                    'touches': num_tests
+                    'touches': num_tests,
+                    'test_count': num_tests,  # For Phase 1 output
+                    'pattern_type': pattern_type,  # For Phase 2 output
+                    'selloff_detected': selloff_info['is_selloff'],
+                    'proximity_adjusted': proximity_check['use_lower']
                 }
 
             return {'activated': False}
@@ -384,8 +784,14 @@ class PS60Scanner:
                 return None
 
             # Set end date for historical data
-            if historical_date:
-                # CRITICAL: To scan FOR a trading day, use data from PREVIOUS day
+            if self.scan_timestamp:
+                # CRITICAL FIX: For pre-market scans (8 AM), use PREVIOUS day's close
+                # IBKR daily bars include the ENTIRE day even if you specify 8 AM
+                # So to simulate 8 AM pre-market, we need data from the day BEFORE
+                previous_day = self.scan_timestamp.date() - timedelta(days=1)
+                end_datetime = previous_day.strftime('%Y%m%d 23:59:59')
+            elif historical_date:
+                # BACKWARD COMPATIBILITY: To scan FOR a trading day, use data from PREVIOUS day
                 # Scanner runs pre-market, so can't see same-day data yet
                 previous_day = historical_date - timedelta(days=1)
                 end_datetime = previous_day.strftime('%Y%m%d 23:59:59')
@@ -444,13 +850,16 @@ class PS60Scanner:
             support = None
             resistance_reason = None
             support_reason = None
+            resistance_result = None  # Initialize for later access
+            support_result = None     # Initialize for later access
+            df_hourly = None          # Initialize for later access
 
             try:
-                # Fetch 5 days of hourly bars for precision analysis
+                # Fetch 7 days of hourly bars for precision analysis
                 hourly_bars = self.ib.reqHistoricalData(
                     contract,
                     endDateTime=end_datetime,
-                    durationStr='5 D',
+                    durationStr='7 D',
                     barSizeSetting='1 hour',
                     whatToShow='TRADES',
                     useRTH=True,  # Regular trading hours only
@@ -505,6 +914,130 @@ class PS60Scanner:
             # Calculate distances
             dist_to_resistance = ((resistance - current_price) / current_price) * 100
             dist_to_support = ((current_price - support) / current_price) * 100
+
+            # ========== PHASE 1 & 2: CALCULATE ENHANCED FIELDS ==========
+
+            # Phase 1: Intraday Price Context
+            open_price = today['open']
+            high_price = today['high']
+            low_price = today['low']
+            prev_close = yesterday['close']
+            gap_pct = ((open_price - prev_close) / prev_close) * 100
+
+            # Phase 1: Resistance/Support Test Metadata
+            # Extract from recency-weighted detection results
+            resistance_test_count = 0
+            resistance_last_test = None
+            support_test_count = 0
+            support_last_test = None
+
+            # Try to extract test counts from hourly analysis
+            try:
+                if resistance_result and 'test_count' in resistance_result:
+                    resistance_test_count = resistance_result.get('test_count', 0)
+                if support_result and 'test_count' in support_result:
+                    support_test_count = support_result.get('test_count', 0)
+
+                # Find last test timestamps from hourly bars
+                if df_hourly is not None and len(df_hourly) > 0:
+                    # Find most recent bar that tested resistance (within 1%)
+                    resistance_zone_upper = resistance * 1.01
+                    resistance_zone_lower = resistance * 0.99
+                    recent_resistance_tests = df_hourly[
+                        (df_hourly['high'] >= resistance_zone_lower) &
+                        (df_hourly['high'] <= resistance_zone_upper)
+                    ]
+                    if len(recent_resistance_tests) > 0:
+                        resistance_last_test = recent_resistance_tests.iloc[-1]['date']
+                        if hasattr(resistance_last_test, 'isoformat'):
+                            resistance_last_test = resistance_last_test.isoformat()
+
+                    # Find most recent bar that tested support (within 1%)
+                    support_zone_upper = support * 1.01
+                    support_zone_lower = support * 0.99
+                    recent_support_tests = df_hourly[
+                        (df_hourly['low'] >= support_zone_lower) &
+                        (df_hourly['low'] <= support_zone_upper)
+                    ]
+                    if len(recent_support_tests) > 0:
+                        support_last_test = recent_support_tests.iloc[-1]['date']
+                        if hasattr(support_last_test, 'isoformat'):
+                            support_last_test = support_last_test.isoformat()
+            except Exception as e:
+                pass  # Use defaults if extraction fails
+
+            # Phase 1: Volume Distribution
+            # Calculate volume trend (last 5 days)
+            volume_trend = "flat"
+            try:
+                volumes_last_5 = df['volume'].iloc[-5:].values
+                if len(volumes_last_5) >= 3:
+                    recent_avg = volumes_last_5[-2:].mean()
+                    older_avg = volumes_last_5[:-2].mean()
+                    if recent_avg > older_avg * 1.2:
+                        volume_trend = "increasing"
+                    elif recent_avg < older_avg * 0.8:
+                        volume_trend = "decreasing"
+            except:
+                pass
+
+            volume_vs_prev_day = today['volume'] / yesterday['volume'] if yesterday['volume'] > 0 else 0
+            avg_volume_20d = avg_volume  # Already calculated earlier (line 746)
+
+            # Phase 2: Moving Average Distances
+            sma_50 = df['close'].iloc[-50:].mean() if len(df) >= 50 else None
+            dist_to_sma10 = ((current_price - sma_10) / sma_10) * 100
+            dist_to_sma20 = ((current_price - sma_20) / sma_20) * 100
+            dist_to_sma50 = ((current_price - sma_50) / sma_50) * 100 if sma_50 else None
+
+            # Phase 2: Pattern Classification
+            pattern_type = None
+            consolidation_days = None
+            try:
+                # Extract pattern type from resistance detection if available
+                if resistance_result and 'pattern_type' in resistance_result:
+                    pattern_type = resistance_result['pattern_type']
+
+                # Detect consolidation (tight range for 3+ days)
+                recent_5_days = df.iloc[-5:]
+                ranges = (recent_5_days['high'] - recent_5_days['low']) / recent_5_days['low']
+                if ranges.mean() < 0.03:  # Average range < 3%
+                    consolidation_days = 5
+                    if pattern_type is None:
+                        pattern_type = "CONSOLIDATION"
+            except:
+                pass
+
+            # Phase 2: Time-Based Metrics
+            session_range_pct = ((high_price - low_price) / low_price) * 100 if low_price > 0 else 0
+
+            # Hourly trend (last 3 hours vs previous 3 hours)
+            hourly_trend = "neutral"
+            try:
+                if df_hourly is not None and len(df_hourly) >= 6:
+                    recent_3h = df_hourly.iloc[-3:]['close'].mean()
+                    prev_3h = df_hourly.iloc[-6:-3]['close'].mean()
+                    if recent_3h > prev_3h * 1.01:
+                        hourly_trend = "bullish"
+                    elif recent_3h < prev_3h * 0.99:
+                        hourly_trend = "bearish"
+            except:
+                pass
+
+            # Daily trend (last 5 days vs previous 5 days)
+            daily_trend = "neutral"
+            try:
+                if len(df) >= 10:
+                    recent_5d = df.iloc[-5:]['close'].mean()
+                    prev_5d = df.iloc[-10:-5]['close'].mean()
+                    if recent_5d > prev_5d * 1.02:
+                        daily_trend = "bullish"
+                    elif recent_5d < prev_5d * 0.98:
+                        daily_trend = "bearish"
+            except:
+                pass
+
+            # ========== END ENHANCED FIELDS CALCULATION ==========
 
             # Score the setup
             score = 0
@@ -567,17 +1100,39 @@ class PS60Scanner:
                 setup_factors.append("Uptrend")
 
             return {
+                # Core identification
                 'symbol': symbol,
+
+                # Current price data
                 'close': round(current_price, 2),
+                'open': round(open_price, 2),
+                'high': round(high_price, 2),
+                'low': round(low_price, 2),
+                'prev_close': round(prev_close, 2),
                 'change%': round(change_pct, 2),
+                'gap%': round(gap_pct, 2),
+
+                # Volume metrics
                 'volume': int(today['volume']),
                 'volume_M': round(today['volume'] / 1e6, 1),
                 'rvol': round(rvol, 2),
+                'volume_trend': volume_trend,
+                'volume_vs_prev_day': round(volume_vs_prev_day, 2),
+                'avg_volume_20d': int(avg_volume_20d),
+
+                # Volatility
                 'atr%': round(atr_pct, 2),
+                'session_range%': round(session_range_pct, 2),
+
+                # Key levels
                 'resistance': round(resistance, 2),
                 'support': round(support, 2),
-                'dist_to_R%': round(dist_to_resistance, 2),
-                'dist_to_S%': round(dist_to_support, 2),
+                'resistance_test_count': resistance_test_count,
+                'resistance_last_test': resistance_last_test,
+                'support_test_count': support_test_count,
+                'support_last_test': support_last_test,
+
+                # Targets and risk
                 'breakout_reason': analysis['reasoning'],
                 'target1': analysis['target1'],
                 'target2': analysis['target2'],
@@ -587,8 +1142,22 @@ class PS60Scanner:
                 'potential_gain%': analysis['potential_gain%'],
                 'risk%': analysis['risk%'],
                 'risk_reward': analysis['risk_reward'],
+
+                # Moving averages and distances
                 'sma10': round(sma_10, 2),
                 'sma20': round(sma_20, 2),
+                'sma50': round(sma_50, 2) if sma_50 else None,
+                'dist_to_sma10': round(dist_to_sma10, 2),
+                'dist_to_sma20': round(dist_to_sma20, 2),
+                'dist_to_sma50': round(dist_to_sma50, 2) if dist_to_sma50 else None,
+
+                # Pattern and trend
+                'pattern_type': pattern_type,
+                'consolidation_days': consolidation_days,
+                'hourly_trend': hourly_trend,
+                'daily_trend': daily_trend,
+
+                # Scoring
                 'score': score,
                 'setup': ' | '.join(setup_factors) if setup_factors else 'No setup'
             }
@@ -607,10 +1176,16 @@ class PS60Scanner:
             historical_date: Optional date (datetime.date) to scan as of that date
         """
         # Store the scan date for later use in save_results()
-        self.scan_date = historical_date
+        # Use scan_timestamp date if available, otherwise use historical_date
+        if self.scan_timestamp:
+            self.scan_date = self.scan_timestamp.date()
+        else:
+            self.scan_date = historical_date
 
         print("\n" + "="*80)
-        if historical_date:
+        if self.scan_timestamp:
+            print(f"PS60 BREAKOUT SCANNER - HISTORICAL ({self.scan_timestamp.strftime('%Y-%m-%d %H:%M:%S %Z')})")
+        elif historical_date:
             print(f"PS60 BREAKOUT SCANNER - HISTORICAL ({historical_date.strftime('%Y-%m-%d')})")
         else:
             print("PS60 BREAKOUT SCANNER - TOMORROW'S TRADING SETUPS")
@@ -680,7 +1255,8 @@ class PS60Scanner:
             return
 
         # Sort by score and breakout proximity
-        self.results.sort(key=lambda x: (-x['score'], x['dist_to_R%'] if x['dist_to_R%'] > 0 else 999))
+        # Calculate dist_to_R% inline: (resistance - close) / close * 100
+        self.results.sort(key=lambda x: (-x['score'], ((x['resistance'] - x['close']) / x['close'] * 100) if x['close'] > 0 else 999))
 
         print("\n" + "="*80)
         print("🎯 TOP BREAKOUT CANDIDATES (DETAILED ANALYSIS)")
@@ -700,8 +1276,11 @@ class PS60Scanner:
             print(f"  Volatility: {r['atr%']:.1f}% ATR")
 
             print(f"\n🎯 KEY LEVELS:")
-            print(f"  Resistance: ${r['resistance']} ({r['dist_to_R%']:+.1f}% away)")
-            print(f"  Support: ${r['support']} ({r['dist_to_S%']:.1f}% below)")
+            # Calculate distances inline
+            dist_to_R = ((r['resistance'] - r['close']) / r['close'] * 100)
+            dist_to_S = ((r['close'] - r['support']) / r['close'] * 100)
+            print(f"  Resistance: ${r['resistance']} ({dist_to_R:+.1f}% away)")
+            print(f"  Support: ${r['support']} ({dist_to_S:.1f}% below)")
             print(f"  Why ${r['resistance']}? {r['breakout_reason']}")
 
             print(f"\n🚀 ROOM TO RUN (if breaks ${r['resistance']}):")
@@ -724,7 +1303,10 @@ class PS60Scanner:
 
         high_score = [r for r in self.results if r['score'] >= 30]
         if high_score:
-            df_display = pd.DataFrame(high_score)[
+            df_display = pd.DataFrame(high_score)
+            # Calculate dist_to_R% as a new column
+            df_display['dist_to_R%'] = ((df_display['resistance'] - df_display['close']) / df_display['close'] * 100)
+            df_display = df_display[
                 ['symbol', 'close', 'change%', 'dist_to_R%', 'target2', 'risk_reward', 'score']
             ].head(20)
             print(tabulate(df_display, headers='keys', tablefmt='grid', showindex=False))
@@ -740,7 +1322,8 @@ class PS60Scanner:
 
         print(f"Market Breadth: {up} up / {down} down")
         print(f"High Scores (≥40): {len([r for r in self.results if r['score'] >= 40])} stocks")
-        print(f"Near Breakout (<3% from R): {len([r for r in self.results if 0 < r['dist_to_R%'] <= 3])} stocks")
+        # Calculate dist_to_R% inline for breakout proximity check
+        print(f"Near Breakout (<3% from R): {len([r for r in self.results if 0 < ((r['resistance'] - r['close']) / r['close'] * 100) <= 3])} stocks")
         print(f"High Volatility (≥3% ATR): {len([r for r in self.results if r['atr%'] >= 3])} stocks")
         print(f"Average Risk/Reward: {df['risk_reward'].mean():.2f}:1")
 
